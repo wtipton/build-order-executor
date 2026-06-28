@@ -26,6 +26,8 @@ from __future__ import annotations
 
 import argparse
 import os
+import re
+from datetime import datetime
 
 # --- configure the launcher BEFORE importing sc2 ----------------------------
 # These are read by sc2.paths at import time. Defaults match this machine's
@@ -49,7 +51,7 @@ from sc2.data import Difficulty, Race  # noqa: E402
 from sc2.main import run_game  # noqa: E402
 from sc2.player import Bot, Computer  # noqa: E402
 
-from bot import OpeningBot  # noqa: E402
+from bot import BuildOrderBot, load_build  # noqa: E402
 
 RACES = {"zerg": Race.Zerg, "terran": Race.Terran, "protoss": Race.Protoss, "random": Race.Random}
 DIFFS = {
@@ -61,34 +63,42 @@ DIFFS = {
 
 
 # Keep replays out of the real SC2 replay folder for now.
-REPLAY_DIR = Path("/tmp/sc2_build_replays")
+REPLAY_DIR = Path.home() / "replays" / "bot"
 
 
 def main():
     ap = argparse.ArgumentParser()
+    ap.add_argument("--build", default="builds/pvz_pvt_opening_8worker.yaml", help="build-order config")
     ap.add_argument("--map", default="LockdownLE", help="map filename without .SC2Map")
     ap.add_argument("--opponent", default="zerg", choices=RACES, help="built-in AI race")
     ap.add_argument("--difficulty", default="easy", choices=DIFFS)
-    ap.add_argument("--realtime", action="store_true", help="watch live (may lag under Wine)")
+    ap.add_argument("--realtime", action=argparse.BooleanOptionalAction, default=False,
+                    help="--realtime watches live (may lag under Wine); --no-realtime (default) runs as fast as possible")
     ap.add_argument("--fullscreen", action="store_true", help="launch SC2 fullscreen (-displayMode 1)")
     ap.add_argument("--replay", default=None, help="replay output path (default: in-game Replays dir)")
     ap.add_argument("--time-limit", type=int, default=300, help="end game after N game-seconds (0 = no limit)")
+    ap.add_argument("--debug", action="store_true", help="verbose economy/timing heartbeat each ~10 game-seconds")
     args = ap.parse_args()
 
     # Pass a bare map filename; SC2 locates it among its own map roots.
     game_map = Map(Path(f"{args.map}.SC2Map"))
 
+    build = load_build(args.build)
+    print(f"Build: {build.get('name', args.build)}")
+
     if args.replay:
         replay_path = Path(args.replay)
     else:
         REPLAY_DIR.mkdir(parents=True, exist_ok=True)
-        replay_path = REPLAY_DIR / f"opening_vs_{args.opponent}.SC2Replay"
+        slug = re.sub(r"[^a-z0-9]+", "-", build.get("name", "build").lower()).strip("-")
+        stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+        replay_path = REPLAY_DIR / f"{slug}_{stamp}.SC2Replay"
 
     run_game(
         game_map,
         [
             # fullscreen on the Bot player -> SC2Process launches with -displayMode 1
-            Bot(Race.Protoss, OpeningBot(), name="OpeningBot", fullscreen=args.fullscreen),
+            Bot(Race.Protoss, BuildOrderBot(build, debug=args.debug), name="OpeningBot", fullscreen=args.fullscreen),
             Computer(RACES[args.opponent], DIFFS[args.difficulty]),
         ],
         realtime=args.realtime,

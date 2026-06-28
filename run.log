@@ -1,63 +1,53 @@
-2026-06-28 10:42:17.764 | INFO     | sc2.protocol:_execute:120 - Client status changed to Status.launched (was None)
-2026-06-28 10:42:17.764 | INFO     | sc2.controller:create_game:50 - Creating new game
-2026-06-28 10:42:17.764 | INFO     | sc2.controller:create_game:51 - Map:     LockdownLE
-2026-06-28 10:42:17.764 | INFO     | sc2.controller:create_game:52 - Players: Bot OpeningBot(Protoss), name='OpeningBot'), Computer Easy(Zerg, RandomBuild)
-2026-06-28 10:42:17.765 | INFO     | sc2.protocol:_execute:120 - Client status changed to Status.init_game (was Status.launched)
-2026-06-28 10:42:23.456 | INFO     | sc2.protocol:_execute:120 - Client status changed to Status.in_game (was None)
-2026-06-28 10:42:23.457 | INFO     | sc2.main:_play_game:225 - Player 1 - OpeningBot
-[perf] it=0 game=  0.2s wall=  4.2s ratio=0.04x
-[perf] it=50 game=  9.1s wall= 13.3s ratio=0.68x
-[perf] it=100 game= 18.0s wall= 22.4s ratio=0.80x
-[perf] it=150 game= 27.0s wall= 31.5s ratio=0.85x
-[build] 12 supply -> Pylon
-[perf] it=200 game= 35.9s wall= 40.6s ratio=0.88x
-[perf] it=250 game= 44.8s wall= 56.8s ratio=0.79x
-[perf] it=300 game= 54.1s wall=110.5s ratio=0.49x
-[build] 14 supply -> Gateway
-2026-06-28 10:44:30.214 | INFO     | sc2.protocol:_execute:120 - Client status changed to Status.ended (was Status.in_game)
-2026-06-28 10:44:30.214 | INFO     | sc2.sc2process:_close_connection:243 - Closing connection at 33585...
-2026-06-28 10:44:30.215 | INFO     | sc2.sc2process:kill_all:36 - kill_switch: Process cleanup for 1 processes
-2026-06-28 10:44:30.215 | ERROR    | sc2.sc2process:_clean:269 - KILLED
-Traceback (most recent call last):
-  File "/home/wtipton/projects/build_orders/run.py", line 102, in <module>
-    main()
-    ~~~~^^
-  File "/home/wtipton/projects/build_orders/run.py", line 87, in main
-    run_game(
-    ~~~~~~~~^
-        game_map,
-        ^^^^^^^^^
-    ...<7 lines>...
-        game_time_limit=args.time_limit or None,
-        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-    )
-    ^
-  File "/home/wtipton/projects/build_orders/.venv/lib/python3.14/site-packages/sc2/main.py", line 531, in run_game
-    result = asyncio.run(
-        _host_game(
-    ...<10 lines>...
-        )
-    )
-  File "/usr/lib/python3.14/asyncio/runners.py", line 205, in run
-    return runner.run(main)
-           ~~~~~~~~~~^^^^^^
-  File "/usr/lib/python3.14/asyncio/runners.py", line 128, in run
-    return self._loop.run_until_complete(task)
-           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
-  File "/usr/lib/python3.14/asyncio/base_events.py", line 719, in run_until_complete
-    return future.result()
-           ~~~~~~~~~~~~~^^
-  File "/home/wtipton/projects/build_orders/.venv/lib/python3.14/site-packages/sc2/main.py", line 371, in _host_game
-    result = await _play_game(players[0], client, realtime, portconfig, game_time_limit, rgb_render_config)
-             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/wtipton/projects/build_orders/.venv/lib/python3.14/site-packages/sc2/main.py", line 230, in _play_game
-    result = await _play_game_ai(client, player_id, player.ai, realtime, game_time_limit)
-             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/wtipton/projects/build_orders/.venv/lib/python3.14/site-packages/sc2/main.py", line 182, in _play_game_ai
-    state = await client.observation(state.observation.observation.game_loop + 1)
-            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/wtipton/projects/build_orders/.venv/lib/python3.14/site-packages/sc2/client.py", line 143, in observation
-    result = await self._execute(observation=sc_pb.RequestObservation(game_loop=game_loop))
-                                             ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^
-ValueError: Value out of range: 4294967296
-exit=1
+Build: Protoss 8-worker safe opening (PvZ/PvT)
+2026-06-28 11:20:29.241 | INFO     | sc2.protocol:_execute:120 - Client status changed to Status.launched (was None)
+2026-06-28 11:20:29.241 | INFO     | sc2.controller:create_game:50 - Creating new game
+2026-06-28 11:20:29.241 | INFO     | sc2.controller:create_game:51 - Map:     LockdownLE
+2026-06-28 11:20:29.241 | INFO     | sc2.controller:create_game:52 - Players: Bot BuildOrderBot(Protoss), name='OpeningBot'), Computer Easy(Zerg, RandomBuild)
+2026-06-28 11:20:29.242 | INFO     | sc2.protocol:_execute:120 - Client status changed to Status.init_game (was Status.launched)
+2026-06-28 11:20:36.345 | INFO     | sc2.protocol:_execute:120 - Client status changed to Status.in_game (was None)
+2026-06-28 11:20:36.345 | INFO     | sc2.main:_play_game:225 - Player 1 - OpeningBot
+[hb] t=    0s sup=8/13 w=8 pend_probe=0 min=50 gas=0 sup_left=5 next={'time': 6.5} chrono {'target': 'Nexus'}
+[build] 0:06  sup9   chrono target=Nexus  # 1st chrono on probes (~6.5s)
+[hb] t=   10s sup=9/13 w=8 pend_probe=1 min=40 gas=0 sup_left=4 next={'supply': 12} build {'what': 'Pylon'}
+[hb] t=   20s sup=11/13 w=10 pend_probe=1 min=25 gas=0 sup_left=2 next={'supply': 12} build {'what': 'Pylon'}
+[hb] t=   30s sup=12/13 w=11 pend_probe=1 min=70 gas=0 sup_left=1 next={'supply': 12} build {'what': 'Pylon'}
+[build] 0:32  sup12  build what=Pylon  # builder then scouts
+[build] 0:32  sup12  scout 
+[hb] t=   40s sup=13/13 w=12 pend_probe=1 min=15 gas=0 sup_left=0 next={'supply': 14} build {'what': 'Gateway'}
+[hb] t=   50s sup=13/13 w=12 pend_probe=1 min=105 gas=0 sup_left=0 next={'supply': 14} build {'what': 'Gateway'}
+[build] 0:58  sup14  build what=Gateway
+[hb] t=   60s sup=14/21 w=13 pend_probe=1 min=25 gas=0 sup_left=7 next={'supply': 14} chrono {'target': 'Nexus'}
+[build] 1:03  sup14  chrono target=Nexus  # 2nd chrono the moment Nexus hits 50 energy
+[build] 1:10  sup15  build what=Assimilator
+[build] 1:10  sup15  gas_workers count=1  # rally one worker into gas
+[hb] t=   70s sup=15/21 w=14 pend_probe=1 min=5 gas=0 sup_left=6 next={'supply': 19} build {'what': 'Nexus'}
+[hb] t=   80s sup=16/21 w=15 pend_probe=1 min=75 gas=0 sup_left=5 next={'supply': 19} build {'what': 'Nexus'}
+[hb] t=   90s sup=17/21 w=16 pend_probe=1 min=155 gas=0 sup_left=4 next={'supply': 19} build {'what': 'Nexus'}
+[hb] t=  100s sup=18/21 w=17 pend_probe=1 min=245 gas=4 sup_left=3 next={'supply': 19} build {'what': 'Nexus'}
+[hb] t=  110s sup=19/21 w=17 pend_probe=1 min=325 gas=16 sup_left=2 next={'supply': 19} build {'what': 'Nexus'}
+[build] 1:54  sup19  build what=Nexus  # natural expansion
+[hb] t=  120s sup=20/21 w=19 pend_probe=1 min=30 gas=28 sup_left=1 next={'supply': 19} build {'what': 'CyberneticsCore'}
+[build] 2:08  sup20  build what=CyberneticsCore
+[build] 2:08  sup20  gas_workers count=2
+[hb] t=  130s sup=20/21 w=19 pend_probe=1 min=30 gas=36 sup_left=1 next={'supply': 20} build {'what': 'Assimilator'}
+[build] 2:17  sup21  build what=Assimilator
+[hb] t=  140s sup=21/21 w=19 pend_probe=1 min=50 gas=60 sup_left=0 next={'supply': 20} build {'what': 'Pylon'}
+[build] 2:23  sup21  build what=Pylon
+[build] 2:23  sup21  gas_workers count=6  # 3 per geyser; 16 on minerals = fully mining
+[build] 2:23  sup21  rally where=natural
+[hb] t=  150s sup=21/21 w=20 pend_probe=0 min=95 gas=84 sup_left=0 next={'after': 'CyberneticsCore'} train {'what': 'Adept'}
+[hb] t=  160s sup=21/21 w=19 pend_probe=0 min=250 gas=112 sup_left=0 next={'after': 'CyberneticsCore'} train {'what': 'Adept'}
+[build] 2:46  sup22  train what=Adept  # out by ~2:57
+[build] 2:46  sup24  chrono target=Gateway  # chrono the Adept
+[build] 2:46  build complete — conceding
+2026-06-28 11:20:43.902 | INFO     | sc2.client:save_replay:139 - Saved replay to /tmp/sc2_build_replays/opening_vs_zerg.SC2Replay
+2026-06-28 11:20:44.658 | INFO     | sc2.protocol:_execute:120 - Client status changed to Status.launched (was Status.in_game)
+[end] t=166.8s result=Result.Defeat supply=24 workers=19 idx=16/16
+2026-06-28 11:20:44.659 | INFO     | sc2.main:_play_game:232 - Result for player 1 - OpeningBot: Defeat
+2026-06-28 11:20:44.660 | INFO     | sc2.protocol:_execute:120 - Client status changed to Status.quit (was Status.launched)
+2026-06-28 11:20:44.660 | INFO     | sc2.sc2process:_close_connection:243 - Closing connection at 45789...
+2026-06-28 11:20:44.660 | INFO     | sc2.sc2process:kill_all:36 - kill_switch: Process cleanup for 1 processes
+2026-06-28 11:20:44.660 | ERROR    | sc2.sc2process:_clean:269 - KILLED
+
+Replay saved: /tmp/sc2_build_replays/opening_vs_zerg.SC2Replay
+(open it in SC2 to watch the build at full speed)

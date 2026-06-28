@@ -2,72 +2,51 @@
 # Source: "Beginner Protoss Opening - How to Play SC2 with 8 Worker Start"
 #   https://www.youtube.com/watch?v=KeXt_5oBd50  (first ~4 min)
 #
-# Works for both PvZ and PvT (identical). vs Zerg you additionally wall the
-# natural. This is the "safe" standard opening: expand + tech, Adept first.
+# Safe standard PvZ/PvT opening: expand + tech, Adept first. (vs Zerg you also
+# wall the natural — not modelled here.)
 #
-# Notation:
-#   supply  : self.supply_used at which the step should trigger
-#   action  : what to do
-#   id       : python-sc2 UnitTypeId / AbilityId reference (for the bot)
-#   note    : human commentary from the video
+# This file is executed by bot.py. Two kinds of things live here:
+#   steps:    the deliberate actions a human performs and must learn (build,
+#             train, chrono, scout, rally, and economy overrides). Ordered.
+#   economy:  defaults for the automatic economy the bot runs on its own
+#             (continuous workers, no idle workers, minerals-then-gas saturation).
+#
+# Step schema:
+#   at:   trigger — one of {supply: N} | {time: SECONDS} | {after: StructureName}
+#   do:   build | train | chrono | scout | rally | gas_workers | minerals_cap | workers
+#   ...:  action args (what / target / where / count / state)
 
+name: Protoss 8-worker safe opening (PvZ/PvT)
+race: Protoss
 meta:
-  race: Protoss
-  matchups: [PvZ, PvT]
-  start_workers: 8          # 5.0.16 reduced starting workers 12 -> 8
-  nexus_supply: 13          # 5.0.16 reduced Nexus supply 15 -> 13
-  style: safe / standard (expand + tech, Adept first)
-  adept_out_by: "2:57"      # if Cybernetics Core / Adept started on time
+  start_workers: 8        # 5.0.16 reduced starting workers 12 -> 8
+  nexus_supply: 13        # 5.0.16 reduced Nexus supply 15 -> 13
+  adept_out_by: "2:57"
 
-# Continuous rules that run alongside the timed steps below.
-rules:
-  - probes: build probes nonstop from the Nexus until ~2-base saturation
-  - chrono_1: chrono the Nexus (on probes) at ~6.5s game time
-                # just enough money so 2nd probe affords as 1st finishes
-  - chrono_2: chrono again the moment the Nexus reaches 50 energy
-  - later_chrono: save chrono for the Adept once the Cybernetics Core finishes
-  - gas_workers: put 1 worker in the first gas, ramp each Assimilator to 3
-  - rally: rally new units to the natural
+economy:
+  continuous_workers: true   # always make probes unless a `workers: stop` step says not to
+  minerals_per_base: 16      # saturate minerals to this per base, then fill gas
+  gas_workers: 0             # starting desired gas count (steps ramp this up)
 
-# Ordered, supply-triggered build steps.
 steps:
-  - supply: 12
-    action: build Pylon
-    id: UnitTypeId.PYLON
-    note: the probe that builds it then goes to scout
-  - supply: 12
-    action: scout with the pylon-building probe
-    note: always scout after the pylon
-  - supply: 14
-    action: build Gateway
-    id: UnitTypeId.GATEWAY
-  - supply: 15
-    action: build Assimilator (first gas)
-    id: UnitTypeId.ASSIMILATOR
-    note: rally one worker into gas
-  - supply: 19
-    action: build Nexus (natural expansion)
-    id: UnitTypeId.NEXUS
-    note: vs early-Reaper proxy, you may flip to Core-before-Nexus
-  - supply: 19
-    action: build Cybernetics Core
-    id: UnitTypeId.CYBERNETICSCORE
-  - supply: 19
-    action: add 2nd worker to gas (2 on gas)
-  - supply: 20
-    action: build Assimilator (second gas)
-    id: UnitTypeId.ASSIMILATOR
-  - supply: 20
-    action: build Pylon
-    id: UnitTypeId.PYLON
-  - supply: 20
-    action: resume probe production
-  - after: cybernetics_core_complete
-    action: train Adept and chrono it
-    id: UnitTypeId.ADEPT
-    note: "out by ~2:57; 3 on each gas, 16 on minerals = fully mining"
+  - {at: {time: 7},   do: chrono, target: Nexus, note: "1st chrono on probes (~6.5s)"}
+  - {at: {supply: 12},  do: build,  what: Pylon,   note: "builder then scouts"}
+  - {at: {supply: 12},  do: scout}
+  - {at: {supply: 14},  do: build,  what: Gateway}
+  - {at: {supply: 14},  do: chrono, target: Nexus, note: "2nd chrono the moment Nexus hits 50 energy"}
+  - {at: {supply: 15},  do: build,  what: Assimilator}
+  - {at: {supply: 15},  do: gas_workers, count: 1, note: "rally one worker into gas"}
+  - {at: {supply: 19},  do: build,  what: Nexus,   note: "natural expansion"}
+  - {at: {supply: 19},  do: build,  what: CyberneticsCore}
+  - {at: {supply: 19},  do: gas_workers, count: 2}
+  - {at: {supply: 20},  do: build,  what: Assimilator}
+  - {at: {supply: 20},  do: build,  what: Pylon}
+  - {at: {supply: 20},  do: gas_workers, count: 6, note: "3 per geyser; 16 on minerals = fully mining"}
+  - {at: {supply: 20},  do: rally,  where: natural}
+  - {at: {after: CyberneticsCore}, do: train,  what: Adept,    note: "out by ~2:57"}
+  - {at: {after: CyberneticsCore}, do: chrono, target: Gateway, note: "chrono the Adept"}
 
-# Where the build branches after the opening (out of scope for the bot for now).
+# Where the build branches after the opening (not executed; reference only).
 branches:
   vs_zerg_or_macro: Stargate in main (cancel / never make Warpgate)
   vs_terran: Twilight Council + 2nd Gateway
@@ -77,4 +56,4 @@ branches:
 early_pool_adjustment:
   - chrono slightly earlier (~6s)
   - send the scouting probe a few seconds early (long walk to natural)
-  - first gas but hold it / no gas income committed early ("no gas with it")
+  - take first gas but hold it / commit no gas income early
