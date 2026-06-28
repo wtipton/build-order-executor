@@ -30,9 +30,9 @@ economy:
 
 steps:
   - {at: {time: 7},   do: chrono, target: Nexus, note: "1st chrono on probes (~6.5s)"}
-  # prewalk: {minerals: N} walks the builder once we have N minerals — but only
-  # after the probes to reach the step's supply are queued (so it can't fire at a
-  # much lower supply when minerals briefly sit high). Pick N a bit under cost.
+  # prewalk: {minerals: N} walks the builder once we'd have N minerals left AFTER
+  # paying for the probes still needed to reach the step's supply (so it can't
+  # fire early on a transient mineral spike). Pick N a bit under the build's cost.
   - {at: {supply: 12},  do: build,  what: Pylon,   prewalk: {minerals: 75},  note: "Pylon=100; builder then scouts"}
   - {at: {supply: 12},  do: scout}
   - {at: {supply: 14},  do: build,  what: Gateway, prewalk: {minerals: 100}, note: "Gateway=150"}

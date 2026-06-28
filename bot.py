@@ -205,17 +205,26 @@ class BuildOrderBot(BotAI):
 
     def _prewalk_due(self, step: _Step) -> bool:
         """Whether to start walking the builder. For a resource-based prewalk
-        ({minerals}/{vespene}) we first require that the probes needed to reach
-        the build's supply are already queued (so we don't pull a builder while
-        minerals briefly sit high at a much lower supply), then wait for the
-        resource threshold. Other trigger forms use trigger_met directly."""
+        ({minerals}/{vespene}) we reserve the cost of the probes still needed to
+        reach the build's supply, then check the threshold against what's left —
+        i.e. the minerals we'd have AFTER committing those probes, not minerals
+        that are about to be spent on them. (Probes cost 50 minerals / 0 gas.)
+        Other trigger forms use trigger_met directly."""
         trig = step.prewalk or step.at
         if "minerals" in trig or "vespene" in trig:
+            reserved = 0
             if "supply" in step.at:
-                committed = self.supply_used + self.already_pending(U.PROBE)
-                if committed < step.at["supply"]:
-                    return False
-            return self.trigger_met(trig)
+                # supply_used already counts in-production probes (supply is
+                # reserved the moment training starts), so DON'T also subtract
+                # already_pending — that double-counts the building probe and
+                # fires the pull one supply early.
+                need = step.at["supply"] - self.supply_used
+                reserved = 50 * max(0, need)
+            if "minerals" in trig and self.minerals - reserved < trig["minerals"]:
+                return False
+            if "vespene" in trig and self.vespene < trig["vespene"]:
+                return False
+            return True
         return self.trigger_met(trig)
 
     async def execute(self, step: _Step) -> bool:
@@ -360,8 +369,8 @@ class BuildOrderBot(BotAI):
         self._build_target = target
         worker.move(pos)
         if self.debug:
-            print(f"[prewalk] {self._clock():>4}  reserved probe for {step.args['what']} "
-                  f"(build at {step.at}) — walking to placement", flush=True)
+            print(f"[prewalk] {self._clock():>4}  sup{self.supply_used} min={self.minerals} "
+                  f"reserved probe for {step.args['what']} (build at {step.at})", flush=True)
 
     def _next_build_step(self) -> _Step | None:
         for s in self.steps[self.idx:]:
