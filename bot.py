@@ -14,6 +14,9 @@ Two layers:
              to mining.
 
 Trigger forms (step `at:`):  {supply: N} | {time: SECONDS} | {after: Structure}
+A build step may also carry `prewalk: <trigger>` — when it fires, a probe is
+reserved and walked to the placement so construction starts the instant the build
+is affordable. Defaults to the step's own `at` trigger.
 Actions (step `do:`):
     build <what>        structure or expansion (Nexus -> expand)
     train <what>        unit, from the appropriate producer
@@ -36,6 +39,7 @@ from sc2.bot_ai import BotAI
 from sc2.ids.ability_id import AbilityId
 from sc2.ids.buff_id import BuffId
 from sc2.ids.unit_typeid import UnitTypeId as U
+from sc2.unit import Unit
 
 CHRONO = AbilityId.EFFECT_CHRONOBOOSTENERGYCOST
 CHRONO_BUFF = BuffId.CHRONOBOOSTENERGYCOST
@@ -79,13 +83,16 @@ def _unit(name: str) -> U:
 
 
 class _Step:
-    __slots__ = ("at", "do", "args", "note", "done")
+    __slots__ = ("at", "do", "args", "note", "prewalk", "done")
 
     def __init__(self, raw: dict):
         self.at = raw["at"]
         self.do = raw["do"]
         self.note = raw.get("note", "")
-        self.args = {k: v for k, v in raw.items() if k not in ("at", "do", "note")}
+        # optional trigger for when to start pre-walking the builder into place;
+        # if omitted it defaults to `at` (walk starts when the step comes up).
+        self.prewalk = raw.get("prewalk")
+        self.args = {k: v for k, v in raw.items() if k not in ("at", "do", "note", "prewalk")}
         self.done = False
 
     @property
@@ -115,6 +122,13 @@ class BuildOrderBot(BotAI):
         self._last_hb = -999
         self._conceded = False
 
+        # pre-walk reservation: a probe sent to the next build's placement ahead
+        # of time so construction starts the instant we can afford it.
+        self._reserved_step: _Step | None = None
+        self._builder_tag: int | None = None
+        self._build_target = None      # Point2 (placement) or geyser Unit (gas)
+        self._active_step: _Step | None = None
+
     async def on_start(self):
         self.client.game_step = 4
 
@@ -136,6 +150,7 @@ class BuildOrderBot(BotAI):
                   f"w={self.workers.amount} pend_probe={self.already_pending(U.PROBE)} "
                   f"min={self.minerals} gas={self.vespene} sup_left={self.supply_left} "
                   f"next={nxt}", flush=True)
+        await self.manage_prebuild()
         await self.run_steps()
 
         # The build is the whole job: once every step has fired, concede rather
@@ -180,11 +195,31 @@ class BuildOrderBot(BotAI):
             return self.supply_used >= at["supply"]
         if "time" in at:
             return self.time >= at["time"]
+        if "minerals" in at:
+            return self.minerals >= at["minerals"]
+        if "vespene" in at:
+            return self.vespene >= at["vespene"]
         if "after" in at:
             return bool(self.structures(_unit(at["after"])).ready)
         return True
 
+    def _prewalk_due(self, step: _Step) -> bool:
+        """Whether to start walking the builder. For a resource-based prewalk
+        ({minerals}/{vespene}) we first require that the probes needed to reach
+        the build's supply are already queued (so we don't pull a builder while
+        minerals briefly sit high at a much lower supply), then wait for the
+        resource threshold. Other trigger forms use trigger_met directly."""
+        trig = step.prewalk or step.at
+        if "minerals" in trig or "vespene" in trig:
+            if "supply" in step.at:
+                committed = self.supply_used + self.already_pending(U.PROBE)
+                if committed < step.at["supply"]:
+                    return False
+            return self.trigger_met(trig)
+        return self.trigger_met(trig)
+
     async def execute(self, step: _Step) -> bool:
+        self._active_step = step
         handler = getattr(self, f"do_{step.do}")
         return await handler(step.args)
 
@@ -193,34 +228,43 @@ class BuildOrderBot(BotAI):
         unit = _unit(args["what"])
         if not self.can_afford(unit):
             return False
-        if unit == U.NEXUS:
-            await self.expand_now()
-            return True
-        if unit == U.ASSIMILATOR:
-            return await self._build_gas()
-        if unit == U.PYLON:
-            pos = self.start_location.towards(self.game_info.map_center, 6)
-            return await self.build(U.PYLON, near=pos)
-        if unit in POWERED:
-            pylons = self.structures(U.PYLON).ready
-            if not pylons:
-                return False
-            near = pylons.closest_to(self.start_location).position.towards(self.game_info.map_center, 2)
-            return await self.build(unit, near=near)
-        # generic fallback
-        return await self.build(unit, near=self.start_location.towards(self.game_info.map_center, 6))
 
-    async def _build_gas(self) -> bool:
-        for th in self.townhalls.ready:
-            for geyser in self.vespene_geyser.closer_than(10, th):
-                if self.gas_buildings.closer_than(1, geyser):
-                    continue
-                worker = self.select_build_worker(geyser.position)
-                if worker is None:
-                    return False
-                worker.build_gas(geyser)
-                return True
-        return False
+        # use the pre-walked builder + cached placement if one is reserved for
+        # this step (probe already in position -> construction starts instantly)
+        builder = self._reserved_worker() if self._reserved_step is self._active_step else None
+        target = self._build_target if builder is not None else None
+        if builder is not None and self.debug:
+            pos = target.position if isinstance(target, Unit) else target
+            d = builder.distance_to(pos) if pos is not None else -1
+            print(f"[prewalk] {self._clock():>4}  {args['what']} builder dist={d:.1f} (≈0 = pre-positioned)", flush=True)
+
+        if unit == U.ASSIMILATOR:
+            ok = await self._build_gas(builder, target if isinstance(target, Unit) else None)
+        elif unit == U.NEXUS:
+            loc = target if target is not None else await self.get_next_expansion()
+            if loc is None:
+                return False
+            ok = await self.build(U.NEXUS, near=loc, build_worker=builder, placement_step=1)
+        else:
+            loc = target if target is not None else await self._placement_for(self._active_step)
+            if loc is None:
+                return False
+            ok = await self.build(unit, near=loc, build_worker=builder)
+
+        if ok:
+            self._clear_reservation()
+        return ok
+
+    async def _build_gas(self, builder=None, geyser=None) -> bool:
+        if geyser is None:
+            geyser = self._free_geyser()
+        if geyser is None:
+            return False
+        worker = builder or self.select_build_worker(geyser.position)
+        if worker is None:
+            return False
+        worker.build_gas(geyser)
+        return True
 
     async def do_train(self, args) -> bool:
         unit = _unit(args["what"])
@@ -288,6 +332,97 @@ class BuildOrderBot(BotAI):
         others = [e for e in self.expansion_locations_list if e.distance_to(self.start_location) > 1]
         return min(others, key=lambda e: e.distance_to(self.start_location)) if others else self.start_location
 
+    # ========================================================= pre-walk builder
+    async def manage_prebuild(self):
+        """Reserve a probe for the next build step and walk it to the placement
+        ahead of time, so `do_build` can start construction the instant we can
+        afford it. WHEN to start walking is config-driven (the step's `prewalk`
+        trigger, defaulting to its `at` trigger) — the bot does no estimating."""
+        step = self._next_build_step()
+        if self._reserved_step is not None and self._reserved_step is not step:
+            self._clear_reservation()
+        if step is None or not self._prewalk_due(step):
+            return
+
+        if self._reserved_step is step:
+            self._reposition_builder()
+            return
+
+        target = await self._placement_for(step)
+        if target is None:
+            return  # can't determine placement yet (e.g. no pylon) — retry later
+        pos = target.position if isinstance(target, Unit) else target
+        worker = self.select_build_worker(pos)
+        if worker is None:
+            return
+        self._reserved_step = step
+        self._builder_tag = worker.tag
+        self._build_target = target
+        worker.move(pos)
+        if self.debug:
+            print(f"[prewalk] {self._clock():>4}  reserved probe for {step.args['what']} "
+                  f"(build at {step.at}) — walking to placement", flush=True)
+
+    def _next_build_step(self) -> _Step | None:
+        for s in self.steps[self.idx:]:
+            if s.done:
+                continue
+            if s.do == "build":
+                return s
+            if s.blocking:
+                return None  # a train step gates the line; don't reserve past it
+        return None
+
+    async def _placement_for(self, step: _Step):
+        unit = _unit(step.args["what"])
+        if unit == U.NEXUS:
+            return await self.get_next_expansion()
+        if unit == U.ASSIMILATOR:
+            return self._free_geyser()
+        if unit == U.PYLON:
+            return await self.find_placement(U.PYLON, near=self.start_location.towards(self.game_info.map_center, 6))
+        if unit in POWERED:
+            pylons = self.structures(U.PYLON).ready
+            if not pylons:
+                return None
+            near = pylons.closest_to(self.start_location).position.towards(self.game_info.map_center, 2)
+            return await self.find_placement(unit, near=near)
+        return await self.find_placement(unit, near=self.start_location.towards(self.game_info.map_center, 6))
+
+    def _free_geyser(self):
+        for th in self.townhalls.ready:
+            for g in self.vespene_geyser.closer_than(10, th):
+                if not self.gas_buildings.closer_than(1, g):
+                    return g
+        return None
+
+    def _reserved_worker(self) -> Unit | None:
+        if self._builder_tag is None:
+            return None
+        res = self.workers.tags_in({self._builder_tag})
+        return res.first if res else None
+
+    def _reposition_builder(self):
+        w = self._reserved_worker()
+        if w is None:
+            self._clear_reservation()
+            return
+        pos = self._build_target.position if isinstance(self._build_target, Unit) else self._build_target
+        if pos is not None and w.is_idle and w.distance_to(pos) > 1:
+            w.move(pos)
+
+    def _clear_reservation(self):
+        self._reserved_step = None
+        self._builder_tag = None
+        self._build_target = None
+
+    def _econ_workers(self):
+        """Workers available to the economy — excludes the reserved builder so it
+        isn't yanked back to mining while waiting in position."""
+        if self._builder_tag is None:
+            return self.workers
+        return self.workers.tags_not_in({self._builder_tag})
+
     # ============================================================ auto economy
     async def make_workers(self):
         # Make probes continuously, full stop. If a build needs to pause worker
@@ -303,13 +438,14 @@ class BuildOrderBot(BotAI):
     async def manage_economy(self):
         """Saturate minerals up to the per-base cap, then fill gas to gas_target,
         and keep no worker idle."""
+        workers = self._econ_workers()
         gas_ready = self.gas_buildings.ready
         capacity = sum(g.ideal_harvesters for g in gas_ready)
         desired_gas = min(self.gas_target, capacity)
         assigned_gas = sum(g.assigned_harvesters for g in gas_ready)
 
         if assigned_gas < desired_gas:
-            movable = self.workers.filter(
+            movable = workers.filter(
                 lambda w: (w.is_gathering and not w.is_carrying_vespene) or w.is_idle
             )
             for g in gas_ready:
@@ -321,7 +457,7 @@ class BuildOrderBot(BotAI):
         elif assigned_gas > desired_gas:
             for g in gas_ready:
                 while g.assigned_harvesters > 0 and assigned_gas > desired_gas:
-                    w = self.workers.filter(lambda u: u.is_carrying_vespene is False).closest_to(g)
+                    w = workers.filter(lambda u: u.is_carrying_vespene is False).closest_to(g)
                     mins = self._minerals_under_cap()
                     if not (w and mins):
                         break
@@ -330,7 +466,7 @@ class BuildOrderBot(BotAI):
 
         # never idle: park idle workers on minerals (under cap), else spare gas,
         # else nearest minerals anyway (over-saturation beats standing still)
-        for w in self.workers.idle:
+        for w in workers.idle:
             mins = self._minerals_under_cap()
             if mins:
                 w.gather(mins.closest_to(w))

@@ -30,13 +30,17 @@ economy:
 
 steps:
   - {at: {time: 7},   do: chrono, target: Nexus, note: "1st chrono on probes (~6.5s)"}
-  - {at: {supply: 12},  do: build,  what: Pylon,   note: "builder then scouts"}
+  # prewalk: {minerals: N} walks the builder once we have N minerals — but only
+  # after the probes to reach the step's supply are queued (so it can't fire at a
+  # much lower supply when minerals briefly sit high). Pick N a bit under cost.
+  - {at: {supply: 12},  do: build,  what: Pylon,   prewalk: {minerals: 75},  note: "Pylon=100; builder then scouts"}
   - {at: {supply: 12},  do: scout}
-  - {at: {supply: 14},  do: build,  what: Gateway}
+  - {at: {supply: 14},  do: build,  what: Gateway, prewalk: {minerals: 100}, note: "Gateway=150"}
   - {at: {supply: 14},  do: chrono, target: Nexus, note: "2nd chrono the moment Nexus hits 50 energy"}
   - {at: {supply: 15},  do: build,  what: Assimilator}
   - {at: {supply: 15},  do: gas_workers, count: 1, note: "rally one worker into gas"}
-  - {at: {supply: 19},  do: build,  what: Nexus,   note: "natural expansion"}
+  # long walk to the natural, so give it a big lead: walk at 300 (Nexus=400).
+  - {at: {supply: 19},  do: build,  what: Nexus,   prewalk: {minerals: 300}, note: "natural expansion (Nexus=400)"}
   - {at: {supply: 19},  do: build,  what: CyberneticsCore}
   - {at: {supply: 19},  do: gas_workers, count: 2}
   - {at: {supply: 20},  do: build,  what: Assimilator}

@@ -98,7 +98,7 @@ def main():
         game_map,
         [
             # fullscreen on the Bot player -> SC2Process launches with -displayMode 1
-            Bot(Race.Protoss, BuildOrderBot(build, debug=args.debug), name="OpeningBot", fullscreen=args.fullscreen),
+            Bot(Race.Protoss, BuildOrderBot(build, debug=args.debug), name="BuildOrderBot", fullscreen=args.fullscreen),
             Computer(RACES[args.opponent], DIFFS[args.difficulty]),
         ],
         realtime=args.realtime,
