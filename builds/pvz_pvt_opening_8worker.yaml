@@ -1,0 +1,80 @@
+# Protoss opening for the 8-worker start (patch 5.0.16+)
+# Source: "Beginner Protoss Opening - How to Play SC2 with 8 Worker Start"
+#   https://www.youtube.com/watch?v=KeXt_5oBd50  (first ~4 min)
+#
+# Works for both PvZ and PvT (identical). vs Zerg you additionally wall the
+# natural. This is the "safe" standard opening: expand + tech, Adept first.
+#
+# Notation:
+#   supply  : self.supply_used at which the step should trigger
+#   action  : what to do
+#   id       : python-sc2 UnitTypeId / AbilityId reference (for the bot)
+#   note    : human commentary from the video
+
+meta:
+  race: Protoss
+  matchups: [PvZ, PvT]
+  start_workers: 8          # 5.0.16 reduced starting workers 12 -> 8
+  nexus_supply: 13          # 5.0.16 reduced Nexus supply 15 -> 13
+  style: safe / standard (expand + tech, Adept first)
+  adept_out_by: "2:57"      # if Cybernetics Core / Adept started on time
+
+# Continuous rules that run alongside the timed steps below.
+rules:
+  - probes: build probes nonstop from the Nexus until ~2-base saturation
+  - chrono_1: chrono the Nexus (on probes) at ~6.5s game time
+                # just enough money so 2nd probe affords as 1st finishes
+  - chrono_2: chrono again the moment the Nexus reaches 50 energy
+  - later_chrono: save chrono for the Adept once the Cybernetics Core finishes
+  - gas_workers: put 1 worker in the first gas, ramp each Assimilator to 3
+  - rally: rally new units to the natural
+
+# Ordered, supply-triggered build steps.
+steps:
+  - supply: 12
+    action: build Pylon
+    id: UnitTypeId.PYLON
+    note: the probe that builds it then goes to scout
+  - supply: 12
+    action: scout with the pylon-building probe
+    note: always scout after the pylon
+  - supply: 14
+    action: build Gateway
+    id: UnitTypeId.GATEWAY
+  - supply: 15
+    action: build Assimilator (first gas)
+    id: UnitTypeId.ASSIMILATOR
+    note: rally one worker into gas
+  - supply: 19
+    action: build Nexus (natural expansion)
+    id: UnitTypeId.NEXUS
+    note: vs early-Reaper proxy, you may flip to Core-before-Nexus
+  - supply: 19
+    action: build Cybernetics Core
+    id: UnitTypeId.CYBERNETICSCORE
+  - supply: 19
+    action: add 2nd worker to gas (2 on gas)
+  - supply: 20
+    action: build Assimilator (second gas)
+    id: UnitTypeId.ASSIMILATOR
+  - supply: 20
+    action: build Pylon
+    id: UnitTypeId.PYLON
+  - supply: 20
+    action: resume probe production
+  - after: cybernetics_core_complete
+    action: train Adept and chrono it
+    id: UnitTypeId.ADEPT
+    note: "out by ~2:57; 3 on each gas, 16 on minerals = fully mining"
+
+# Where the build branches after the opening (out of scope for the bot for now).
+branches:
+  vs_zerg_or_macro: Stargate in main (cancel / never make Warpgate)
+  vs_terran: Twilight Council + 2nd Gateway
+  mineral_focused: skip the gas-heavy path, 2 Gateways early -> Blink
+
+# Adjustment vs all-in early pool (e.g. 10-pool), from later in the video.
+early_pool_adjustment:
+  - chrono slightly earlier (~6s)
+  - send the scouting probe a few seconds early (long walk to natural)
+  - first gas but hold it / no gas income committed early ("no gas with it")

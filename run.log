@@ -1,0 +1,63 @@
+2026-06-28 10:42:17.764 | INFO     | sc2.protocol:_execute:120 - Client status changed to Status.launched (was None)
+2026-06-28 10:42:17.764 | INFO     | sc2.controller:create_game:50 - Creating new game
+2026-06-28 10:42:17.764 | INFO     | sc2.controller:create_game:51 - Map:     LockdownLE
+2026-06-28 10:42:17.764 | INFO     | sc2.controller:create_game:52 - Players: Bot OpeningBot(Protoss), name='OpeningBot'), Computer Easy(Zerg, RandomBuild)
+2026-06-28 10:42:17.765 | INFO     | sc2.protocol:_execute:120 - Client status changed to Status.init_game (was Status.launched)
+2026-06-28 10:42:23.456 | INFO     | sc2.protocol:_execute:120 - Client status changed to Status.in_game (was None)
+2026-06-28 10:42:23.457 | INFO     | sc2.main:_play_game:225 - Player 1 - OpeningBot
+[perf] it=0 game=  0.2s wall=  4.2s ratio=0.04x
+[perf] it=50 game=  9.1s wall= 13.3s ratio=0.68x
+[perf] it=100 game= 18.0s wall= 22.4s ratio=0.80x
+[perf] it=150 game= 27.0s wall= 31.5s ratio=0.85x
+[build] 12 supply -> Pylon
+[perf] it=200 game= 35.9s wall= 40.6s ratio=0.88x
+[perf] it=250 game= 44.8s wall= 56.8s ratio=0.79x
+[perf] it=300 game= 54.1s wall=110.5s ratio=0.49x
+[build] 14 supply -> Gateway
+2026-06-28 10:44:30.214 | INFO     | sc2.protocol:_execute:120 - Client status changed to Status.ended (was Status.in_game)
+2026-06-28 10:44:30.214 | INFO     | sc2.sc2process:_close_connection:243 - Closing connection at 33585...
+2026-06-28 10:44:30.215 | INFO     | sc2.sc2process:kill_all:36 - kill_switch: Process cleanup for 1 processes
+2026-06-28 10:44:30.215 | ERROR    | sc2.sc2process:_clean:269 - KILLED
+Traceback (most recent call last):
+  File "/home/wtipton/projects/build_orders/run.py", line 102, in <module>
+    main()
+    ~~~~^^
+  File "/home/wtipton/projects/build_orders/run.py", line 87, in main
+    run_game(
+    ~~~~~~~~^
+        game_map,
+        ^^^^^^^^^
+    ...<7 lines>...
+        game_time_limit=args.time_limit or None,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/home/wtipton/projects/build_orders/.venv/lib/python3.14/site-packages/sc2/main.py", line 531, in run_game
+    result = asyncio.run(
+        _host_game(
+    ...<10 lines>...
+        )
+    )
+  File "/usr/lib/python3.14/asyncio/runners.py", line 205, in run
+    return runner.run(main)
+           ~~~~~~~~~~^^^^^^
+  File "/usr/lib/python3.14/asyncio/runners.py", line 128, in run
+    return self._loop.run_until_complete(task)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "/usr/lib/python3.14/asyncio/base_events.py", line 719, in run_until_complete
+    return future.result()
+           ~~~~~~~~~~~~~^^
+  File "/home/wtipton/projects/build_orders/.venv/lib/python3.14/site-packages/sc2/main.py", line 371, in _host_game
+    result = await _play_game(players[0], client, realtime, portconfig, game_time_limit, rgb_render_config)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/wtipton/projects/build_orders/.venv/lib/python3.14/site-packages/sc2/main.py", line 230, in _play_game
+    result = await _play_game_ai(client, player_id, player.ai, realtime, game_time_limit)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/wtipton/projects/build_orders/.venv/lib/python3.14/site-packages/sc2/main.py", line 182, in _play_game_ai
+    state = await client.observation(state.observation.observation.game_loop + 1)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/wtipton/projects/build_orders/.venv/lib/python3.14/site-packages/sc2/client.py", line 143, in observation
+    result = await self._execute(observation=sc_pb.RequestObservation(game_loop=game_loop))
+                                             ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^
+ValueError: Value out of range: 4294967296
+exit=1
