@@ -35,9 +35,11 @@ from datetime import datetime
 HOME = os.path.expanduser("~")
 DEFAULTS = {
     "SC2PF": "WineLinux",
-    "SC2PATH": f"{HOME}/Games/starcraft-ii-2/drive_c/Program Files (x86)/StarCraft II",
+    "SC2PATH": f"{HOME}/Games/nobak/sc2_bot/drive_c/Program Files (x86)/StarCraft II",
+    # Dedicated prefix for the bot (separate from the one you watch replays in),
+    # so python-sc2's `wineserver -k` teardown only kills the bot's own game.
     # python-sc2's launcher does NOT set WINEPREFIX itself, so we must.
-    "WINEPREFIX": f"{HOME}/Games/starcraft-ii-2",
+    "WINEPREFIX": f"{HOME}/Games/nobak/sc2_bot",
     "WINE": f"{HOME}/.local/share/lutris/runners/wine/GE-Proton10-34/files/bin/wine",
 }
 if os.name != "nt":
@@ -52,47 +54,6 @@ from sc2.main import run_game  # noqa: E402
 from sc2.player import Bot, Computer  # noqa: E402
 
 from bot import BuildOrderBot, load_build  # noqa: E402
-
-
-# --- don't nuke the shared wineserver on teardown ---------------------------
-# python-sc2's SC2Process._clean runs `wineserver -k`, which kills the whole
-# WINEPREFIX's wineserver — including any other SC2 you have open to watch
-# replays. Replace it with a teardown that kills only THIS game's SC2 process
-# (the one listening on our API port) and leaves the wineserver (and your other
-# instance) alone.
-import shutil  # noqa: E402
-import subprocess  # noqa: E402
-
-from sc2.sc2process import SC2Process  # noqa: E402
-
-
-def _clean_only_this_game(self, verbose: bool = False):
-    # Identify THIS game's SC2 by the unique args it was launched with (-port /
-    # -tempDir). These persist in the process cmdline even after the API socket
-    # closes at game end — unlike `lsof` on the (now-dead) port.
-    patterns = []
-    if getattr(self, "_tmp_dir", None):
-        patterns.append(str(self._tmp_dir))
-    if getattr(self, "_port", None):
-        patterns.append(f"port {self._port}")
-    pids = set()
-    for pat in patterns:
-        try:
-            out = subprocess.run(["pgrep", "-f", pat], capture_output=True, text=True).stdout.split()
-            pids.update(out)
-        except Exception:
-            pass
-    if pids:
-        print(f"[teardown] killing this game's SC2 (pids={sorted(pids)})", flush=True)
-    for pid in pids:
-        subprocess.run(["kill", "-9", pid], check=False)
-    if getattr(self, "_tmp_dir", None) and Path(self._tmp_dir).exists():
-        shutil.rmtree(self._tmp_dir, ignore_errors=True)
-    self._process = None
-    self._ws = None
-
-
-SC2Process._clean = _clean_only_this_game
 
 RACES = {"zerg": Race.Zerg, "terran": Race.Terran, "protoss": Race.Protoss, "random": Race.Random}
 DIFFS = {

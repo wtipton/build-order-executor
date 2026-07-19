@@ -1,0 +1,9 @@
+# Python
+__pycache__/
+*.py[cod]
+
+# Virtualenv
+.venv/
+
+# Bot run output
+run.log
