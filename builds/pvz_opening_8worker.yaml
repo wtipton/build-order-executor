@@ -15,7 +15,6 @@ race: Protoss
 economy:
   continuous_workers: true   # always make probes unless a `workers: stop` step says not to
   minerals_per_base: 16      # saturate minerals to this per base, then fill gas
-  gas_workers: 0             # starting desired gas count (steps ramp this up)
 
 steps:
   - {at: {time: 7},   do: chrono, target: Nexus, note: "1st chrono on probes (~6.5s)"}

@@ -105,7 +105,6 @@ class Economy(BaseModel):
     model_config = ConfigDict(extra="forbid")
     continuous_workers: bool = True
     minerals_per_base: int = 16
-    gas_workers: int = 0
 
 
 class BuildConfig(BaseModel):

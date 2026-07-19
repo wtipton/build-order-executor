@@ -1,0 +1,36 @@
+# Protoss vs Terran (PvT) economic opening for the 8-worker start (patch 5.0.16+)
+#
+# Structure: 12 Pylon, 14 Gateway, 18 Nexus, 18 Gas, 18 Core, 19 Gas, 20 Pylon.
+# Both assimilators are saturated (3 each) as soon as they finish — expressed as a
+# standing gas target of 6 (capacity-gated to 3 per ready gas), not a timed step.
+#
+# Standard opening extras added on top of the given structures: 2 probe chronos
+# and a scout after the first Pylon.
+#
+# Schema defined + validated in schema.py.
+
+name: Protoss 8-worker economic opening (PvT)
+race: Protoss
+
+economy:
+  continuous_workers: true
+  minerals_per_base: 16
+
+steps:
+  - {at: {time: 7},     do: chrono, target: Nexus, note: "1st chrono on probes (~6.5s)"}
+  - {at: {supply: 12},  do: build,  what: Pylon,   prewalk: {minerals: 75},  note: "Pylon=100; builder then scouts"}
+  - {at: {supply: 14},  do: build,  what: Gateway, prewalk: {minerals: 100}, note: "Gateway=150"}
+  - {at: {supply: 14},  do: scout}
+  - {at: {supply: 14},  do: chrono, target: Nexus, note: "2nd chrono the moment Nexus hits 50 energy"}
+  # cut probes at 18 to bank Nexus (400) + Gas (75) + Core (150) so all three land
+  # on 18; resume after the Core, then 2nd Gas (19) and Pylon (20) follow naturally.
+  - {at: {supply: 18},  do: workers, state: stop,  note: "cut for Nexus + Gas + Core"}
+  - {at: {supply: 18},  do: build,  what: Nexus,   prewalk: {minerals: 300}, note: "natural expansion (Nexus=400)"}
+  - {at: {supply: 18},  do: build,  what: Assimilator, note: "1st gas"}
+  - {at: {supply: 18},  do: gas_workers, count: 6, note: "fully saturate both gases (3 each) as they finish"}
+  - {at: {supply: 18},  do: build,  what: CyberneticsCore, prewalk: {minerals: 100}, note: "Core=150"}
+  - {at: {supply: 18},  do: workers, state: start, note: "resume probes"}
+  - {at: {supply: 19},  do: build,  what: Assimilator, note: "2nd gas"}
+  - {at: {supply: 20},  do: build,  what: Pylon,   prewalk: {minerals: 75}}
+  # keep running until both gases are up (and thus saturated) before conceding
+  - {at: {count: {Assimilator: 2}}, do: workers, state: stop, note: "end: both gases up + saturated"}

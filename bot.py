@@ -68,7 +68,7 @@ class BuildOrderBot(BotAI):
 
         self.continuous_workers: bool = config.economy.continuous_workers
         self.minerals_per_base: int = config.economy.minerals_per_base
-        self.gas_target: int = config.economy.gas_workers
+        self.gas_target: int = 0  # no workers in gas until a `gas_workers` step says so
 
         self.rally_target = None
         self.scout_sent = False
