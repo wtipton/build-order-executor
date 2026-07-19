@@ -41,7 +41,8 @@ steps:
   - {at: {count: {CyberneticsCore: 1}}, do: train,    what: Stalker, note: "2nd Stalker"}
   - {at: {count: {CyberneticsCore: 1}}, do: build,    what: Gateway, note: "2nd Gateway"}
   - {at: {count: {CyberneticsCore: 1}}, do: build,    what: Pylon}
-  # @twilight: Blink (chrono).  (+ hallu = Sentry casts Hallucination — needs a `cast` action, not yet built)
+  # @twilight: Blink (chrono) + hallu (Sentry hallucinates a Phoenix, ~scout)
   - {at: {count: {TwilightCouncil: 1}}, do: research, what: Blink}
   - {at: {count: {TwilightCouncil: 1}}, do: chrono,   target: TwilightCouncil, note: "chrono Blink"}
-  - {at: {count: {TwilightCouncil: 1}}, do: workers, state: stop, note: "end: Blink underway"}
+  - {at: {count: {TwilightCouncil: 1}}, do: cast,     what: Hallucination, note: "Sentry hallucinates a Phoenix"}
+  - {at: {count: {TwilightCouncil: 1}}, do: workers, state: stop, note: "end"}

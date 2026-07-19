@@ -60,6 +60,14 @@ RESEARCH: dict[str, UpgradeId] = {
     "Charge": UpgradeId.CHARGE,
 }
 
+# Friendly spell names -> (ability, caster unit type, energy cost). Instant self-
+# casts (Hallucination spawns the fake unit next to the Sentry; no target needed).
+CAST: dict[str, tuple[AbilityId, U, int]] = {
+    "Hallucination": (AbilityId.HALLUCINATION_PHOENIX, U.SENTRY, 75),  # default: Phoenix (scout)
+    "HallucinationPhoenix": (AbilityId.HALLUCINATION_PHOENIX, U.SENTRY, 75),
+    "HallucinationArchon": (AbilityId.HALLUCINATION_ARCHON, U.SENTRY, 75),
+}
+
 
 def _unit(name: str) -> U:
     return U[name.upper()]
@@ -133,6 +141,7 @@ class BuildOrderBot(BotAI):
                   f"min={self.minerals} gas={self.vespene} sup_left={self.supply_left} "
                   f"next={nxt}", flush=True)
         await self.manage_prebuild()
+        await self.make_workers()  # probes first: continuous, first claim on minerals each frame
         await self.run_steps()
 
         # The build is the whole job: once every step has fired, concede rather
@@ -143,7 +152,6 @@ class BuildOrderBot(BotAI):
             await self.client.leave()
             return
 
-        await self.make_workers()
         await self.manage_economy()
         self.apply_rally()
 
@@ -286,6 +294,14 @@ class BuildOrderBot(BotAI):
             return False  # save for it, holding the line
         self.research(upgrade)  # finds the structure + issues; confirm next frame
         return False
+
+    async def do_cast(self, step: Step) -> bool:
+        ability, caster_type, energy = CAST[step.what]
+        casters = self.units(caster_type).filter(lambda u: u.energy >= energy)
+        if not casters:
+            return False  # no caster with enough energy yet — hold the line
+        casters.first(ability)
+        return True
 
     async def do_chrono(self, step: Step) -> bool:
         target_type = _unit(step.target)

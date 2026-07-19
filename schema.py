@@ -66,6 +66,11 @@ class ResearchStep(_StepBase):
     what: str            # upgrade friendly name (Warpgate, Blink, Charge)
 
 
+class CastStep(_StepBase):
+    do: Literal["cast"]
+    what: str            # spell friendly name (e.g. Hallucination) — cast by the appropriate unit
+
+
 class ChronoStep(_StepBase):
     do: Literal["chrono"]
     target: str          # structure type to chrono-boost (must be producing/researching)
@@ -97,7 +102,7 @@ class WorkersStep(_StepBase):
 
 Step = Annotated[
     Union[
-        BuildStep, TrainStep, ResearchStep, ChronoStep, ScoutStep,
+        BuildStep, TrainStep, ResearchStep, CastStep, ChronoStep, ScoutStep,
         RallyStep, GasWorkersStep, MineralsCapStep, WorkersStep,
     ],
     Field(discriminator="do"),
