@@ -22,6 +22,7 @@ from sc2.bot_ai import BotAI
 from sc2.ids.ability_id import AbilityId
 from sc2.ids.buff_id import BuffId
 from sc2.ids.unit_typeid import UnitTypeId as U
+from sc2.position import Point2
 from sc2.unit import Unit
 
 from placement import Placement
@@ -80,6 +81,10 @@ class BuildOrderBot(BotAI):
         self._builder_tag: int | None = None
         self._build_target = None      # Point2 (placement) or geyser Unit (gas)
         self._active_step: Step | None = None
+
+        # confirm a build actually starts (re-issue if a probe blocked the tile)
+        self._building_step: Step | None = None
+        self._build_baseline = 0
 
     async def on_start(self):
         self.client.game_step = 4
@@ -208,34 +213,45 @@ class BuildOrderBot(BotAI):
     # ----------------------------------------------------------- step handlers
     async def do_build(self, step: Step) -> bool:
         unit = _unit(step.what)
+
+        # A build isn't "done" when the command is issued — a probe walking over
+        # the tile can block placement and the order is dropped silently. Confirm
+        # the structure actually appears (count grows past the baseline captured
+        # when this step started), and re-issue whenever nothing is in flight.
+        if self._building_step is not step:
+            self._building_step = step
+            self._build_baseline = self.structures(unit).amount
+
+        if self.structures(unit).amount > self._build_baseline:
+            self._building_step = None
+            self._clear_reservation()
+            return True
+
         if not self.can_afford(unit):
             return False
+        if self.already_pending(unit):
+            return False  # a worker is en route / it's warping in — wait, don't re-issue
 
-        # use the pre-walked builder + cached placement if one is reserved for
-        # this step (probe already in position -> construction starts instantly)
-        builder = self._reserved_worker() if self._reserved_step is self._active_step else None
-        target = self._build_target if builder is not None else None
-        if builder is not None and self.debug:
+        # (re)issue with the pre-walked builder + cached placement if reserved
+        reserved = self._reserved_step is self._active_step
+        builder = self._reserved_worker() if reserved else None
+        target = self._build_target if reserved else None
+        if self.debug:
             pos = target.position if isinstance(target, Unit) else target
-            d = builder.distance_to(pos) if pos is not None else -1
-            print(f"[prewalk] {self._clock():>4}  {step.what} builder dist={d:.1f} (≈0 = pre-positioned)", flush=True)
+            d = f" builder dist={builder.distance_to(pos):.1f}" if (builder and pos is not None) else ""
+            print(f"[build*] {self._clock():>4}  issuing {step.what}{d}", flush=True)
 
         if unit == U.ASSIMILATOR:
-            ok = await self._build_gas(builder, target if isinstance(target, Unit) else None)
+            await self._build_gas(builder, target if isinstance(target, Unit) else None)
         elif unit == U.NEXUS:
-            loc = target if target is not None else await self.get_next_expansion()
-            if loc is None:
-                return False
-            ok = await self.build(U.NEXUS, near=loc, build_worker=builder, placement_step=1)
+            loc = target if isinstance(target, Point2) else await self.get_next_expansion()
+            if loc is not None:
+                await self.build(U.NEXUS, near=loc, build_worker=builder, placement_step=1)
         else:
-            loc = target if target is not None else await self._placement_for(self._active_step)
-            if loc is None:
-                return False
-            ok = await self.build(unit, near=loc, build_worker=builder)
-
-        if ok:
-            self._clear_reservation()
-        return ok
+            loc = target if isinstance(target, Point2) else await self._placement_for(step)
+            if loc is not None:
+                await self.build(unit, near=loc, build_worker=builder)
+        return False
 
     async def _build_gas(self, builder=None, geyser=None) -> bool:
         if geyser is None:
