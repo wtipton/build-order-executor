@@ -433,6 +433,19 @@ class BuildOrderBot(BotAI):
         """Saturate minerals up to the per-base cap, then fill gas to gas_target,
         and keep no worker idle."""
         workers = self._econ_workers()
+
+        # A probe that just warped in an Assimilator gets auto-queued to harvest
+        # it and stands on the (still-building) geyser doing nothing — it reads as
+        # "gathering", not idle, so send it back to minerals until the gas is done
+        # (the gas-fill below re-assigns as needed once it's ready).
+        building_gas = {g.tag for g in self.gas_buildings.not_ready}
+        if building_gas:
+            for w in workers.gathering:
+                if w.order_target in building_gas:
+                    mins = self._minerals_under_cap() or self.mineral_field
+                    if mins:
+                        w.gather(mins.closest_to(w))
+
         gas_ready = self.gas_buildings.ready
         capacity = sum(g.ideal_harvesters for g in gas_ready)
         desired_gas = min(self.gas_target, capacity)
