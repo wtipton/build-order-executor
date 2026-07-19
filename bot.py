@@ -24,6 +24,7 @@ from sc2.ids.buff_id import BuffId
 from sc2.ids.unit_typeid import UnitTypeId as U
 from sc2.unit import Unit
 
+from placement import Placement
 from schema import BuildConfig, Step, Trigger, load_build  # noqa: F401  (re-exported for run.py)
 
 CHRONO = AbilityId.EFFECT_CHRONOBOOSTENERGYCOST
@@ -50,13 +51,6 @@ PRODUCER: dict[U, U] = {
     U.CARRIER: U.STARGATE,
 }
 
-# Structures that must be placed in pylon power.
-POWERED = {
-    U.GATEWAY, U.CYBERNETICSCORE, U.FORGE, U.TWILIGHTCOUNCIL, U.STARGATE,
-    U.ROBOTICSFACILITY, U.ROBOTICSBAY, U.TEMPLARARCHIVE, U.DARKSHRINE,
-    U.FLEETBEACON, U.PHOTONCANNON, U.SHIELDBATTERY,
-}
-
 _TRIGGER_KEYS = ("supply", "time", "minerals", "vespene", "after")
 
 
@@ -69,6 +63,7 @@ class BuildOrderBot(BotAI):
         super().__init__()
         self.cfg = config
         self.debug = debug
+        self.placement = Placement(self)
         self.steps: list[Step] = config.steps
         self._done: list[bool] = [False] * len(self.steps)
         self.idx = 0
@@ -347,7 +342,8 @@ class BuildOrderBot(BotAI):
         worker.move(pos)
         if self.debug:
             print(f"[prewalk] {self._clock():>4}  sup{self.supply_used} min={self.minerals} "
-                  f"reserved probe for {step.what} (build at {self._trig_str(step.at)})", flush=True)
+                  f"reserved probe for {step.what} @ ({pos.x:.0f},{pos.y:.0f}) "
+                  f"(build at {self._trig_str(step.at)})", flush=True)
 
     def _next_build_step(self) -> Step | None:
         for j in range(self.idx, len(self.steps)):
@@ -367,14 +363,8 @@ class BuildOrderBot(BotAI):
         if unit == U.ASSIMILATOR:
             return self._free_geyser()
         if unit == U.PYLON:
-            return await self.find_placement(U.PYLON, near=self.start_location.towards(self.game_info.map_center, 6))
-        if unit in POWERED:
-            pylons = self.structures(U.PYLON).ready
-            if not pylons:
-                return None
-            near = pylons.closest_to(self.start_location).position.towards(self.game_info.map_center, 2)
-            return await self.find_placement(unit, near=near)
-        return await self.find_placement(unit, near=self.start_location.towards(self.game_info.map_center, 6))
+            return await self.placement.pylon()
+        return await self.placement.building(unit)
 
     def _free_geyser(self):
         for th in self.townhalls.ready:
