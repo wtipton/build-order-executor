@@ -51,9 +51,6 @@ PRODUCER: dict[U, U] = {
     U.CARRIER: U.STARGATE,
 }
 
-_TRIGGER_KEYS = ("supply", "time", "minerals", "vespene", "after")
-
-
 def _unit(name: str) -> U:
     return U[name.upper()]
 
@@ -102,7 +99,10 @@ class BuildOrderBot(BotAI):
 
     @staticmethod
     def _trig_str(t: Trigger) -> str:
-        for k in _TRIGGER_KEYS:
+        if t.count is not None:
+            name, n = next(iter(t.count.items()))
+            return f"count:{name}={n}"
+        for k in ("supply", "time", "minerals", "vespene"):
             v = getattr(t, k)
             if v is not None:
                 return f"{k}:{v}"
@@ -171,8 +171,9 @@ class BuildOrderBot(BotAI):
             return self.minerals >= at.minerals
         if at.vespene is not None:
             return self.vespene >= at.vespene
-        if at.after is not None:
-            return bool(self.structures(_unit(at.after)).ready)
+        if at.count is not None:
+            name, n = next(iter(at.count.items()))
+            return self.all_own_units(_unit(name)).ready.amount >= n
         return True
 
     def _prewalk_due(self, step: Step) -> bool:

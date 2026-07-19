@@ -14,14 +14,17 @@ from typing import Annotated, Literal, Union
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-_TRIGGER_KEYS = ("supply", "time", "minerals", "vespene", "after")
+_TRIGGER_KEYS = ("supply", "time", "minerals", "vespene", "count")
 
 
 class Trigger(BaseModel):
     """A firing condition. Exactly one key must be set.
 
     supply/time/minerals/vespene: fire when that value is >= the given number
-    (time in game-seconds). after: fire when a structure of that name is ready.
+    (time in game-seconds).
+    count:  {UnitType: N} — fire once we have N completed units/structures of that
+            type, e.g. {Probe: 18}, {Gateway: 5}, or {CyberneticsCore: 1} for
+            "once the Core is done".
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -29,13 +32,15 @@ class Trigger(BaseModel):
     time: float | None = None
     minerals: int | None = None
     vespene: int | None = None
-    after: str | None = None
+    count: dict[str, int] | None = None
 
     @model_validator(mode="after")
     def _exactly_one(self) -> "Trigger":
         present = [k for k in _TRIGGER_KEYS if getattr(self, k) is not None]
         if len(present) != 1:
             raise ValueError(f"a trigger needs exactly one of {list(_TRIGGER_KEYS)}, got {present or 'none'}")
+        if self.count is not None and (len(self.count) != 1 or any(v < 1 for v in self.count.values())):
+            raise ValueError("count trigger must be a single {UnitType: N>=1}, e.g. {Probe: 18}")
         return self
 
 
