@@ -45,4 +45,3 @@ steps:
   - {at: {count: {TwilightCouncil: 1}}, do: research, what: Blink}
   - {at: {count: {TwilightCouncil: 1}}, do: chrono,   target: TwilightCouncil, note: "chrono Blink"}
   - {at: {count: {TwilightCouncil: 1}}, do: cast,     what: Hallucination, note: "Sentry hallucinates a Phoenix"}
-  - {at: {count: {TwilightCouncil: 1}}, do: workers, state: stop, note: "end"}

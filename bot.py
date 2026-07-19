@@ -32,6 +32,10 @@ from schema import BuildConfig, Step, Trigger, load_build  # noqa: F401  (re-exp
 CHRONO = AbilityId.EFFECT_CHRONOBOOSTENERGYCOST
 CHRONO_BUFF = BuffId.CHRONOBOOSTENERGYCOST
 
+# Grace period (game-seconds) between the build finishing and conceding, so the
+# last actions land and are watchable rather than cutting out instantly.
+CONCEDE_GRACE = 10.0
+
 # Which producer builds/trains a given unit.
 PRODUCER: dict[U, U] = {
     U.PROBE: U.NEXUS,
@@ -91,6 +95,7 @@ class BuildOrderBot(BotAI):
         self.scout_sent = False
         self._last_hb = -999
         self._conceded = False
+        self._build_done_at: float | None = None  # game-time the last step finished
 
         # pre-walk reservation: a probe sent to the next build's placement ahead
         # of time so construction starts the instant we can afford it.
@@ -143,17 +148,19 @@ class BuildOrderBot(BotAI):
         await self.manage_prebuild()
         await self.make_workers()  # probes first: continuous, first claim on minerals each frame
         await self.run_steps()
-
-        # The build is the whole job: once every step has fired, concede rather
-        # than idling until the game timer runs out.
-        if self.idx >= len(self.steps) and not self._conceded:
-            self._conceded = True
-            print(f"[build] {self._clock():>4}  build complete — conceding", flush=True)
-            await self.client.leave()
-            return
-
         await self.manage_economy()
         self.apply_rally()
+
+        # The build is the whole job: once every step has fired, keep macroing for
+        # a short grace period, then concede (rather than idling to the game timer).
+        if self.idx >= len(self.steps):
+            if self._build_done_at is None:
+                self._build_done_at = self.time
+                print(f"[build] {self._clock():>4}  build complete", flush=True)
+            elif not self._conceded and self.time - self._build_done_at >= CONCEDE_GRACE:
+                self._conceded = True
+                print(f"[build] {self._clock():>4}  conceding ({int(CONCEDE_GRACE)}s after build)", flush=True)
+                await self.client.leave()
 
     # ============================================================ build steps
     async def run_steps(self):

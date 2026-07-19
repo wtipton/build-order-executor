@@ -45,4 +45,3 @@ steps:
   - {at: {count: {CyberneticsCore: 1}}, do: chrono, target: Gateway, note: "chrono the Adept"}
   - {at: {count: {Probe: 22}}, do: gas_workers, count: 5, note: ""}
   - {at: {count: {Probe: 23}}, do: gas_workers, count: 6, note: ""}
-  - {at: {count: {Adept: 1}}, do: workers, state: stop,  note: "end"}
