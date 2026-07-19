@@ -32,5 +32,16 @@ steps:
   - {at: {supply: 18},  do: workers, state: start, note: "resume probes"}
   - {at: {supply: 19},  do: build,  what: Assimilator, note: "2nd gas"}
   - {at: {supply: 20},  do: build,  what: Pylon,   prewalk: {minerals: 75}}
-  # keep running until both gases are up (and thus saturated) before conceding
-  - {at: {count: {Assimilator: 2}}, do: workers, state: stop, note: "end: both gases up + saturated"}
+  # @core: 1st Stalker (chrono) + Warpgate, then Sentry, Twilight, 2nd Stalker, 2nd Gate, Pylon
+  - {at: {count: {CyberneticsCore: 1}}, do: train,    what: Stalker, note: "1st Stalker (chrono'd)"}
+  - {at: {count: {CyberneticsCore: 1}}, do: chrono,   target: Gateway, note: "chrono the Stalker"}
+  - {at: {count: {CyberneticsCore: 1}}, do: research, what: Warpgate}
+  - {at: {count: {CyberneticsCore: 1}}, do: train,    what: Sentry}
+  - {at: {count: {CyberneticsCore: 1}}, do: build,    what: TwilightCouncil}
+  - {at: {count: {CyberneticsCore: 1}}, do: train,    what: Stalker, note: "2nd Stalker"}
+  - {at: {count: {CyberneticsCore: 1}}, do: build,    what: Gateway, note: "2nd Gateway"}
+  - {at: {count: {CyberneticsCore: 1}}, do: build,    what: Pylon}
+  # @twilight: Blink (chrono).  (+ hallu = Sentry casts Hallucination — needs a `cast` action, not yet built)
+  - {at: {count: {TwilightCouncil: 1}}, do: research, what: Blink}
+  - {at: {count: {TwilightCouncil: 1}}, do: chrono,   target: TwilightCouncil, note: "chrono Blink"}
+  - {at: {count: {TwilightCouncil: 1}}, do: workers, state: stop, note: "end: Blink underway"}

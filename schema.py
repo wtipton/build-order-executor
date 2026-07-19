@@ -61,9 +61,14 @@ class TrainStep(_StepBase):
     what: str            # unit (UnitTypeId name, e.g. Adept)
 
 
+class ResearchStep(_StepBase):
+    do: Literal["research"]
+    what: str            # upgrade friendly name (Warpgate, Blink, Charge)
+
+
 class ChronoStep(_StepBase):
     do: Literal["chrono"]
-    target: str          # structure type to chrono-boost (must be producing)
+    target: str          # structure type to chrono-boost (must be producing/researching)
 
 
 class ScoutStep(_StepBase):
@@ -92,7 +97,7 @@ class WorkersStep(_StepBase):
 
 Step = Annotated[
     Union[
-        BuildStep, TrainStep, ChronoStep, ScoutStep,
+        BuildStep, TrainStep, ResearchStep, ChronoStep, ScoutStep,
         RallyStep, GasWorkersStep, MineralsCapStep, WorkersStep,
     ],
     Field(discriminator="do"),

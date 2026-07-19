@@ -22,6 +22,7 @@ from sc2.bot_ai import BotAI
 from sc2.ids.ability_id import AbilityId
 from sc2.ids.buff_id import BuffId
 from sc2.ids.unit_typeid import UnitTypeId as U
+from sc2.ids.upgrade_id import UpgradeId
 from sc2.position import Point2
 from sc2.unit import Unit
 
@@ -51,6 +52,14 @@ PRODUCER: dict[U, U] = {
     U.TEMPEST: U.STARGATE,
     U.CARRIER: U.STARGATE,
 }
+
+# Friendly research names -> UpgradeId (issued via self.research()).
+RESEARCH: dict[str, UpgradeId] = {
+    "Warpgate": UpgradeId.WARPGATERESEARCH,
+    "Blink": UpgradeId.BLINKTECH,
+    "Charge": UpgradeId.CHARGE,
+}
+
 
 def _unit(name: str) -> U:
     return U[name.upper()]
@@ -96,11 +105,6 @@ class BuildOrderBot(BotAI):
     def _clock(self) -> str:
         s = int(self.time)
         return f"{s // 60}:{s % 60:02d}"
-
-    @staticmethod
-    def _blocking(step: Step) -> bool:
-        # resource-consuming, order-critical actions hold the line until done
-        return step.do in ("build", "train")
 
     @staticmethod
     def _trig_str(t: Trigger) -> str:
@@ -153,16 +157,12 @@ class BuildOrderBot(BotAI):
             step = self.steps[i]
             if not self.trigger_met(step.at):
                 break  # this step (and everything after) isn't due yet
-            ok = await self.execute(step)
-            if ok:
-                self._done[i] = True
-                note = f"  # {step.note}" if step.note else ""
-                print(f"[build] {self._clock():>4}  sup{self.supply_used:<3} {self._describe(step)}{note}", flush=True)
-                i += 1
-            elif self._blocking(step):
-                break  # must wait here (e.g. saving for this build)
-            else:
-                i += 1  # soft action not ready yet (e.g. no chrono energy); retry later
+            if not await self.execute(step):
+                break  # hold the line until this step can be done (strict order)
+            self._done[i] = True
+            note = f"  # {step.note}" if step.note else ""
+            print(f"[build] {self._clock():>4}  sup{self.supply_used:<3} {self._describe(step)}{note}", flush=True)
+            i += 1
         # advance the pointer past any leading completed steps
         while self.idx < len(self.steps) and self._done[self.idx]:
             self.idx += 1
@@ -228,9 +228,9 @@ class BuildOrderBot(BotAI):
             return True
 
         if not self.can_afford(unit):
-            return False
+            return False  # save for it, holding the line
         if self.already_pending(unit):
-            return False  # a worker is en route / it's warping in — wait, don't re-issue
+            return False  # a worker is en route / it's warping in — hold, don't re-issue
 
         # (re)issue with the pre-walked builder + cached placement if reserved
         reserved = self._reserved_step is self._active_step
@@ -251,7 +251,7 @@ class BuildOrderBot(BotAI):
             loc = target if isinstance(target, Point2) else await self._placement_for(step)
             if loc is not None:
                 await self.build(unit, near=loc, build_worker=builder)
-        return False
+        return False  # issued; hold the line until the structure appears (confirm)
 
     async def _build_gas(self, builder=None, geyser=None) -> bool:
         if geyser is None:
@@ -267,16 +267,25 @@ class BuildOrderBot(BotAI):
     async def do_train(self, step: Step) -> bool:
         unit = _unit(step.what)
         if not self.can_afford(unit):
-            return False
+            return False  # save for it (costs money + supply), holding the line
         producer = PRODUCER.get(unit)
         if producer == U.NEXUS or unit == U.PROBE:
             havers = self.townhalls.ready.idle
         else:
             havers = self.structures(producer).ready.idle
         if not havers:
-            return False
+            return False  # producer busy — wait for it (correct if the order is right)
         havers.first.train(unit)
-        return True
+        return True  # issued (producer now busy); the next step proceeds concurrently
+
+    async def do_research(self, step: Step) -> bool:
+        upgrade = RESEARCH[step.what]
+        if self.already_pending_upgrade(upgrade) > 0 or upgrade in self.state.upgrades:
+            return True  # already researching or done
+        if not self.can_afford(upgrade):
+            return False  # save for it, holding the line
+        self.research(upgrade)  # finds the structure + issues; confirm next frame
+        return False
 
     async def do_chrono(self, step: Step) -> bool:
         target_type = _unit(step.target)
@@ -369,8 +378,8 @@ class BuildOrderBot(BotAI):
             s = self.steps[j]
             if s.do == "build":
                 return s
-            if self._blocking(s):
-                return None  # a train step gates the line; don't reserve past it
+            if s.do in ("train", "research"):
+                return None  # a resource-committing step precedes the next build
         return None
 
     async def _placement_for(self, step: Step):
