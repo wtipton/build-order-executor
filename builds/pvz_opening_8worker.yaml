@@ -1,27 +1,16 @@
-# Protoss opening for the 8-worker start (patch 5.0.16+)
+# Protoss vs Zerg (PvZ) opening for the 8-worker start (patch 5.0.16+)
 # Source: "Beginner Protoss Opening - How to Play SC2 with 8 Worker Start"
 #   https://www.youtube.com/watch?v=KeXt_5oBd50  (first ~4 min)
 #
-# Safe standard PvZ/PvT opening: expand + tech, Adept first. (vs Zerg you also
-# wall the natural — not modelled here.)
+# Safe standard PvZ opening: expand + tech, Adept first. PvZ-specific — it
+# rallies to the natural and (in the video) walls it; the PvT variant differs.
 #
-# This file is executed by bot.py. Two kinds of things live here:
-#   steps:    the deliberate actions a human performs and must learn (build,
-#             train, chrono, scout, rally, and economy overrides). Ordered.
-#   economy:  defaults for the automatic economy the bot runs on its own
-#             (continuous workers, no idle workers, minerals-then-gas saturation).
+# The config schema is defined + validated in schema.py (pydantic).
 #
-# Step schema:
-#   at:   trigger — one of {supply: N} | {time: SECONDS} | {after: StructureName}
-#   do:   build | train | chrono | scout | rally | gas_workers | minerals_cap | workers
-#   ...:  action args (what / target / where / count / state)
+# Patch facts / targets: 8 starting workers, Nexus = 13 supply, Adept out ~2:57.
 
-name: Protoss 8-worker safe opening (PvZ/PvT)
+name: Protoss 8-worker safe opening (PvZ)
 race: Protoss
-meta:
-  start_workers: 8        # 5.0.16 reduced starting workers 12 -> 8
-  nexus_supply: 13        # 5.0.16 reduced Nexus supply 15 -> 13
-  adept_out_by: "2:57"
 
 economy:
   continuous_workers: true   # always make probes unless a `workers: stop` step says not to
@@ -49,15 +38,3 @@ steps:
   - {at: {supply: 20},  do: rally,  where: natural}
   - {at: {after: CyberneticsCore}, do: train,  what: Adept,    note: "out by ~2:57"}
   - {at: {after: CyberneticsCore}, do: chrono, target: Gateway, note: "chrono the Adept"}
-
-# Where the build branches after the opening (not executed; reference only).
-branches:
-  vs_zerg_or_macro: Stargate in main (cancel / never make Warpgate)
-  vs_terran: Twilight Council + 2nd Gateway
-  mineral_focused: skip the gas-heavy path, 2 Gateways early -> Blink
-
-# Adjustment vs all-in early pool (e.g. 10-pool), from later in the video.
-early_pool_adjustment:
-  - chrono slightly earlier (~6s)
-  - send the scouting probe a few seconds early (long walk to natural)
-  - take first gas but hold it / commit no gas income early

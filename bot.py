@@ -1,7 +1,7 @@
 """Generic build-order bot for python-sc2.
 
-`BuildOrderBot` executes a build described entirely by a config dict (see
-builds/*.yaml). Nothing about a specific build is hard-coded here.
+`BuildOrderBot` executes a build described entirely by a validated config (see
+schema.py + builds/*.yaml). Nothing about a specific build is hard-coded here.
 
 Two layers:
 
@@ -13,33 +13,18 @@ Two layers:
              saturate minerals to N per base and then fill gas, return builders
              to mining.
 
-Trigger forms (step `at:`):  {supply: N} | {time: SECONDS} | {after: Structure}
-A build step may also carry `prewalk: <trigger>` — when it fires, a probe is
-reserved and walked to the placement so construction starts the instant the build
-is affordable. Defaults to the step's own `at` trigger.
-Actions (step `do:`):
-    build <what>        structure or expansion (Nexus -> expand)
-    train <what>        unit, from the appropriate producer
-    chrono <target>     chrono-boost a structure type that is producing
-    scout               send one probe toward the enemy
-    rally <where>       set gateway rally point (natural | main)
-    gas_workers <count> desired total workers in gas (overrides auto)
-    minerals_cap <count> per-base mineral worker cap (overrides default)
-    workers <state>     stop | start continuous probe production
+The YAML spec (triggers, actions, economy) is defined and validated in schema.py.
 """
 
 from __future__ import annotations
-
-from pathlib import Path
-from typing import Any
-
-import yaml
 
 from sc2.bot_ai import BotAI
 from sc2.ids.ability_id import AbilityId
 from sc2.ids.buff_id import BuffId
 from sc2.ids.unit_typeid import UnitTypeId as U
 from sc2.unit import Unit
+
+from schema import BuildConfig, Step, Trigger, load_build  # noqa: F401  (re-exported for run.py)
 
 CHRONO = AbilityId.EFFECT_CHRONOBOOSTENERGYCOST
 CHRONO_BUFF = BuffId.CHRONOBOOSTENERGYCOST
@@ -72,50 +57,25 @@ POWERED = {
     U.FLEETBEACON, U.PHOTONCANNON, U.SHIELDBATTERY,
 }
 
-
-def load_build(path: str | Path) -> dict[str, Any]:
-    with open(path) as f:
-        return yaml.safe_load(f)
+_TRIGGER_KEYS = ("supply", "time", "minerals", "vespene", "after")
 
 
 def _unit(name: str) -> U:
     return U[name.upper()]
 
 
-class _Step:
-    __slots__ = ("at", "do", "args", "note", "prewalk", "done")
-
-    def __init__(self, raw: dict):
-        self.at = raw["at"]
-        self.do = raw["do"]
-        self.note = raw.get("note", "")
-        # optional trigger for when to start pre-walking the builder into place;
-        # if omitted it defaults to `at` (walk starts when the step comes up).
-        self.prewalk = raw.get("prewalk")
-        self.args = {k: v for k, v in raw.items() if k not in ("at", "do", "note", "prewalk")}
-        self.done = False
-
-    @property
-    def blocking(self) -> bool:
-        # resource-consuming, order-critical actions hold the line until done
-        return self.do in ("build", "train")
-
-    def __repr__(self):
-        return f"{self.at} {self.do} {self.args or ''}".strip()
-
-
 class BuildOrderBot(BotAI):
-    def __init__(self, config: dict[str, Any], debug: bool = False):
+    def __init__(self, config: BuildConfig, debug: bool = False):
         super().__init__()
         self.cfg = config
         self.debug = debug
-        self.steps = [_Step(s) for s in config.get("steps", [])]
+        self.steps: list[Step] = config.steps
+        self._done: list[bool] = [False] * len(self.steps)
         self.idx = 0
 
-        econ = config.get("economy", {})
-        self.continuous_workers: bool = econ.get("continuous_workers", True)
-        self.minerals_per_base: int = econ.get("minerals_per_base", 16)
-        self.gas_target: int = econ.get("gas_workers", 0)
+        self.continuous_workers: bool = config.economy.continuous_workers
+        self.minerals_per_base: int = config.economy.minerals_per_base
+        self.gas_target: int = config.economy.gas_workers
 
         self.rally_target = None
         self.scout_sent = False
@@ -124,10 +84,10 @@ class BuildOrderBot(BotAI):
 
         # pre-walk reservation: a probe sent to the next build's placement ahead
         # of time so construction starts the instant we can afford it.
-        self._reserved_step: _Step | None = None
+        self._reserved_step: Step | None = None
         self._builder_tag: int | None = None
         self._build_target = None      # Point2 (placement) or geyser Unit (gas)
-        self._active_step: _Step | None = None
+        self._active_step: Step | None = None
 
     async def on_start(self):
         self.client.game_step = 4
@@ -140,12 +100,30 @@ class BuildOrderBot(BotAI):
         s = int(self.time)
         return f"{s // 60}:{s % 60:02d}"
 
+    @staticmethod
+    def _blocking(step: Step) -> bool:
+        # resource-consuming, order-critical actions hold the line until done
+        return step.do in ("build", "train")
+
+    @staticmethod
+    def _trig_str(t: Trigger) -> str:
+        for k in _TRIGGER_KEYS:
+            v = getattr(t, k)
+            if v is not None:
+                return f"{k}:{v}"
+        return "?"
+
+    def _describe(self, step: Step) -> str:
+        args = step.model_dump(exclude={"at", "prewalk", "note", "do"}, exclude_none=True)
+        argstr = " ".join(f"{k}={v}" for k, v in args.items())
+        return f"{step.do} {argstr}".rstrip()
+
     async def on_step(self, iteration: int):
         if not self.townhalls:
             return
         if self.debug and self.time - self._last_hb >= 10:
             self._last_hb = self.time
-            nxt = self.steps[self.idx] if self.idx < len(self.steps) else "DONE"
+            nxt = self._describe(self.steps[self.idx]) if self.idx < len(self.steps) else "DONE"
             print(f"[hb] t={self.time:5.0f}s sup={self.supply_used}/{self.supply_cap} "
                   f"w={self.workers.amount} pend_probe={self.already_pending(U.PROBE)} "
                   f"min={self.minerals} gas={self.vespene} sup_left={self.supply_left} "
@@ -169,72 +147,71 @@ class BuildOrderBot(BotAI):
     async def run_steps(self):
         i = self.idx
         while i < len(self.steps):
-            step = self.steps[i]
-            if step.done:
+            if self._done[i]:
                 i += 1
                 continue
+            step = self.steps[i]
             if not self.trigger_met(step.at):
                 break  # this step (and everything after) isn't due yet
             ok = await self.execute(step)
             if ok:
-                step.done = True
-                args = " ".join(f"{k}={v}" for k, v in step.args.items())
+                self._done[i] = True
                 note = f"  # {step.note}" if step.note else ""
-                print(f"[build] {self._clock():>4}  sup{self.supply_used:<3} {step.do} {args}{note}", flush=True)
+                print(f"[build] {self._clock():>4}  sup{self.supply_used:<3} {self._describe(step)}{note}", flush=True)
                 i += 1
-            elif step.blocking:
+            elif self._blocking(step):
                 break  # must wait here (e.g. saving for this build)
             else:
                 i += 1  # soft action not ready yet (e.g. no chrono energy); retry later
         # advance the pointer past any leading completed steps
-        while self.idx < len(self.steps) and self.steps[self.idx].done:
+        while self.idx < len(self.steps) and self._done[self.idx]:
             self.idx += 1
 
-    def trigger_met(self, at: dict) -> bool:
-        if "supply" in at:
-            return self.supply_used >= at["supply"]
-        if "time" in at:
-            return self.time >= at["time"]
-        if "minerals" in at:
-            return self.minerals >= at["minerals"]
-        if "vespene" in at:
-            return self.vespene >= at["vespene"]
-        if "after" in at:
-            return bool(self.structures(_unit(at["after"])).ready)
+    def trigger_met(self, at: Trigger) -> bool:
+        if at.supply is not None:
+            return self.supply_used >= at.supply
+        if at.time is not None:
+            return self.time >= at.time
+        if at.minerals is not None:
+            return self.minerals >= at.minerals
+        if at.vespene is not None:
+            return self.vespene >= at.vespene
+        if at.after is not None:
+            return bool(self.structures(_unit(at.after)).ready)
         return True
 
-    def _prewalk_due(self, step: _Step) -> bool:
+    def _prewalk_due(self, step: Step) -> bool:
         """Whether to start walking the builder. For a resource-based prewalk
         ({minerals}/{vespene}) we reserve the cost of the probes still needed to
         reach the build's supply, then check the threshold against what's left —
         i.e. the minerals we'd have AFTER committing those probes, not minerals
         that are about to be spent on them. (Probes cost 50 minerals / 0 gas.)
         Other trigger forms use trigger_met directly."""
-        trig = step.prewalk or step.at
-        if "minerals" in trig or "vespene" in trig:
+        trig = getattr(step, "prewalk", None) or step.at
+        if trig.minerals is not None or trig.vespene is not None:
             reserved = 0
-            if "supply" in step.at:
+            if step.at.supply is not None:
                 # supply_used already counts in-production probes (supply is
                 # reserved the moment training starts), so DON'T also subtract
                 # already_pending — that double-counts the building probe and
                 # fires the pull one supply early.
-                need = step.at["supply"] - self.supply_used
+                need = step.at.supply - self.supply_used
                 reserved = 50 * max(0, need)
-            if "minerals" in trig and self.minerals - reserved < trig["minerals"]:
+            if trig.minerals is not None and self.minerals - reserved < trig.minerals:
                 return False
-            if "vespene" in trig and self.vespene < trig["vespene"]:
+            if trig.vespene is not None and self.vespene < trig.vespene:
                 return False
             return True
         return self.trigger_met(trig)
 
-    async def execute(self, step: _Step) -> bool:
+    async def execute(self, step: Step) -> bool:
         self._active_step = step
         handler = getattr(self, f"do_{step.do}")
-        return await handler(step.args)
+        return await handler(step)
 
     # ----------------------------------------------------------- step handlers
-    async def do_build(self, args) -> bool:
-        unit = _unit(args["what"])
+    async def do_build(self, step: Step) -> bool:
+        unit = _unit(step.what)
         if not self.can_afford(unit):
             return False
 
@@ -245,7 +222,7 @@ class BuildOrderBot(BotAI):
         if builder is not None and self.debug:
             pos = target.position if isinstance(target, Unit) else target
             d = builder.distance_to(pos) if pos is not None else -1
-            print(f"[prewalk] {self._clock():>4}  {args['what']} builder dist={d:.1f} (≈0 = pre-positioned)", flush=True)
+            print(f"[prewalk] {self._clock():>4}  {step.what} builder dist={d:.1f} (≈0 = pre-positioned)", flush=True)
 
         if unit == U.ASSIMILATOR:
             ok = await self._build_gas(builder, target if isinstance(target, Unit) else None)
@@ -275,8 +252,8 @@ class BuildOrderBot(BotAI):
         worker.build_gas(geyser)
         return True
 
-    async def do_train(self, args) -> bool:
-        unit = _unit(args["what"])
+    async def do_train(self, step: Step) -> bool:
+        unit = _unit(step.what)
         if not self.can_afford(unit):
             return False
         producer = PRODUCER.get(unit)
@@ -289,8 +266,8 @@ class BuildOrderBot(BotAI):
         havers.first.train(unit)
         return True
 
-    async def do_chrono(self, args) -> bool:
-        target_type = _unit(args["target"])
+    async def do_chrono(self, step: Step) -> bool:
+        target_type = _unit(step.target)
         nexuses = self.townhalls(U.NEXUS).ready.filter(lambda n: n.energy >= 50)
         if not nexuses:
             return False  # wait until a Nexus has 50 energy
@@ -306,7 +283,7 @@ class BuildOrderBot(BotAI):
         nexuses.first(CHRONO, target)
         return True
 
-    async def do_scout(self, args) -> bool:
+    async def do_scout(self, step: Step) -> bool:
         if self.scout_sent:
             return True
         if not self.enemy_start_locations:
@@ -318,20 +295,20 @@ class BuildOrderBot(BotAI):
         self.scout_sent = True
         return True
 
-    async def do_rally(self, args) -> bool:
-        self.rally_target = self._resolve_place(args.get("where", "natural"))
+    async def do_rally(self, step: Step) -> bool:
+        self.rally_target = self._resolve_place(step.where)
         return True
 
-    async def do_gas_workers(self, args) -> bool:
-        self.gas_target = int(args["count"])
+    async def do_gas_workers(self, step: Step) -> bool:
+        self.gas_target = step.count
         return True
 
-    async def do_minerals_cap(self, args) -> bool:
-        self.minerals_per_base = int(args["count"])
+    async def do_minerals_cap(self, step: Step) -> bool:
+        self.minerals_per_base = step.count
         return True
 
-    async def do_workers(self, args) -> bool:
-        self.continuous_workers = args.get("state", "start") == "start"
+    async def do_workers(self, step: Step) -> bool:
+        self.continuous_workers = step.state == "start"
         return True
 
     def _resolve_place(self, where: str):
@@ -370,20 +347,21 @@ class BuildOrderBot(BotAI):
         worker.move(pos)
         if self.debug:
             print(f"[prewalk] {self._clock():>4}  sup{self.supply_used} min={self.minerals} "
-                  f"reserved probe for {step.args['what']} (build at {step.at})", flush=True)
+                  f"reserved probe for {step.what} (build at {self._trig_str(step.at)})", flush=True)
 
-    def _next_build_step(self) -> _Step | None:
-        for s in self.steps[self.idx:]:
-            if s.done:
+    def _next_build_step(self) -> Step | None:
+        for j in range(self.idx, len(self.steps)):
+            if self._done[j]:
                 continue
+            s = self.steps[j]
             if s.do == "build":
                 return s
-            if s.blocking:
+            if self._blocking(s):
                 return None  # a train step gates the line; don't reserve past it
         return None
 
-    async def _placement_for(self, step: _Step):
-        unit = _unit(step.args["what"])
+    async def _placement_for(self, step: Step):
+        unit = _unit(step.what)
         if unit == U.NEXUS:
             return await self.get_next_expansion()
         if unit == U.ASSIMILATOR:

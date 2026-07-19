@@ -19,7 +19,7 @@ under Wine; `--realtime` watches live; `--debug` adds a 10s economy heartbeat):
 
 ```bash
 cd ~/projects/build_orders && .venv/bin/python run.py \
-  --build builds/pvz_pvt_opening_8worker.yaml \
+  --build builds/pvz_opening_8worker.yaml \
   --map LockdownLE \
   --opponent zerg \
   --difficulty easy \

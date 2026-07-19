@@ -70,7 +70,7 @@ REPLAY_DIR = Path.home() / "replays" / "bot"
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--build", default="builds/pvz_pvt_opening_8worker.yaml", help="build-order config")
+    ap.add_argument("--build", default="builds/pvz_opening_8worker.yaml", help="build-order config")
     ap.add_argument("--map", default="LockdownLE", help="map filename without .SC2Map")
     ap.add_argument("--opponent", default="zerg", choices=RACES, help="built-in AI race")
     ap.add_argument("--difficulty", default="easy", choices=DIFFS)
@@ -86,13 +86,13 @@ def main():
     game_map = Map(Path(f"{args.map}.SC2Map"))
 
     build = load_build(args.build)
-    print(f"Build: {build.get('name', args.build)}")
+    print(f"Build: {build.name}")
 
     if args.replay:
         replay_path = Path(args.replay)
     else:
         REPLAY_DIR.mkdir(parents=True, exist_ok=True)
-        slug = re.sub(r"[^a-z0-9]+", "-", build.get("name", "build").lower()).strip("-")
+        slug = re.sub(r"[^a-z0-9]+", "-", build.name.lower()).strip("-")
         stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
         replay_path = REPLAY_DIR / f"{slug}_{stamp}.SC2Replay"
 
@@ -100,7 +100,7 @@ def main():
         game_map,
         [
             # fullscreen on the Bot player -> SC2Process launches with -displayMode 1
-            Bot(Race.Protoss, BuildOrderBot(build, debug=args.debug), name="BuildOrderBot", fullscreen=args.fullscreen),
+            Bot(Race[build.race], BuildOrderBot(build, debug=args.debug), name="BuildOrderBot", fullscreen=args.fullscreen),
             Computer(RACES[args.opponent], DIFFS[args.difficulty]),
         ],
         realtime=args.realtime,

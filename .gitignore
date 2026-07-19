@@ -6,4 +6,4 @@ __pycache__/
 .venv/
 
 # Bot run output
-run.log
+*.log
