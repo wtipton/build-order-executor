@@ -46,3 +46,5 @@ steps:
   - {at: {count: {CyberneticsCore: 1}}, do: chrono, target: Gateway, note: "chrono the Adept"}
   - {at: {count: {Probe: 22}}, do: gas_workers, count: 5, note: ""}
   - {at: {count: {Probe: 23}}, do: gas_workers, count: 6, note: ""}
+  # once the natural finishes, transfer workers onto it and rally new probes there
+  - {at: {count: {Nexus: 2}}, do: rally_and_transfer, base: 2, note: "saturate the natural"}

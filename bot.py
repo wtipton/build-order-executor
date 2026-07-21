@@ -7,8 +7,8 @@ Two layers:
 
   * STEPS  — the deliberate actions a human performs and must learn: build,
              train, warp, morph, research, cast, chrono, send_probe/return_probe,
-             rally, plus economy overrides. Each step has a trigger and fires
-             once, in order.
+             rally, rally_and_transfer, plus economy overrides. Each step has a
+             trigger and fires once, in order.
   * ECONOMY — automatic behaviour the bot runs on its own unless a step
              overrides it: make probes continuously, never leave a worker idle,
              saturate minerals to N per base and then fill gas, return builders
@@ -115,6 +115,9 @@ class BuildOrderBot(BotAI):
         # OUT of all worker automation (mining, prewalk, build auto-select) until a
         # `return_probe` step hands them back.
         self.named_probes: dict[str, int] = {}
+        # The base a returned/idle worker mines at (1 = main, 2 = natural, ...).
+        # `rally_and_transfer` moves it; workers never fall back to random minerals.
+        self.populating_base_num: int = 1
         self._last_hb = -999
         self._conceded = False
         self._build_done_at: float | None = None  # game-time the last step finished
@@ -176,10 +179,12 @@ class BuildOrderBot(BotAI):
         if self.debug and self.time - self._last_hb >= 10:
             self._last_hb = self.time
             nxt = self._describe(self.steps[self.idx]) if self.idx < len(self.steps) else "DONE"
+            bases = " ".join(f"b{i+1}={t.assigned_harvesters}/{self.minerals_per_base}"
+                             for i, t in enumerate(self._ordered_bases()))
             print(f"[hb] t={self.time:5.0f}s sup={self.supply_used}/{self.supply_cap} "
                   f"w={self.workers.amount} pend_probe={self.already_pending(U.PROBE)} "
                   f"min={self.minerals} gas={self.vespene} sup_left={self.supply_left} "
-                  f"next={nxt}", flush=True)
+                  f"mins[{bases}] next={nxt}", flush=True)
         await self.manage_prebuild()
         await self.make_workers()  # probes first: continuous, first claim on minerals each frame
         await self.run_steps()
@@ -453,14 +458,44 @@ class BuildOrderBot(BotAI):
         tag = self.named_probes.pop(step.label, None)
         worker = self._worker_by_tag(tag) if tag is not None else None
         if worker is not None:
-            # nudge it back to mining; from here the economy manages it normally
-            mins = self._minerals_under_cap() or self.mineral_field
-            if mins:
-                worker.gather(mins.closest_to(worker))
+            field = self._populating_field()  # our currently-populating base, never enemy minerals
+            if field is not None:
+                worker.gather(field)
         return True
 
     async def do_rally(self, step: Step) -> bool:
         self.rally_target = self._resolve_place(step.where)
+        return True
+
+    async def do_rally_and_transfer(self, step: Step) -> bool:
+        bases = self._ordered_bases()
+        if step.base > len(bases):
+            return False  # that base isn't up yet — hold the line until it exists
+        self.populating_base_num = step.base
+        base = bases[step.base - 1]
+        field = self._base_field(base)
+        if field is None:
+            return True
+        # rally every Nexus's new probes onto this base's minerals
+        for nexus in self.townhalls(U.NEXUS).ready:
+            nexus(AbilityId.RALLY_WORKERS, field)
+        # transfer every OTHER base's excess mineral workers here, leaving each at
+        # the cap. assigned_harvesters is the accurate count, so moving exactly
+        # (assigned - cap) of that base's workers lands it on the cap. Prefer ones
+        # not carrying (no wasted trip), but include carriers if needed to reach it.
+        pool = self.workers.tags_not_in(self._excluded_tags()).filter(lambda w: w.is_gathering)
+        for th in bases:
+            if th.tag == base.tag:
+                continue
+            excess = th.assigned_harvesters - self.minerals_per_base
+            if excess <= 0:
+                continue
+            near = pool.closer_than(10, th).sorted(key=lambda w: w.is_carrying_minerals)
+            for w in near:
+                if excess <= 0:
+                    break
+                w.gather(field)
+                excess -= 1
         return True
 
     async def do_gas_workers(self, step: Step) -> bool:
@@ -660,9 +695,10 @@ class BuildOrderBot(BotAI):
         if building_gas:
             for w in workers.gathering:
                 if w.order_target in building_gas:
-                    mins = self._minerals_under_cap() or self.mineral_field
-                    if mins:
-                        w.gather(mins.closest_to(w))
+                    fields = self._minerals_under_cap()
+                    field = fields.closest_to(w) if fields else self._populating_field()
+                    if field is not None:
+                        w.gather(field)
 
         gas_ready = self.gas_buildings.ready
         capacity = sum(g.ideal_harvesters for g in gas_ready)
@@ -683,14 +719,16 @@ class BuildOrderBot(BotAI):
             for g in gas_ready:
                 while g.assigned_harvesters > 0 and assigned_gas > desired_gas:
                     w = workers.filter(lambda u: u.is_carrying_vespene is False).closest_to(g)
-                    mins = self._minerals_under_cap()
-                    if not (w and mins):
+                    fields = self._minerals_under_cap()
+                    field = fields.closest_to(w) if (fields and w) else self._populating_field()
+                    if not (w and field):
                         break
-                    w.gather(mins.closest_to(w))
+                    w.gather(field)
                     assigned_gas -= 1
 
         # never idle: park idle workers on minerals (under cap), else spare gas,
-        # else nearest minerals anyway (over-saturation beats standing still)
+        # else the populating base (over-saturation beats standing still — but
+        # always one of OUR bases, never the nearest field on the map)
         for w in workers.idle:
             mins = self._minerals_under_cap()
             if mins:
@@ -700,16 +738,47 @@ class BuildOrderBot(BotAI):
             if spare:
                 w.gather(spare.closest_to(w))
                 continue
-            if self.mineral_field and self.townhalls.ready:
-                w.gather(self.mineral_field.closest_to(self.townhalls.ready.first))
+            field = self._populating_field()
+            if field is not None:
+                w.gather(field)
 
     def _minerals_under_cap(self):
-        """Mineral fields belonging to a base that is below the per-base cap."""
-        for th in self.townhalls.ready.sorted(key=lambda t: t.assigned_harvesters):
+        """Mineral fields of the first (in base order: main, natural, third, ...)
+        base below the per-base cap — so bases fill up in order."""
+        for th in self._ordered_bases():
             if th.assigned_harvesters < self.minerals_per_base:
                 fields = self.mineral_field.closer_than(10, th)
                 if fields:
                     return fields
+        return None
+
+    def _ordered_bases(self):
+        """Our ready bases in expansion order (nearest our start first = base 1)."""
+        return self.townhalls.ready.sorted(key=lambda t: t.distance_to(self.start_location))
+
+    def _populating_base(self):
+        bases = self._ordered_bases()
+        if not bases:
+            return None
+        return bases[min(self.populating_base_num, len(bases)) - 1]
+
+    def _base_field(self, base):
+        """A mineral field at `base` (closest patch to it), or None."""
+        if base is None:
+            return None
+        fields = self.mineral_field.closer_than(10, base)
+        return fields.closest_to(base) if fields else None
+
+    def _populating_field(self):
+        """Where homeless workers mine: the populating base's minerals, else any of
+        our bases in order. Never the nearest field on the map (could be the enemy's)."""
+        f = self._base_field(self._populating_base())
+        if f is not None:
+            return f
+        for th in self._ordered_bases():
+            f = self._base_field(th)
+            if f is not None:
+                return f
         return None
 
     def apply_rally(self):

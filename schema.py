@@ -115,6 +115,13 @@ class RallyStep(_StepBase):
     where: Place = "natural"
 
 
+class RallyAndTransferStep(_StepBase):
+    do: Literal["rally_and_transfer"]
+    base: int = Field(ge=1)  # which of our bases (1 = main, 2 = natural, 3 = third, ...) to saturate
+    # Transfers every other base's excess mineral workers to this base, rallies all
+    # Nexuses onto its minerals, and makes it the base returned probes mine at.
+
+
 class GasWorkersStep(_StepBase):
     do: Literal["gas_workers"]
     count: int           # desired total workers in gas
@@ -133,8 +140,8 @@ class WorkersStep(_StepBase):
 Step = Annotated[
     Union[
         BuildStep, TrainStep, WarpStep, MorphStep, ResearchStep, CastStep,
-        ChronoStep, SendProbeStep, ReturnProbeStep, RallyStep, GasWorkersStep,
-        MineralsCapStep, WorkersStep,
+        ChronoStep, SendProbeStep, ReturnProbeStep, RallyStep, RallyAndTransferStep,
+        GasWorkersStep, MineralsCapStep, WorkersStep,
     ],
     Field(discriminator="do"),
 ]

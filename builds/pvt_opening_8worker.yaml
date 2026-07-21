@@ -46,3 +46,5 @@ steps:
   - {at: {count: {TwilightCouncil: 1}}, do: research, what: Blink}
   - {at: {count: {TwilightCouncil: 1}}, do: chrono,   target: TwilightCouncil, note: "chrono Blink"}
   - {at: {count: {TwilightCouncil: 1}}, do: cast,     what: Hallucination, note: "Sentry hallucinates a Phoenix"}
+  # once the natural finishes, transfer workers onto it and rally new probes there
+  - {at: {count: {Nexus: 2}}, do: rally_and_transfer, base: 2, note: "saturate the natural"}

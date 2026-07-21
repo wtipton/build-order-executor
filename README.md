@@ -45,4 +45,8 @@ The `[build]` lines (always on) show each step firing with the game clock, e.g.
     build with a specific sent probe instead of auto-pulling one.
   - `warp {what, where}` warps a unit in at the pylon nearest `where`.
   - `morph {to: warpgate|gateway, count?}` explicitly converts Gateways<->Warpgates.
+  - `rally_and_transfer {base}` — make base N (1=main, 2=natural, …) the base to
+    saturate: transfers other bases' excess mineral workers there, rallies Nexuses
+    onto its minerals, and sends returned/idle probes there. Homeless workers always
+    mine at one of our bases (never the nearest field on the map).
 - `run.py` — launcher.
