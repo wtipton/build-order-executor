@@ -132,6 +132,7 @@ class BuildOrderBot(BotAI):
         # confirm a build actually starts (re-issue if a probe blocked the tile)
         self._building_step: Step | None = None
         self._build_baseline = 0
+        self._pending_baseline = 0  # same-type builds already in flight when a build step starts
 
         # confirm a warp-in actually happened (a Warpgate looks off-cooldown to
         # get_available_abilities right after we've used it, so issuing != warped;
@@ -276,6 +277,13 @@ class BuildOrderBot(BotAI):
         if self._building_step is not step:
             self._building_step = step
             self._build_baseline = self.structures(unit).amount
+            # already_pending() counts EVERY in-progress structure of this type
+            # (python-sc2 counts under-construction Protoss buildings), so baseline
+            # the ones already in flight from earlier steps — the guard below then
+            # only holds on THIS step's own build, letting several of the same
+            # structure (e.g. a wall of Gateways) build concurrently instead of
+            # strictly one-after-another.
+            self._pending_baseline = self.already_pending(unit)
 
         if self.structures(unit).amount > self._build_baseline:
             self._building_step = None
@@ -284,8 +292,8 @@ class BuildOrderBot(BotAI):
 
         if not self.can_afford(unit):
             return False  # save for it, holding the line
-        if self.already_pending(unit):
-            return False  # a worker is en route / it's warping in — hold, don't re-issue
+        if self.already_pending(unit) > self._pending_baseline:
+            return False  # THIS build is en route / warping in — hold, don't re-issue
 
         # Builder: an explicitly sent probe (step.label), else the pre-walked
         # reservation, else auto-selected from the free pool — never a sent probe.
