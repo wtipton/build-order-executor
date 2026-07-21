@@ -6,8 +6,9 @@ schema.py + builds/*.yaml). Nothing about a specific build is hard-coded here.
 Two layers:
 
   * STEPS  — the deliberate actions a human performs and must learn: build,
-             train, chrono, scout, rally, plus economy overrides. Each step has
-             a trigger and fires once, in order.
+             train, warp, morph, research, cast, chrono, send_probe/return_probe,
+             rally, plus economy overrides. Each step has a trigger and fires
+             once, in order.
   * ECONOMY — automatic behaviour the bot runs on its own unless a step
              overrides it: make probes continuously, never leave a worker idle,
              saturate minerals to N per base and then fill gas, return builders
@@ -110,7 +111,10 @@ class BuildOrderBot(BotAI):
         self.gas_target: int = 0  # no workers in gas until a `gas_workers` step says so
 
         self.rally_target = None
-        self.scout_sent = False
+        # label -> probe tag for probes sent out via `send_probe`. These are held
+        # OUT of all worker automation (mining, prewalk, build auto-select) until a
+        # `return_probe` step hands them back.
+        self.named_probes: dict[str, int] = {}
         self._last_hb = -999
         self._conceded = False
         self._build_done_at: float | None = None  # game-time the last step finished
@@ -278,10 +282,16 @@ class BuildOrderBot(BotAI):
         if self.already_pending(unit):
             return False  # a worker is en route / it's warping in — hold, don't re-issue
 
-        # (re)issue with the pre-walked builder + cached placement if reserved
-        reserved = self._reserved_step is self._active_step
-        builder = self._reserved_worker() if reserved else None
-        target = self._build_target if reserved else None
+        # Builder: an explicitly sent probe (step.label), else the pre-walked
+        # reservation, else auto-selected from the free pool — never a sent probe.
+        label = getattr(step, "label", None)
+        if label is not None:
+            builder = self._named_worker(label)  # may be None if it died -> auto-select
+            target = None
+        else:
+            reserved = self._reserved_step is self._active_step
+            builder = self._reserved_worker() if reserved else None
+            target = self._build_target if reserved else None
         if self.debug:
             pos = target.position if isinstance(target, Unit) else target
             d = f" builder dist={builder.distance_to(pos):.1f}" if (builder and pos is not None) else ""
@@ -292,11 +302,11 @@ class BuildOrderBot(BotAI):
         elif unit == U.NEXUS:
             loc = target if isinstance(target, Point2) else await self.get_next_expansion()
             if loc is not None:
-                await self.build(U.NEXUS, near=loc, build_worker=builder, placement_step=1)
+                await self.build(U.NEXUS, near=loc, build_worker=builder or self._free_probe_near(loc), placement_step=1)
         else:
             loc = target if isinstance(target, Point2) else await self._placement_for(step)
             if loc is not None:
-                await self.build(unit, near=loc, build_worker=builder)
+                await self.build(unit, near=loc, build_worker=builder or self._free_probe_near(loc))
         return False  # issued; hold the line until the structure appears (confirm)
 
     async def _build_gas(self, builder=None, geyser=None) -> bool:
@@ -304,7 +314,7 @@ class BuildOrderBot(BotAI):
             geyser = self._free_geyser()
         if geyser is None:
             return False
-        worker = builder or self.select_build_worker(geyser.position)
+        worker = builder or self._free_probe_near(geyser.position)
         if worker is None:
             return False
         worker.build_gas(geyser)
@@ -424,16 +434,29 @@ class BuildOrderBot(BotAI):
         nexuses.first(CHRONO, target)
         return True
 
-    async def do_scout(self, step: Step) -> bool:
-        if self.scout_sent:
-            return True
-        if not self.enemy_start_locations:
-            return True
-        worker = self.workers.gathering.random_or(self.workers.random) if self.workers else None
+    async def do_send_probe(self, step: Step) -> bool:
+        # Reuse the probe already under this label if it's still alive (e.g. move
+        # the "scout" from the enemy main out to the proxy), else pull a fresh one.
+        # A sent probe is held out of automation until a return_probe (see
+        # _excluded_tags), so it stays put/on-task rather than drifting back to mine.
+        dest = self._resolve_place(step.where)
+        worker = self._named_worker(step.label)
         if worker is None:
-            return False
-        worker.move(self.enemy_start_locations[0])
-        self.scout_sent = True
+            worker = self._free_probe_near(dest)
+            if worker is None:
+                return False  # no probe available yet — hold the line
+            self.named_probes[step.label] = worker.tag
+        worker.move(dest)
+        return True
+
+    async def do_return_probe(self, step: Step) -> bool:
+        tag = self.named_probes.pop(step.label, None)
+        worker = self._worker_by_tag(tag) if tag is not None else None
+        if worker is not None:
+            # nudge it back to mining; from here the economy manages it normally
+            mins = self._minerals_under_cap() or self.mineral_field
+            if mins:
+                worker.gather(mins.closest_to(worker))
         return True
 
     async def do_rally(self, step: Step) -> bool:
@@ -460,10 +483,14 @@ class BuildOrderBot(BotAI):
     def _resolve_place(self, where: str):
         if where == "main":
             return self.start_location
-        if where == "proxy":
-            return self._expansion_near(self._enemy_start(), self.PROXY_BASE_RANK)
-        # "natural": our own natural (the base one rank out from our start)
-        return self._expansion_near(self.start_location, 1)
+        if where == "natural":
+            return self._expansion_near(self.start_location, 1)
+        if where == "enemy_main":
+            return self._enemy_start()
+        if where == "enemy_natural":
+            return self._expansion_near(self._enemy_start(), 1)
+        # "proxy": out near the enemy but off their doorstep (their ~4th base)
+        return self._expansion_near(self._enemy_start(), self.PROXY_BASE_RANK)
 
     def _enemy_start(self):
         return self.enemy_start_locations[0] if self.enemy_start_locations else self.game_info.map_center
@@ -476,6 +503,34 @@ class BuildOrderBot(BotAI):
             return base
         return exps[min(rank, len(exps) - 1)]
 
+    # =========================================================== named probes
+    def _worker_by_tag(self, tag: int | None):
+        if tag is None:
+            return None
+        found = self.workers.tags_in({tag})
+        return found.first if found else None
+
+    def _named_worker(self, label: str | None):
+        """The live probe currently held under `label`, or None."""
+        if label is None:
+            return None
+        return self._worker_by_tag(self.named_probes.get(label))
+
+    def _excluded_tags(self) -> set[int]:
+        """Probes not available to automation: those sent out via send_probe, plus
+        the current prewalk reservation."""
+        tags = set(self.named_probes.values())
+        if self._builder_tag is not None:
+            tags.add(self._builder_tag)
+        return tags
+
+    def _free_probe_near(self, pos):
+        """Nearest probe available to automation (not a sent/reserved one)."""
+        pool = self.workers.tags_not_in(self._excluded_tags())
+        cands = pool.filter(lambda w: w.is_gathering and not w.is_carrying_minerals)
+        cands = cands or pool.gathering or pool
+        return cands.closest_to(pos) if cands else None
+
     # ========================================================= pre-walk builder
     async def manage_prebuild(self):
         """Reserve a probe for the next build step and walk it to the placement
@@ -486,6 +541,9 @@ class BuildOrderBot(BotAI):
         if self._reserved_step is not None and self._reserved_step is not step:
             self._clear_reservation()
         if step is None or not self._prewalk_due(step):
+            return
+        # a labelled build brings its own (explicitly sent) probe — no prewalk
+        if getattr(step, "label", None) is not None:
             return
 
         if self._reserved_step is step:
@@ -505,7 +563,7 @@ class BuildOrderBot(BotAI):
         if target is None:
             return  # can't determine placement yet (e.g. no pylon) — retry later
         pos = target.position if isinstance(target, Unit) else target
-        worker = self.select_build_worker(pos)
+        worker = self._free_probe_near(pos)
         if worker is None:
             return
         self._reserved_step = step
@@ -572,11 +630,10 @@ class BuildOrderBot(BotAI):
         self._build_target = None
 
     def _econ_workers(self):
-        """Workers available to the economy — excludes the reserved builder so it
-        isn't yanked back to mining while waiting in position."""
-        if self._builder_tag is None:
-            return self.workers
-        return self.workers.tags_not_in({self._builder_tag})
+        """Workers available to the economy — excludes the prewalk builder and any
+        probes sent out via send_probe, so they aren't yanked back to mining."""
+        ex = self._excluded_tags()
+        return self.workers.tags_not_in(ex) if ex else self.workers
 
     # ============================================================ auto economy
     async def make_workers(self):

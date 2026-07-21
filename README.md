@@ -36,9 +36,13 @@ The `[build]` lines (always on) show each step firing with the game clock, e.g.
 - `bot.py` — generic `BuildOrderBot`: interprets a build config; runs the economy
   (continuous probes, no idle workers, minerals-then-gas) automatically.
 - `builds/*.yaml` — build orders. `steps:` are the deliberate actions; `economy:`
-  sets the auto-economy defaults. A `build` step can take `where: proxy` to place
-  a structure near the enemy (prewalk walks the builder over automatically); a
-  `warp` step warps a unit in at a chosen pylon (`where: proxy` = the proxy pylon);
-  and a `morph` step explicitly converts Gateways<->Warpgates (`to: warpgate|gateway`,
-  optional `count:` for a partial switch). See `builds/proxy_warp_zealot.yaml`.
+  sets the auto-economy defaults. Beyond `build`/`train`/`chrono`/`rally`/economy
+  overrides, steps for proxy/warp play (see `builds/proxy_warp_zealot.yaml`):
+  - `send_probe {where, label}` — send a named probe somewhere (`enemy_main`,
+    `proxy`, …); re-sending the same `label` moves that same probe. Sent probes
+    are held out of mining/auto-build until a `return_probe {label}` gives them back.
+  - `build ... where: proxy` places a structure near the enemy; add `label:` to
+    build with a specific sent probe instead of auto-pulling one.
+  - `warp {what, where}` warps a unit in at the pylon nearest `where`.
+  - `morph {to: warpgate|gateway, count?}` explicitly converts Gateways<->Warpgates.
 - `run.py` — launcher.

@@ -21,8 +21,8 @@ steps:
   # prewalk: {minerals: N} walks the builder once we'd have N minerals left AFTER
   # paying for the probes still needed to reach the step's supply (so it can't
   # fire early on a transient mineral spike). Pick N a bit under the build's cost.
-  - {at: {supply: 12},  do: build,  what: Pylon,   prewalk: {minerals: 75},  note: "Pylon=100; builder then scouts"}
-  - {at: {supply: 12},  do: scout}
+  - {at: {supply: 12},  do: build,  what: Pylon,   prewalk: {minerals: 75},  note: "Pylon=100"}
+  - {at: {supply: 12},  do: send_probe, where: enemy_main, label: scout, note: "poke-scout the enemy"}
   - {at: {supply: 14},  do: build,  what: Gateway, prewalk: {minerals: 100}, note: "Gateway=150"}
   - {at: {supply: 14},  do: chrono, target: Nexus, note: "2nd chrono the moment Nexus hits 50 energy"}
   - {at: {supply: 15},  do: build,  what: Assimilator}
@@ -30,6 +30,7 @@ steps:
   - {at: {count: {Probe: 17}}, do: gas_workers, count: 2, note: "17th probe -> gas"}
   # cut probe production to bank Nexus (400) + Core (150), resume after Core.
   - {at: {supply: 19},  do: workers, state: stop,  note: "cut probes for Nexus + Core"}
+  - {at: {supply: 19},  do: return_probe, label: scout, note: "scout home to mining"}
   - {at: {count: {Probe: 19}}, do: gas_workers, count: 3, note: "19th probe -> gas"}
   # long walk to the natural, so give it a big lead: walk at 300 (Nexus=400).
   - {at: {supply: 19},  do: build,  what: Nexus,   prewalk: {minerals: 300}, note: "natural expansion (Nexus=400)"}

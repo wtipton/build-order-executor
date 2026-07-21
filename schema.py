@@ -17,11 +17,13 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 _TRIGGER_KEYS = ("supply", "time", "minerals", "vespene", "count")
 
 # Symbolic locations resolved by the bot at runtime (bot._resolve_place):
-#   main    -> our start location
-#   natural -> our natural expansion
-#   proxy   -> near the enemy (their natural) — for proxying a pylon/building out
-#              on the map and warping units in there.
-Place = Literal["main", "natural", "proxy"]
+#   main          -> our start location
+#   natural       -> our natural expansion
+#   enemy_main    -> the enemy start location (for scouting)
+#   enemy_natural -> the enemy natural expansion
+#   proxy         -> out near the enemy but off their doorstep (their ~4th base) —
+#                    for proxying a pylon/building and warping units in there.
+Place = Literal["main", "natural", "enemy_main", "enemy_natural", "proxy"]
 
 
 class Trigger(BaseModel):
@@ -61,6 +63,7 @@ class BuildStep(_StepBase):
     do: Literal["build"]
     what: str            # structure / expansion (UnitTypeId name, e.g. Pylon, Nexus)
     where: Place | None = None      # where to place it; None = auto (at home). "proxy" builds it near the enemy.
+    label: str | None = None        # build with a specific sent probe (see send_probe) instead of auto-selecting
     prewalk: Trigger | None = None  # when to pre-walk the builder into place (defaults to `at`)
 
 
@@ -96,8 +99,15 @@ class ChronoStep(_StepBase):
     target: str          # structure type to chrono-boost (must be producing/researching)
 
 
-class ScoutStep(_StepBase):
-    do: Literal["scout"]
+class SendProbeStep(_StepBase):
+    do: Literal["send_probe"]
+    where: Place         # where to send it
+    label: str           # name this probe so later steps can move it again, build with it, or return it
+
+
+class ReturnProbeStep(_StepBase):
+    do: Literal["return_probe"]
+    label: str           # a probe previously sent via send_probe — hand it back to the mining/build pool
 
 
 class RallyStep(_StepBase):
@@ -123,7 +133,8 @@ class WorkersStep(_StepBase):
 Step = Annotated[
     Union[
         BuildStep, TrainStep, WarpStep, MorphStep, ResearchStep, CastStep,
-        ChronoStep, ScoutStep, RallyStep, GasWorkersStep, MineralsCapStep, WorkersStep,
+        ChronoStep, SendProbeStep, ReturnProbeStep, RallyStep, GasWorkersStep,
+        MineralsCapStep, WorkersStep,
     ],
     Field(discriminator="do"),
 ]

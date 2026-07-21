@@ -1,22 +1,20 @@
 # Proxy Warpgate Zealot pressure (illustrative) — demonstrates the proxy +
-# warp-in features, not a tuned pro build.
+# warp-in features and the named-probe mechanic, not a tuned pro build.
 #
-# Idea: tech to Warpgate at home while a probe walks a Pylon out to the enemy's
-# doorstep, morph Gateways to Warpgates, then warp Zealots straight in at the
-# proxy Pylon.
+# Idea: one probe scouts the enemy, then stays out and lays a proxy Pylon on the
+# enemy's doorstep; meanwhile we tech to Warpgate at home, morph, and warp Zealots
+# straight in at the proxy.
 #
-# Three new mechanics shown here:
-#   * build ... where: proxy      -> place a structure near the enemy (their
-#     natural). The prewalk machinery sends the builder across the map early.
-#   * warp ... where: proxy       -> warp a unit in at the proxy Pylon. A `warp`
-#     step holds the line until a Warpgate is off cooldown.
-#   * morph to: warpgate          -> explicitly convert Gateways to Warpgates (add
-#     `count: N` to convert only some). Nothing morphs on its own; you switch to
-#     warpgates and back (`to: gateway`) as deliberate steps.
-#
-# Ordering matters: the proxy Pylon `build` comes BEFORE the `warp` steps, and a
-# build holds until the structure actually exists — so by the time we warp, the
-# proxy Pylon is up and is the pylon nearest the enemy, i.e. we warp in there.
+# Mechanics shown here:
+#   * send_probe {where, label}  -> pull a probe and send it somewhere, giving it a
+#     name. Re-sending the same label moves the SAME probe (here: scout the enemy
+#     main first, then move that probe out to the proxy). Sent probes are held out
+#     of mining/auto-build until a return_probe hands them back.
+#   * build ... label: scout     -> build with that specific probe (the scout lays
+#     the proxy Pylon) instead of auto-pulling a fresh one.
+#   * return_probe {label}       -> give the probe back to the economy.
+#   * morph to: warpgate         -> explicitly convert Gateways to Warpgates.
+#   * warp ... where: proxy      -> warp a unit in at the proxy Pylon.
 #
 # Schema defined + validated in schema.py.
 
@@ -29,26 +27,28 @@ economy:
 steps:
   - {at: {time: 7},     do: chrono, target: Nexus, note: "1st chrono on probes"}
   - {at: {supply: 12},  do: build,  what: Pylon,   prewalk: {minerals: 75},  note: "home Pylon=100"}
+  - {at: {supply: 12},  do: send_probe, where: enemy_main, label: scout, note: "scout the enemy with a named probe"}
   - {at: {supply: 13},  do: build,  what: Gateway, prewalk: {minerals: 100}, note: "Gateway=150"}
   - {at: {supply: 14},  do: build,  what: Assimilator, note: "gas for Warpgate research"}
   - {at: {count: {Assimilator: 1}}, do: gas_workers, count: 3, note: "saturate the gas"}
   - {at: {supply: 15},  do: build,  what: Gateway, prewalk: {minerals: 100}, note: "2nd Gateway"}
+  # Send the scout out to the proxy EARLY, reusing the same probe that scouted the
+  # enemy main — a real cross-map send is its own build-order step, so it's in
+  # position long before we need it (rather than fudged a few seconds by prewalk).
+  - {at: {supply: 15},  do: send_probe, where: proxy, label: scout, note: "scout probe out to the proxy (early)"}
   - {at: {count: {Gateway: 1}}, do: build, what: CyberneticsCore, prewalk: {minerals: 100}, note: "Core=150"}
   - {at: {count: {CyberneticsCore: 1}}, do: research, what: Warpgate}
   - {at: {count: {CyberneticsCore: 1}}, do: chrono,   target: CyberneticsCore, note: "chrono Warpgate research"}
-  # Cap probes so the proxy Pylon's supply goes to the Zealot wave, not more probes
-  # (otherwise continuous probes fill supply and the warp-ins can't afford it).
+  # Cap probes so the proxy Pylon's supply goes to the Zealot wave, not more probes.
   - {at: {supply: 18},  do: workers, state: stop, note: "hold probes for the all-in"}
-  # Long walk to the enemy — prewalk the proxy Pylon builder very early (as soon
-  # as we could afford it) so it's in position by the time research finishes.
-  - {at: {supply: 18},  do: build,  what: Pylon, where: proxy, prewalk: {minerals: 25}, note: "proxy Pylon out near the enemy (4th base)"}
+  # The scout is already forward, so the Pylon goes up without a cross-map walk.
+  - {at: {supply: 18},  do: build, what: Pylon, where: proxy, label: scout, note: "scout builds the proxy Pylon"}
+  - {at: {supply: 18},  do: return_probe, label: scout, note: "scout back to mining (or drop this to leave it hidden out there)"}
   # Switch both Gateways to Warpgates (holds until research is done + they convert).
-  # Use `count: 1` here instead to convert just one and keep a Gateway for tech.
   - {at: {supply: 18},  do: morph, to: warpgate, note: "convert all Gateways -> Warpgates"}
-  # Warp in a wave of Zealots at the proxy Pylon. Each step warps one; they hold
-  # the line until a Warpgate is off cooldown, so they fire as fast as warps allow.
+  # Warp a wave of Zealots in at the proxy Pylon (each holds until a Warpgate is up).
   - {at: {supply: 18},  do: warp, what: Zealot, where: proxy, note: "1st warp-in"}
   - {at: {supply: 18},  do: warp, what: Zealot, where: proxy}
   - {at: {supply: 18},  do: warp, what: Zealot, where: proxy}
   - {at: {supply: 18},  do: warp, what: Zealot, where: proxy}
-  - {at: {supply: 18},  do: rally, where: proxy, note: "rally further reinforcements to the proxy"}
+  - {at: {supply: 18},  do: rally, where: proxy, note: "rally reinforcements to the proxy"}
