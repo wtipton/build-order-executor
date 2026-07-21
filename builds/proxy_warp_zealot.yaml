@@ -1,0 +1,54 @@
+# Proxy Warpgate Zealot pressure (illustrative) — demonstrates the proxy +
+# warp-in features, not a tuned pro build.
+#
+# Idea: tech to Warpgate at home while a probe walks a Pylon out to the enemy's
+# doorstep, morph Gateways to Warpgates, then warp Zealots straight in at the
+# proxy Pylon.
+#
+# Three new mechanics shown here:
+#   * build ... where: proxy      -> place a structure near the enemy (their
+#     natural). The prewalk machinery sends the builder across the map early.
+#   * warp ... where: proxy       -> warp a unit in at the proxy Pylon. A `warp`
+#     step holds the line until a Warpgate is off cooldown.
+#   * morph to: warpgate          -> explicitly convert Gateways to Warpgates (add
+#     `count: N` to convert only some). Nothing morphs on its own; you switch to
+#     warpgates and back (`to: gateway`) as deliberate steps.
+#
+# Ordering matters: the proxy Pylon `build` comes BEFORE the `warp` steps, and a
+# build holds until the structure actually exists — so by the time we warp, the
+# proxy Pylon is up and is the pylon nearest the enemy, i.e. we warp in there.
+#
+# Schema defined + validated in schema.py.
+
+name: Proxy Warpgate Zealot pressure
+
+economy:
+  continuous_workers: true
+  minerals_per_base: 16
+
+steps:
+  - {at: {time: 7},     do: chrono, target: Nexus, note: "1st chrono on probes"}
+  - {at: {supply: 12},  do: build,  what: Pylon,   prewalk: {minerals: 75},  note: "home Pylon=100"}
+  - {at: {supply: 13},  do: build,  what: Gateway, prewalk: {minerals: 100}, note: "Gateway=150"}
+  - {at: {supply: 14},  do: build,  what: Assimilator, note: "gas for Warpgate research"}
+  - {at: {count: {Assimilator: 1}}, do: gas_workers, count: 3, note: "saturate the gas"}
+  - {at: {supply: 15},  do: build,  what: Gateway, prewalk: {minerals: 100}, note: "2nd Gateway"}
+  - {at: {count: {Gateway: 1}}, do: build, what: CyberneticsCore, prewalk: {minerals: 100}, note: "Core=150"}
+  - {at: {count: {CyberneticsCore: 1}}, do: research, what: Warpgate}
+  - {at: {count: {CyberneticsCore: 1}}, do: chrono,   target: CyberneticsCore, note: "chrono Warpgate research"}
+  # Cap probes so the proxy Pylon's supply goes to the Zealot wave, not more probes
+  # (otherwise continuous probes fill supply and the warp-ins can't afford it).
+  - {at: {supply: 18},  do: workers, state: stop, note: "hold probes for the all-in"}
+  # Long walk to the enemy — prewalk the proxy Pylon builder very early (as soon
+  # as we could afford it) so it's in position by the time research finishes.
+  - {at: {supply: 18},  do: build,  what: Pylon, where: proxy, prewalk: {minerals: 25}, note: "proxy Pylon out near the enemy (4th base)"}
+  # Switch both Gateways to Warpgates (holds until research is done + they convert).
+  # Use `count: 1` here instead to convert just one and keep a Gateway for tech.
+  - {at: {supply: 18},  do: morph, to: warpgate, note: "convert all Gateways -> Warpgates"}
+  # Warp in a wave of Zealots at the proxy Pylon. Each step warps one; they hold
+  # the line until a Warpgate is off cooldown, so they fire as fast as warps allow.
+  - {at: {supply: 18},  do: warp, what: Zealot, where: proxy, note: "1st warp-in"}
+  - {at: {supply: 18},  do: warp, what: Zealot, where: proxy}
+  - {at: {supply: 18},  do: warp, what: Zealot, where: proxy}
+  - {at: {supply: 18},  do: warp, what: Zealot, where: proxy}
+  - {at: {supply: 18},  do: rally, where: proxy, note: "rally further reinforcements to the proxy"}

@@ -57,6 +57,24 @@ PRODUCER: dict[U, U] = {
     U.CARRIER: U.STARGATE,
 }
 
+# Warp-in ability per unit (checked against get_available_abilities to know when
+# a Warpgate is off cooldown for that unit). Unit.warp_in() maps the ability
+# itself; this table is only for the readiness check.
+WARP_ABILITY: dict[U, AbilityId] = {
+    U.ZEALOT: AbilityId.WARPGATETRAIN_ZEALOT,
+    U.STALKER: AbilityId.WARPGATETRAIN_STALKER,
+    U.SENTRY: AbilityId.WARPGATETRAIN_SENTRY,
+    U.HIGHTEMPLAR: AbilityId.WARPGATETRAIN_HIGHTEMPLAR,
+    U.DARKTEMPLAR: AbilityId.WARPGATETRAIN_DARKTEMPLAR,
+    U.ADEPT: AbilityId.TRAINWARP_ADEPT,
+}
+
+# morph `to` -> (source structure, destination structure, morph ability).
+MORPH: dict[str, tuple[U, U, AbilityId]] = {
+    "warpgate": (U.GATEWAY, U.WARPGATE, AbilityId.MORPH_WARPGATE),
+    "gateway": (U.WARPGATE, U.GATEWAY, AbilityId.MORPH_GATEWAY),
+}
+
 # Friendly research names -> UpgradeId (issued via self.research()).
 RESEARCH: dict[str, UpgradeId] = {
     "Warpgate": UpgradeId.WARPGATERESEARCH,
@@ -107,6 +125,19 @@ class BuildOrderBot(BotAI):
         # confirm a build actually starts (re-issue if a probe blocked the tile)
         self._building_step: Step | None = None
         self._build_baseline = 0
+
+        # confirm a warp-in actually happened (a Warpgate looks off-cooldown to
+        # get_available_abilities right after we've used it, so issuing != warped;
+        # hold until a new unit of that type appears, like the build confirm above)
+        self._warping_step: Step | None = None
+        self._warp_baseline = 0
+
+        # a `morph` step converts `count` buildings and holds until that many have
+        # actually converted (tracked by growth in the destination-type count, so a
+        # rejected order — e.g. ->warpgate before research — correctly keeps waiting)
+        self._morph_step: Step | None = None
+        self._morph_target = 0
+        self._morph_baseline = 0
 
     async def on_start(self):
         self.client.game_step = 4
@@ -293,6 +324,72 @@ class BuildOrderBot(BotAI):
         havers.first.train(unit)
         return True  # issued (producer now busy); the next step proceeds concurrently
 
+    async def do_warp(self, step: Step) -> bool:
+        unit = _unit(step.what)
+
+        # A warp isn't "done" when we issue it: a Warpgate still reads as
+        # off-cooldown to get_available_abilities on the frame(s) right after we
+        # warp from it, so trusting the issue would over-warp (mark N steps done
+        # with only 2 gates). Confirm the unit actually appears — its count grows
+        # past the baseline captured when this step started — and only then advance.
+        if self._warping_step is not step:
+            self._warping_step = step
+            self._warp_baseline = self.units(unit).amount
+
+        if self.units(unit).amount > self._warp_baseline:
+            self._warping_step = None
+            return True
+
+        if not self.can_afford(unit):
+            return False  # save for it (costs money + supply), holding the line
+        ability = WARP_ABILITY[unit]
+        warpgates = self.structures(U.WARPGATE).ready
+        if not warpgates:
+            return False  # no Warpgate yet (research/morph pending) — hold the line
+        avail = await self.get_available_abilities(warpgates)
+        ready = [wg for wg, abils in zip(warpgates, avail) if ability in abils]
+        if not ready:
+            return False  # all on cooldown — hold until one is up
+        pylon = self._warp_pylon(step.where)
+        if pylon is None:
+            return False  # no powering pylon at that place yet
+        pos = await self.find_placement(ability, near=pylon.position, placement_step=1)
+        if pos is None:
+            return False  # no free powered tile by that pylon right now
+        ready[0].warp_in(unit, pos)
+        return False  # issued; hold until the unit appears (confirm above)
+
+    def _warp_pylon(self, where: str):
+        """The ready pylon nearest the requested place — so `where: proxy` warps
+        at the proxy pylon out on the map, `main` at home, etc."""
+        pylons = self.structures(U.PYLON).ready
+        if not pylons:
+            return None
+        return pylons.closest_to(self._resolve_place(where))
+
+    async def do_morph(self, step: Step) -> bool:
+        src, dst, ability = MORPH[step.to]
+        if self._morph_step is not step:
+            # start: how many to convert (all currently-built source structures if
+            # no count given), and the destination-count baseline to measure against
+            self._morph_step = step
+            self._morph_target = step.count if step.count is not None else self.structures(src).ready.amount
+            self._morph_baseline = self.structures(dst).amount
+
+        remaining = self._morph_target - (self.structures(dst).amount - self._morph_baseline)
+        if remaining <= 0:
+            self._morph_step = None
+            return True  # enough have converted — done
+
+        # issue the morph to that many idle source buildings (a busy/converting one
+        # isn't idle, so it's never double-issued); hold until `remaining` convert
+        for s in self.structures(src).ready.idle:
+            if remaining <= 0:
+                break
+            s(ability)
+            remaining -= 1
+        return False
+
     async def do_research(self, step: Step) -> bool:
         upgrade = RESEARCH[step.what]
         if self.already_pending_upgrade(upgrade) > 0 or upgrade in self.state.upgrades:
@@ -355,12 +452,29 @@ class BuildOrderBot(BotAI):
         self.continuous_workers = step.state == "start"
         return True
 
+    # How far out (by base rank) `proxy` sits from the enemy start: 0 = their
+    # main, 1 = natural, 2 = third, 3 = fourth. The natural is too close, so we
+    # aim a few bases out toward the middle of the map.
+    PROXY_BASE_RANK = 3
+
     def _resolve_place(self, where: str):
         if where == "main":
             return self.start_location
-        # "natural": nearest expansion to our start that isn't the start
-        others = [e for e in self.expansion_locations_list if e.distance_to(self.start_location) > 1]
-        return min(others, key=lambda e: e.distance_to(self.start_location)) if others else self.start_location
+        if where == "proxy":
+            return self._expansion_near(self._enemy_start(), self.PROXY_BASE_RANK)
+        # "natural": our own natural (the base one rank out from our start)
+        return self._expansion_near(self.start_location, 1)
+
+    def _enemy_start(self):
+        return self.enemy_start_locations[0] if self.enemy_start_locations else self.game_info.map_center
+
+    def _expansion_near(self, base, rank: int):
+        """The `rank`-th expansion by distance from `base` (0 = the base itself,
+        1 = its natural, 2 = third, ...), clamped to what the map provides."""
+        exps = sorted(self.expansion_locations_list, key=lambda e: e.distance_to(base))
+        if not exps:
+            return base
+        return exps[min(rank, len(exps) - 1)]
 
     # ========================================================= pre-walk builder
     async def manage_prebuild(self):
@@ -376,6 +490,15 @@ class BuildOrderBot(BotAI):
 
         if self._reserved_step is step:
             self._reposition_builder()
+            return
+
+        # do_build may have already issued this build itself (its trigger fired
+        # before prewalk got to reserve — e.g. a research/train/warp step just
+        # ahead of it completed on the same frame, so _next_build_step only now
+        # returns this step). A probe is then en route with the build order, which
+        # for Protoss is exactly what already_pending() counts — don't reserve a
+        # SECOND probe on top of it.
+        if self.already_pending(_unit(step.what)):
             return
 
         target = await self._placement_for(step)
@@ -401,12 +524,18 @@ class BuildOrderBot(BotAI):
             s = self.steps[j]
             if s.do == "build":
                 return s
-            if s.do in ("train", "research"):
+            if s.do in ("train", "warp", "research"):
                 return None  # a resource-committing step precedes the next build
         return None
 
     async def _placement_for(self, step: Step):
         unit = _unit(step.what)
+        # A `where` proxies the building out on the map (e.g. a Pylon near the
+        # enemy). Anchor placement at that place instead of the home heuristics;
+        # the prewalk machinery then walks a probe there ahead of time for free.
+        where = getattr(step, "where", None)
+        if where is not None:
+            return await self.find_placement(unit, near=self._resolve_place(where), max_distance=20)
         if unit == U.NEXUS:
             return await self.get_next_expansion()
         if unit == U.ASSIMILATOR:

@@ -16,6 +16,13 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 _TRIGGER_KEYS = ("supply", "time", "minerals", "vespene", "count")
 
+# Symbolic locations resolved by the bot at runtime (bot._resolve_place):
+#   main    -> our start location
+#   natural -> our natural expansion
+#   proxy   -> near the enemy (their natural) — for proxying a pylon/building out
+#              on the map and warping units in there.
+Place = Literal["main", "natural", "proxy"]
+
 
 class Trigger(BaseModel):
     """A firing condition. Exactly one key must be set.
@@ -53,12 +60,25 @@ class _StepBase(BaseModel):
 class BuildStep(_StepBase):
     do: Literal["build"]
     what: str            # structure / expansion (UnitTypeId name, e.g. Pylon, Nexus)
+    where: Place | None = None      # where to place it; None = auto (at home). "proxy" builds it near the enemy.
     prewalk: Trigger | None = None  # when to pre-walk the builder into place (defaults to `at`)
 
 
 class TrainStep(_StepBase):
     do: Literal["train"]
     what: str            # unit (UnitTypeId name, e.g. Adept)
+
+
+class WarpStep(_StepBase):
+    do: Literal["warp"]
+    what: str            # unit to warp in (Zealot, Stalker, Sentry, Adept, HighTemplar, DarkTemplar)
+    where: Place = "proxy"  # which pylon to warp at (the ready pylon nearest this place)
+
+
+class MorphStep(_StepBase):
+    do: Literal["morph"]
+    to: Literal["warpgate", "gateway"]  # convert Gateways<->Warpgates (needs Warpgate research for ->warpgate)
+    count: int | None = None            # how many to convert; omit = all of them
 
 
 class ResearchStep(_StepBase):
@@ -82,7 +102,7 @@ class ScoutStep(_StepBase):
 
 class RallyStep(_StepBase):
     do: Literal["rally"]
-    where: Literal["natural", "main"] = "natural"
+    where: Place = "natural"
 
 
 class GasWorkersStep(_StepBase):
@@ -102,8 +122,8 @@ class WorkersStep(_StepBase):
 
 Step = Annotated[
     Union[
-        BuildStep, TrainStep, ResearchStep, CastStep, ChronoStep, ScoutStep,
-        RallyStep, GasWorkersStep, MineralsCapStep, WorkersStep,
+        BuildStep, TrainStep, WarpStep, MorphStep, ResearchStep, CastStep,
+        ChronoStep, ScoutStep, RallyStep, GasWorkersStep, MineralsCapStep, WorkersStep,
     ],
     Field(discriminator="do"),
 ]
