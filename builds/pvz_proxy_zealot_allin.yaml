@@ -1,0 +1,98 @@
+# PvZ proxy-Zealot all-in — goal: most Zealots AT the proxy pylon by 5:30.
+#
+# Matches the PvZ 8-worker opening through the first Adept, then all-ins at a proxy
+# Pylon the scout lays on the enemy's doorstep. ~15 Zealots AT the proxy by 5:30.
+#
+# Key ideas (each learned from watching the real game):
+#  - research Warp Gate (speeds gateway training a lot; also enables the warp finish)
+#  - keep only 4 gateways (economy is mineral-capped, so extra gates just idle) and
+#    pull gas to 1 worker (need only ~50 research + 4x25 morph gas; rest -> minerals)
+#  - train Zealots from gateways ONLY while they can still walk to the proxy by 5:30
+#  - then morph 4 gateways to Warp Gates (morphing fewer finishes sooner -> a longer
+#    warp window) and WARP the whole 4:50-5:30 window straight onto the proxy, so the
+#    late Zealots arrive instantly instead of walking (and none are wasted).
+
+name: PvZ proxy Zealot all-in
+
+economy:
+  continuous_workers: true
+  minerals_per_base: 16
+
+steps:
+  # ===================== matched PvZ opener (through the first Adept) =========
+  - {at: {time: 7},   do: chrono, target: Nexus, note: "1st chrono on probes (~6.5s)"}
+  - {at: {supply: 12},  do: build,  what: Pylon,   prewalk: {minerals: 75},  note: "Pylon=100"}
+  - {at: {supply: 12},  do: send_probe, where: enemy_main, label: scout, note: "poke-scout the enemy"}
+  - {at: {supply: 14},  do: build,  what: Gateway, prewalk: {minerals: 100}, note: "Gateway=150"}
+  - {at: {supply: 14},  do: chrono, target: Nexus, note: "2nd chrono the moment Nexus hits 50 energy"}
+  - {at: {supply: 15},  do: build,  what: Assimilator}
+  - {at: {count: {Assimilator: 1}}, do: gas_workers,  count: 1, note: "pull one onto gas1"}
+  - {at: {count: {Probe: 17}}, do: gas_workers, count: 2, note: "17th probe -> gas"}
+  - {at: {supply: 19},  do: workers, state: stop,  note: "cut probes for Nexus + Core"}
+  - {at: {supply: 19},  do: return_probe, label: scout, note: "scout home to mining"}
+  - {at: {count: {Probe: 19}}, do: gas_workers, count: 3, note: "19th probe -> gas"}
+  - {at: {supply: 19},  do: build,  what: Nexus,   prewalk: {minerals: 300}, note: "natural expansion (Nexus=400)"}
+  - {at: {supply: 19},  do: build,  what: CyberneticsCore}
+  - {at: {supply: 19},  do: workers, state: start, note: "resume probes"}
+  - {at: {supply: 20},  do: workers, state: stop,  note: ""}
+  - {at: {supply: 20},  do: rally,  where: natural}
+  - {at: {supply: 20},  do: build,  what: Assimilator}
+  - {at: {supply: 20},  do: build,  what: Pylon}
+  - {at: {supply: 20},  do: workers, state: start, note: "resume"}
+  - {at: {count: {Probe: 21}}, do: gas_workers, count: 4}
+  - {at: {count: {CyberneticsCore: 1}}, do: train,  what: Adept, note: "first Adept (out ~2:57)"}
+  - {at: {count: {CyberneticsCore: 1}}, do: chrono, target: Gateway, note: "chrono the Adept"}
+
+  # ===================== diverge: gateway Zealots + late warp finish ==========
+  # research Warp Gate immediately (chrono'd); it speeds gateway training a lot
+  - {at: {count: {CyberneticsCore: 1}}, do: research, what: Warpgate}
+  - {at: {count: {CyberneticsCore: 1}}, do: gas_workers, count: 1, note: "3 probes to minerals; keep 1 on gas for the 3x25 morph gas"}
+  - {at: {count: {CyberneticsCore: 1}}, do: chrono,   target: CyberneticsCore, note: "chrono warpgate research"}
+  - {at: {count: {CyberneticsCore: 1}}, do: send_probe, where: proxy, label: scout, note: "scout to proxy"}
+  - {at: {count: {CyberneticsCore: 1}}, do: rally, where: proxy, note: "gateway zealots gather at the proxy"}
+  - {at: {count: {Nexus: 2}}, do: rally_and_transfer, base: 2, note: "saturate the natural"}
+
+  # only 4 home gateways (mineral-capped, so more gates just idle); proxy pylon
+  # after them so the scout's walk overlaps the money-limited builds
+  - {at: {count: {CyberneticsCore: 1}}, do: build, what: Pylon, where: main}
+  - {at: {count: {CyberneticsCore: 1}}, do: build, what: Gateway, prewalk: {minerals: 100}}
+  - {at: {count: {CyberneticsCore: 1}}, do: build, what: Gateway, prewalk: {minerals: 100}}
+  - {at: {count: {CyberneticsCore: 1}}, do: build, what: Gateway, prewalk: {minerals: 100}}
+  - {at: {count: {CyberneticsCore: 1}}, do: build, what: Gateway, prewalk: {minerals: 100}}
+  - {at: {count: {CyberneticsCore: 1}}, do: build, what: Pylon, where: proxy, label: scout, note: "proxy pylon"}
+  # keep chrono flowing onto the warpgate research, then the gateways
+  - {at: {time: 205}, do: chrono, target: CyberneticsCore, note: "chrono research again"}
+
+  # cut probes once the natural is saturated, then supply + Zealots
+  - {at: {time: 215}, do: workers, state: stop, note: "stop probes (all-in)"}
+  - {at: {count: {Gateway: 3}}, do: build, what: Pylon, where: main}
+  - {at: {count: {Gateway: 3}}, do: build, what: Pylon, where: natural}
+  - {at: {count: {Gateway: 3}}, do: build, what: Pylon, where: main}
+  # Gateway Zealots that can still WALK to the proxy by 5:30 (stop ~4:40 so
+  # the gateways are idle in time to morph); start ASAP so the 1st gateway
+  # (ready ~2:00) isn't idle waiting.
+  - {at: {count: {CyberneticsCore: 1}}, do: train, what: Zealot}
+  - {at: {count: {CyberneticsCore: 1}}, do: train, what: Zealot}
+  - {at: {count: {CyberneticsCore: 1}}, do: train, what: Zealot}
+  - {at: {count: {CyberneticsCore: 1}}, do: train, what: Zealot}
+  - {at: {count: {CyberneticsCore: 1}}, do: train, what: Zealot}
+  - {at: {count: {CyberneticsCore: 1}}, do: chrono, target: Gateway, note: "chrono zealot production"}
+  - {at: {count: {CyberneticsCore: 1}}, do: train, what: Zealot}
+  - {at: {count: {CyberneticsCore: 1}}, do: train, what: Zealot}
+  # free gateways now idle: convert what the gas affords and WARP the rest of
+  # the window straight onto the proxy (instant, no walk)
+  - {at: {count: {Gateway: 1}}, do: morph, to: warpgate, count: 4, note: "warp finish (25 gas/gate)"}
+  - {at: {count: {WarpGate: 1}}, do: warp, what: Zealot, where: proxy}
+  - {at: {count: {WarpGate: 1}}, do: warp, what: Zealot, where: proxy}
+  - {at: {count: {WarpGate: 1}}, do: warp, what: Zealot, where: proxy}
+  - {at: {count: {WarpGate: 1}}, do: warp, what: Zealot, where: proxy}
+  - {at: {count: {WarpGate: 1}}, do: warp, what: Zealot, where: proxy}
+  - {at: {count: {WarpGate: 1}}, do: warp, what: Zealot, where: proxy}
+  - {at: {count: {WarpGate: 1}}, do: warp, what: Zealot, where: proxy}
+  - {at: {count: {WarpGate: 1}}, do: warp, what: Zealot, where: proxy}
+  - {at: {count: {WarpGate: 1}}, do: warp, what: Zealot, where: proxy}
+  - {at: {count: {WarpGate: 1}}, do: warp, what: Zealot, where: proxy}
+  - {at: {count: {WarpGate: 1}}, do: warp, what: Zealot, where: proxy}
+  - {at: {count: {WarpGate: 1}}, do: warp, what: Zealot, where: proxy}
+  - {at: {count: {WarpGate: 1}}, do: warp, what: Zealot, where: proxy}
+  - {at: {count: {WarpGate: 1}}, do: warp, what: Zealot, where: proxy}

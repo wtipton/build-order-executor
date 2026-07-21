@@ -153,6 +153,22 @@ class BuildOrderBot(BotAI):
     async def on_end(self, result):
         print(f"[end] t={self.time:.1f}s result={result} supply={self.supply_used} "
               f"workers={self.workers.amount} idx={self.idx}/{len(self.steps)}", flush=True)
+        print(f"[end] {self._army_report()}", flush=True)
+
+    def _army_report(self) -> str:
+        """Actual, observed army state — so we don't infer counts from supply math."""
+        z = self.units(U.ZEALOT)
+        done = z.ready.amount
+        proxy = self._resolve_place("proxy")
+        at_proxy = z.ready.closer_than(15, proxy).amount if done else 0
+        in_prod = int(self.already_pending(U.ZEALOT))  # warping-in + gateway queues
+        gw = self.structures(U.GATEWAY).ready.amount
+        wg = self.structures(U.WARPGATE).ready.amount
+        energy = sum(n.energy for n in self.townhalls(U.NEXUS).ready)
+        chronos = int(energy // 50)
+        return (f"zealots done={done} (at_proxy={at_proxy}) in_prod={in_prod} | "
+                f"gateways={gw} warpgates={wg} | gas={self.vespene} "
+                f"nexus_energy={energy:.0f}(~{chronos} chronos)")
 
     def _clock(self) -> str:
         s = int(self.time)
@@ -186,6 +202,7 @@ class BuildOrderBot(BotAI):
                   f"w={self.workers.amount} pend_probe={self.already_pending(U.PROBE)} "
                   f"min={self.minerals} gas={self.vespene} sup_left={self.supply_left} "
                   f"mins[{bases}] next={nxt}", flush=True)
+            print(f"[hb] {self._army_report()}", flush=True)
         await self.manage_prebuild()
         await self.make_workers()  # probes first: continuous, first claim on minerals each frame
         await self.run_steps()

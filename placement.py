@@ -79,18 +79,19 @@ class Placement:
         pylons = bot.structures(U.PYLON).ready
         if not pylons:
             return None
-        production = unit in PRODUCTION
         # try pylons nearest the main first so the base grows outward from home
         for pylon in pylons.sorted(key=lambda p: p.distance_to(bot.start_location)):
-            if production:
-                # bias toward open ground and search a bit looser -> exit room
-                anchor = pylon.position.towards(bot.game_info.map_center, 3)
-                pos = await bot.find_placement(unit, near=anchor, max_distance=8, placement_step=2)
+            # Anchor on the side of the pylon AWAY from any nearby minerals, so we
+            # don't build into the mineral line and block mining. Pack tight
+            # (placement_step=1, no random spread) so many buildings fit per pylon.
+            near_min = bot.mineral_field.closer_than(15, pylon)
+            if near_min:
+                anchor = pylon.position.towards(near_min.center, -3)
             else:
-                # pack tight against the pylon / existing buildings (step 1)
-                pos = await bot.find_placement(
-                    unit, near=pylon.position, max_distance=8, placement_step=1, random_alternative=False
-                )
+                anchor = pylon.position.towards(bot.game_info.map_center, 3)
+            pos = await bot.find_placement(
+                unit, near=anchor, max_distance=10, placement_step=1, random_alternative=False
+            )
             if pos is not None:
                 return pos
         return None
