@@ -19,6 +19,8 @@ The YAML spec (triggers, actions, economy) is defined and validated in schema.py
 
 from __future__ import annotations
 
+import os
+
 from sc2.bot_ai import BotAI
 from sc2.ids.ability_id import AbilityId
 from sc2.ids.buff_id import BuffId
@@ -149,6 +151,9 @@ class BuildOrderBot(BotAI):
 
     async def on_start(self):
         self.client.game_step = 4
+        if os.environ.get("DUMP_DATA"):
+            import gamedata_dump
+            gamedata_dump.dump(self)
 
     async def on_end(self, result):
         print(f"[end] t={self.time:.1f}s result={result} supply={self.supply_used} "

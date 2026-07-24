@@ -1,0 +1,118 @@
+---
+name: optimizing-sc2-build-orders
+description: Write, optimize, and debug YAML build orders for the build_orders python-sc2 bot (~/projects/build_orders, builds/*.yaml). Use when tuning a build toward a timing/quantity goal (e.g. "most zealots at X by 5:30"), when a build stalls / underperforms / deadlocks, or when reasoning about the executor's step semantics, placement, or SC2 production mechanics.
+---
+
+# Optimizing SC2 Build Orders (build_orders bot)
+
+The bot executes a YAML build (`builds/*.yaml`) validated by `schema.py` and run by
+`bot.py`. Steps fire **in list order, strictly**: each step holds the line until it
+completes, so a step that can't fire blocks everything after it. Optimizing a build =
+sequencing explicit steps against that constraint, verified against the real game.
+
+## Rule 0: MEASURE, never infer or fabricate
+
+The single most important lesson. Do **not** deduce unit counts from supply arithmetic
+or guess what happened — run the real game with `--debug` and read the instrumentation.
+`bot.py` prints an army report each heartbeat and at `[end]`:
+
+```
+[end] zealots done=15 (at_proxy=15) in_prod=0 | gateways=1 warpgates=4 | gas=128 nexus_energy=170(~3 chronos)
+```
+
+- `done` = completed units; `at_proxy` = completed units within 15 of the proxy point;
+  `in_prod` = warping-in + in production queues.
+- The heartbeat `[hb]` line shows `min/gas/sup_left`, per-base worker saturation
+  `mins[b1=16/16 b2=..]`, and `next=<step>`.
+
+If a metric matters (e.g. "at the proxy"), add/keep a direct measurement for it. Claims
+like "they died in combat" or "≈19 alive" without a log line to back them are how you
+mislead yourself and the user. Run to a file and grep; don't trust piped `tail` (it
+buffers until the process exits).
+
+```bash
+cd ~/projects/build_orders
+.venv/bin/python run.py --build builds/<x>.yaml --fullscreen --debug --time-limit 330 2>&1 \
+  | grep -E "\[end\]|zealots done"
+# stability: run 3x — game RNG (money/build timing) swings results ±3-4 units
+```
+`--fullscreen` is required (windowed is unusably slow under Wine). `--time-limit N` ends
+at N game-seconds; add a trailing step that never fires (or enough production steps) so
+the build doesn't `concede` before the deadline.
+
+## The executor's step model (and its traps)
+
+- **`build`** completes when the structure *appears* (starts warping in), not when it
+  finishes. Concurrent same-type builds work (drop a batch of gateways at once).
+- **`train`** completes the instant it's issued to an *idle, ready* producer; it *holds*
+  if none is idle or you can't afford it (cost **or supply**).
+- **`warp`** and **`morph`** hold until confirmed (unit appears / N buildings converted).
+- **Supply-block deadlock:** a held `train`/`warp` (no supply) blocks a `Pylon` queued
+  *after* it → permanent stall. **Front-load supply**; keep pylons ahead of the units
+  that need them. Symptom: queue stuck, `min` climbing to thousands, `next=train`.
+- **A build that can't place stalls the whole queue.** `where: main`/`natural` give fast
+  near-base placement; auto placement + a `prewalk:` trigger is also fast *when there's
+  room*. If a base's powered ground fills up, placement returns None and the step holds
+  forever — split builds across `main`/`natural`, or cap the count.
+- **`morph` with no `count` holds forever if it can't afford/convert all of them.** Use
+  `count: N` you can actually afford and that will actually go idle in time.
+- **Don't leave the first producer idle:** trigger production on `count: {Core: 1}` /
+  `{Gateway: 1}` — not `{Gateway: 3}` — or the opener's gateway sits idle for a minute.
+- **Overlap long walks:** `send_probe where: proxy` (or a prewalk) *early*, before the
+  home builds, so a cross-map walk finishes while other steps run.
+
+## Grounded SC2 mechanics (patch 5.0.16b — see `reference/protoss_data.md`)
+
+All costs/base-build-times live in `reference/protoss_data.md` (dumped from the game
+client; regenerate with `DUMP_DATA=1 ... run.py`). Don't quote numbers from memory. The
+key things that table's *static* column can't show are the **runtime modifiers**:
+
+- **Warp Gate research reduces GATEWAY unit train time by EXACTLY 50%** once complete
+  (5.0.16b patch notes; was 40%). e.g. Gateway Zealot 27.1s → **13.6s**. Research =
+  50/50 gas, 100s. Worth it even if you keep training from gateways. The static
+  `build_time` in game data is the *pre-research base* and does NOT reflect this.
+- **Warp-in cooldown is longer than a post-research gateway build**: gateways win on raw
+  throughput; **warp-ins win on positioning** (unit appears instantly at a pylon).
+- **Morph Gateway→Warp Gate: 4s, 25 minerals + 25 gas each.**
+- **If the user states a game mechanic, it is authoritative** — do NOT "correct" it from a
+  static data table or your own inference, and READ any patch notes / links they give you.
+- **Walk time** home→far proxy ≈ 30s. A gateway unit must *finish* by ~5:00 (start
+  ~4:45) to reach the proxy by 5:30. Units that can't arrive by the deadline are wasted.
+- **Morph fewer, sooner:** `morph count:4` finishes ~4:50 (a long warp window);
+  `count:5` waits for the slowest gateway to idle (~5:20) → no warp time. Fewer = better.
+- **Chrono only helps when production is the bottleneck.** If you're mineral-capped
+  (gateways idle waiting for money), chrono does nothing — build *fewer* producers and
+  spend the minerals on units instead.
+
+## Optimization workflow
+
+1. **State the metric precisely** and measure it directly (`at_proxy`, `done`, timing).
+2. **Find the binding constraint each phase** from the heartbeat:
+   - `min` near 0 → **mineral-limited** (fewer/cheaper structures; more income).
+   - `min` banking to hundreds → **producer-limited** (add producers/chrono).
+   - `sup_left` 0 with `next=train` stuck → **supply-blocked** (pylons ahead).
+   - queue `next=` frozen for many hb's → a step is **deadlocked** (placement/afford).
+3. **Change one thing, re-run, re-measure.** Keep the win, revert the loss.
+4. **Don't produce what can't reach the goal by the deadline.** Find something else for
+   that time/money (e.g. switch from walking gateway units to instant warp-ins).
+5. **Cut waste:** don't over-build pylons (each wasted pylon = a lost unit when
+   mineral-bound); pull gas to minerals the moment you have enough for your needs.
+
+## Worked example: PvZ proxy-zealot all-in (`builds/pvz_proxy_zealot_allin.yaml`)
+
+Goal: most zealots **at** a proxy pylon by 5:30. Went 5 → ~15 at the proxy by, in order:
+fixing placement (off the mineral line); researching Warp Gate; cutting to 4 gateways
+(mineral-capped); training gateway zealots only while they can still *walk* in; then
+**morphing 4 gates and warping the entire 4:50–5:30 window straight onto the proxy** so
+late units arrive instantly instead of walking. ~15 is near the 2-base ceiling for a
+3:00 tech start (≈7 walk in + ≈8 warped).
+
+## Bot-code fixes that came out of this (already applied)
+
+- `do_build`: baseline `already_pending()` per step so **many same-type structures build
+  concurrently** (python-sc2 counts every under-construction building type-wide).
+- `placement.building`: anchor **away from the mineral line**, pack tight.
+- `bot.py`: the `_army_report()` observability (keep it — it's how you measure).
+
+If a build behaves impossibly, suspect a bot bug before contorting the YAML — but confirm
+it by reading the game data / instrumentation first.
