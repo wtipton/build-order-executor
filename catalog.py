@@ -83,6 +83,11 @@ WARP_ABILITY: dict[U, AbilityId] = {
     u: info["ability"] for u, info in TRAIN_INFO[U.WARPGATE].items()
 }
 
+# Types a `count:` trigger may reference — anything the player can OWN: every
+# buildable structure and trainable unit, plus the two morph-only results a build
+# refers to (Warp Gate, morphed from a Gateway; Archon, from two templar).
+COUNTABLE: frozenset[U] = BUILDABLE_STRUCTURES | TRAINABLE_UNITS | {U.WARPGATE, U.ARCHON}
+
 # Every upgrade researched from a Protoss building — RESEARCH below must cover
 # exactly this set (asserted at import, so a patch adding one fails loudly here).
 PROTOSS_UPGRADES: frozenset[UpgradeId] = frozenset(
@@ -187,6 +192,10 @@ def require_warpable(name: str) -> str:
 
 def require_chrono_target(name: str) -> str:
     return _require_in(name, BUILDABLE_STRUCTURES, "chrono target structure")
+
+
+def require_countable(name: str) -> str:
+    return _require_in(name, COUNTABLE, "unit/structure to count")
 
 
 def _require_key(name: str, mapping: dict[str, object], kind: str) -> str:

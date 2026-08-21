@@ -50,8 +50,10 @@ class Trigger(BaseModel):
         present = [k for k in _TRIGGER_KEYS if getattr(self, k) is not None]
         if len(present) != 1:
             raise ValueError(f"a trigger needs exactly one of {list(_TRIGGER_KEYS)}, got {present or 'none'}")
-        if self.count is not None and (len(self.count) != 1 or any(v < 1 for v in self.count.values())):
-            raise ValueError("count trigger must be a single {UnitType: N>=1}, e.g. {Probe: 18}")
+        if self.count is not None:
+            if len(self.count) != 1 or any(v < 1 for v in self.count.values()):
+                raise ValueError("count trigger must be a single {UnitType: N>=1}, e.g. {Probe: 18}")
+            catalog.require_countable(next(iter(self.count)))  # reject typo'd/unknown names at load
         return self
 
 

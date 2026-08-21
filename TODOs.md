@@ -13,13 +13,23 @@ Legend: `[ ]` todo · `[~]` in progress · 🎨 = needs genuine design work.
 
 ## Phase 2 — Test scaffold  (Goal 3a)
 
-- [ ] Add `pytest` + a `tests/` dir (+ dev-deps note in README).
-- [ ] 🎨 Build a lightweight `FakeBot` exposing only the attributes the pure
-      logic reads (`supply_used`, `time`, `minerals`, `vespene`, a `units()`
-      stub, …). Design the seam so executor logic is testable without SC2.
-- [ ] Tests: every `builds/*.yaml` loads; invalid snippets raise; catalog table
-      invariants (derived + curated tables consistent and accepted by the
-      validators); `trigger_met` + `_prewalk_due` truth tables.
+Approach: methods tested UNBOUND against a fake `self` (`tests/fakes.py`) — no
+BotAI/game. Tiers: (0) pure schema+catalog, (1) sequencing + handler gating,
+(2) integration vs real SC2 asserting on a structured run summary [later].
+
+- [x] `pytest` + `pytest-asyncio` + `tests/` (`asyncio_mode=auto`); `FakeUnits`
+      + fake-`self` helpers in `tests/fakes.py`. 45 tests, ~0.4s.
+- [x] Tier 0: every `builds/*.yaml` loads; bad names/extra-fields/trigger-arity
+      rejected with the right message; catalog table invariants.
+- [x] Tier 1: `trigger_met`, `_prewalk_due`, `run_steps` strict ordering;
+      handler gating for `train`/`research`/`hallucinate`/`morph` (incl. Archon
+      combine)/`chrono`/`gas_workers`/`minerals_cap`/`workers`.
+- [x] Tier 1 remaining handlers: `do_build` + `do_warp` confirm/baseline state
+      machines, `do_send_probe`/`return_probe`, `do_rally`/`rally_and_transfer`.
+- [ ] Tier 2 integration (chose: structured JSON summary): bot writes a
+      machine-readable run summary at `on_end` (steps done, milestone times, army
+      counts, stalls); a kitchen-sink build exercising every step + trigger type
+      runs to `idx==len(steps)` with no stall. Mark slow / needs SC2.
 
 ## Phase 3 — Refactor into modules  (Goal 3b + clean design)
 

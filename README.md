@@ -28,3 +28,15 @@ cd ~/projects/build_orders && .venv/bin/python run.py \
 
 The `[build]` lines (always on) show each step firing with the game clock, e.g.
 `1:54  sup19  build what=Nexus`.
+
+## Tests
+
+Fast unit tests, no SC2 required — the executor's methods are tested unbound
+against a lightweight fake `self` (`tests/fakes.py`), so schema validation,
+catalog invariants, triggers, step ordering, and each handler's gating run in
+well under a second.
+
+```bash
+.venv/bin/pip install pytest pytest-asyncio   # one-time dev deps
+cd ~/projects/build_orders && .venv/bin/python -m pytest
+```
