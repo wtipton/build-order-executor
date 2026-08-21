@@ -26,8 +26,22 @@ cd ~/projects/build_orders && .venv/bin/python run.py \
   --debug
 ```
 
-The `[build]` lines (always on) show each step firing with the game clock, e.g.
-`1:54  sup19  build what=Nexus`.
+## Reading the output
+
+Every line is tagged. Always-on (the report a build reads back):
+
+| Tag | Meaning |
+|---|---|
+| `[run]` | lifecycle: build loaded, output legend, build complete, conceding, replay/summary paths |
+| `[step]` | a build step fired, with clock + supply, e.g. `[step] 1:54  sup19  build what=Nexus` |
+| `[done]` | a key unit/upgrade first completed, e.g. `[done] 5:19  Warpgate` |
+| `[stall]` | the head step has been blocked a while — names the step and **why** (waiting on a trigger, or a handler reason like `can't afford` / `no placement` / `all Warpgates on cooldown`) |
+| `[end]` | final state + army report |
+
+With `--debug`: `[hb]` (10s economy/timing heartbeat), `[step*]` (build-issue detail), `[prewalk]` (builder reservations).
+
+The final `[summary]` line is a machine-readable JSON blob (steps done, milestones,
+unit/upgrade census, where it stalled) — grep `^[summary] ` and `json.loads` the rest.
 
 ## Tests
 

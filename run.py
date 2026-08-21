@@ -26,6 +26,7 @@ from __future__ import annotations
 import argparse
 import os
 import re
+import sys
 from datetime import datetime
 
 # --- configure the launcher BEFORE importing sc2 ----------------------------
@@ -52,8 +53,15 @@ from sc2.bot_ai import BotAI  # noqa: E402
 from sc2.data import Race  # noqa: E402
 from sc2.main import run_game  # noqa: E402
 from sc2.player import Bot  # noqa: E402
+from loguru import logger as _loguru  # noqa: E402  (python-sc2's logging backend)
 
 from bot import BuildOrderBot, load_build  # noqa: E402
+
+# One-line legend for the always-on output tags (printed at startup).
+OUTPUT_LEGEND = ("[run] output: [step]=step fired  [done]=milestone  "
+                 "[stall]=step stalled (with reason)  [end]=final  "
+                 "[summary]=machine-readable JSON  "
+                 "(--debug adds [hb] heartbeat / [step*] / [prewalk])")
 
 
 class PassiveBot(BotAI):
@@ -75,13 +83,24 @@ def main():
     ap.add_argument("--replay", default=None, help="replay output path (default: in-game Replays dir)")
     ap.add_argument("--time-limit", type=int, default=300, help="end game after N game-seconds (0 = no limit)")
     ap.add_argument("--debug", action="store_true", help="verbose economy/timing heartbeat each ~10 game-seconds")
+    ap.add_argument("--dump-data", action="store_true", help="dump game unit/upgrade data on start (see gamedata_dump.py)")
     args = ap.parse_args()
+
+    # Quiet python-sc2's own (loguru) INFO/boot chatter so our tagged lines are the
+    # signal; keep genuine warnings/errors but drop the benign connection-teardown
+    # errors our own concede (client.leave) provokes at the end of every run.
+    _TEARDOWN_NOISE = ("KILLED", "Connection already closed",
+                       "Connection was closed before the game ended")
+    _loguru.remove()
+    _loguru.add(sys.stderr, level="WARNING",
+                filter=lambda r: not any(s in r["message"] for s in _TEARDOWN_NOISE))
 
     # Pass a bare map filename; SC2 locates it among its own map roots.
     game_map = Map(Path(f"{args.map}.SC2Map"))
 
     build = load_build(args.build)
-    print(f"Build: {build.name}")
+    print(f"[run] build loaded: {build.name}")
+    print(OUTPUT_LEGEND)
 
     if args.replay:
         replay_path = Path(args.replay)
@@ -94,14 +113,16 @@ def main():
     run_game(
         game_map,
         [
-            Bot(Race[build.race], BuildOrderBot(build, debug=args.debug), name="BuildOrderBot", fullscreen=args.fullscreen),
+            Bot(Race[build.race],
+                BuildOrderBot(build, debug=args.debug, dump_data=args.dump_data),
+                name="BuildOrderBot", fullscreen=args.fullscreen),
             Bot(Race.Terran, PassiveBot(), name="PassiveBot"),
         ],
         realtime=False,
         save_replay_as=str(replay_path),
         game_time_limit=args.time_limit or None,
     )
-    print(f"\nReplay saved: {replay_path}\n(open it in SC2 to watch the build at full speed)")
+    print(f"[run] replay={replay_path}")
 
 
 if __name__ == "__main__":

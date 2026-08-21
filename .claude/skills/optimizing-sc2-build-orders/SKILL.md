@@ -100,7 +100,7 @@ end" ≠ "done by the deadline", so use the `[done]` timestamps for hard cutoffs
 ## Grounded SC2 mechanics (patch 5.0.16b — see `reference/protoss_data.md`)
 
 All costs/base-build-times live in `reference/protoss_data.md` (dumped from the game
-client; regenerate with `DUMP_DATA=1 ... run.py`). Don't quote numbers from memory. The
+client; regenerate with `run.py --dump-data`). Don't quote numbers from memory. The
 key things that table's *static* column can't show are the **runtime modifiers**:
 
 - **Warp Gate research reduces GATEWAY unit train time by EXACTLY 50%** once complete

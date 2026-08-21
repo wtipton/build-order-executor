@@ -6,10 +6,10 @@ in game-seconds (frames / 22.4). Runtime modifiers (e.g. the Warp Gate research 
 train-time reduction) are NOT reflected in these static values — see reference/protoss_data.md.
 
 Usage (needs a live game, hence run through the bot):
-    DUMP_DATA=1 .venv/bin/python run.py --build builds/pvz_opening_8worker.yaml \
-        --fullscreen --time-limit 5 2>&1 | grep -E "^DATA|^ABIL|^UPG"
+    .venv/bin/python run.py --build builds/pvz_opening_8worker.yaml \
+        --dump-data --fullscreen --time-limit 5 2>&1 | grep -E "^DATA|^ABIL|^UPG"
 
-bot.on_start calls dump(self) when $DUMP_DATA is set.
+bot.on_start calls dump(self) when --dump-data is passed.
 """
 
 from __future__ import annotations

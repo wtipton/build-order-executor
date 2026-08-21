@@ -6,9 +6,9 @@ in-game clock the bot's `self.time` uses): `build_frames / 22.4`.
 
 Regenerate after a patch:
 ```bash
-DUMP_DATA=1 .venv/bin/python run.py --build builds/pvz_opening_8worker.yaml --fullscreen --time-limit 5 2>&1 | grep -E "^DATA|^ABIL|^UPG"
+.venv/bin/python run.py --build builds/pvz_opening_8worker.yaml --dump-data --fullscreen --time-limit 5 2>&1 | grep -E "^DATA|^ABIL|^UPG"
 ```
-(`gamedata_dump.py`; `bot.on_start` calls it when `$DUMP_DATA` is set.)
+(`gamedata_dump.py`; `bot.on_start` calls it when `--dump-data` is passed.)
 
 ## ⚠ Runtime modifiers NOT captured by the static `build_time` above
 

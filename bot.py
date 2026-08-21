@@ -19,7 +19,7 @@ The YAML spec (triggers, actions, economy) is defined and validated in schema.py
 
 from __future__ import annotations
 
-import os
+import json
 
 from sc2.bot_ai import BotAI
 from sc2.ids.ability_id import AbilityId
@@ -29,6 +29,7 @@ from sc2.position import Point2
 from sc2.unit import Unit
 
 from catalog import (
+    BUILDABLE_STRUCTURES,
     CHRONO_ABILITY,
     CHRONO_BUFF,
     CHRONO_CASTER,
@@ -39,6 +40,7 @@ from catalog import (
     MORPH,
     PRODUCER,
     RESEARCH,
+    TRAINABLE_UNITS,
     WARP_ABILITY,
     unit_id as _unit,
 )
@@ -55,12 +57,20 @@ from schema import BuildConfig, Step, Trigger, load_build  # noqa: F401  (re-exp
 # last actions land and are watchable rather than cutting out instantly.
 CONCEDE_GRACE = 10.0
 
+# Stall diagnostics: how long the head step may stall before we report why, and
+# how often to re-report while it's still stuck. Set high so legitimate long
+# waits (saving for a Nexus, a slow count trigger) don't cry wolf — a `[stall]`
+# line means "this has been sitting a while; here's what it's waiting on".
+STALL_FIRST = 60.0
+STALL_REPEAT = 30.0
+
 
 class BuildOrderBot(BotAI):
-    def __init__(self, config: BuildConfig, debug: bool = False):
+    def __init__(self, config: BuildConfig, debug: bool = False, dump_data: bool = False):
         super().__init__()
         self.cfg = config
         self.debug = debug
+        self.dump_data = dump_data
         self.placement = Placement(self)
         self.steps: list[Step] = config.steps
         self._done: list[bool] = [False] * len(self.steps)
@@ -83,6 +93,14 @@ class BuildOrderBot(BotAI):
         self._build_done_at: float | None = None  # game-time the last step finished
         self._milestones: dict[str, float] = {}    # exact completion times (deadline checks)
 
+        # stall diagnostics: when the head step (self.idx) got there, when we last
+        # warned about it, and why the current handler is stalled (set by handlers
+        # on a False return; surfaced by the [stall] line).
+        self._head_idx = -1
+        self._head_since = 0.0
+        self._stall_warned = -1e9
+        self._stall_reason = ""
+
         # pre-walk reservation: a probe sent to the next build's placement ahead
         # of time so construction starts the instant we can afford it.
         self._reserved_step: Step | None = None
@@ -97,11 +115,11 @@ class BuildOrderBot(BotAI):
 
         # confirm a warp-in actually happened (a Warpgate looks off-cooldown to
         # get_available_abilities right after we've used it, so issuing != warped;
-        # hold until a new unit of that type appears, like the build confirm above)
+        # stall until a new unit of that type appears, like the build confirm above)
         self._warping_step: Step | None = None
         self._warp_baseline = 0
 
-        # a `morph` step converts `count` buildings and holds until that many have
+        # a `morph` step converts `count` buildings and stalls until that many have
         # actually converted (tracked by growth in the destination-type count, so a
         # rejected order — e.g. ->warpgate before research — correctly keeps waiting)
         self._morph_step: Step | None = None
@@ -110,7 +128,7 @@ class BuildOrderBot(BotAI):
 
     async def on_start(self):
         self.client.game_step = 4
-        if os.environ.get("DUMP_DATA"):
+        if self.dump_data:
             import gamedata_dump
             gamedata_dump.dump(self)
 
@@ -118,6 +136,36 @@ class BuildOrderBot(BotAI):
         print(f"[end] t={self.time:.1f}s result={result} supply={self.supply_used} "
               f"workers={self.workers.amount} idx={self.idx}/{len(self.steps)}", flush=True)
         print(f"[end] {self._army_report()}", flush=True)
+        # Machine-readable summary as one tagged line on stdout, so a caller can
+        # grep `^[summary] ` and json.loads the rest.
+        print(f"[summary] {json.dumps(self._run_summary(result))}", flush=True)
+
+    def _run_summary(self, result) -> dict:
+        """Machine-readable end-of-run summary (the `[summary]` stdout line) so a
+        caller asserts on what ACTUALLY happened (structures/units/upgrades produced,
+        where the queue stalled) rather than parsing the human log."""
+        completed = self.idx >= len(self.steps)
+        census = {}
+        for t in (BUILDABLE_STRUCTURES | TRAINABLE_UNITS | {U.WARPGATE, U.ARCHON}):
+            n = self.all_own_units(t).ready.amount
+            if n:
+                census[t.name] = n
+        friendly = {v: k for k, v in RESEARCH.items()}
+        upgrades = sorted(friendly.get(u, u.name) for u in self.state.upgrades)
+        return {
+            "name": self.cfg.name,
+            "result": str(result),
+            "completed": completed,
+            "steps_done": self.idx,
+            "steps_total": len(self.steps),
+            "next_step": None if completed else self._describe(self.steps[self.idx]),
+            "final_time": round(self.time, 1),
+            "milestones": {k: round(v, 1) for k, v in self._milestones.items()},
+            "census": census,
+            "upgrades": upgrades,
+            "workers": self.workers.amount,
+            "supply_used": self.supply_used,
+        }
 
     def _note_milestones(self) -> None:
         """Log the exact game-time key units/upgrades first complete — heartbeats are
@@ -188,6 +236,7 @@ class BuildOrderBot(BotAI):
         await self.manage_prebuild()
         await self.make_workers()  # probes first: continuous, first claim on minerals each frame
         await self.run_steps()
+        self._check_stall()
         await self.manage_economy()
         self.apply_rally()
 
@@ -196,10 +245,10 @@ class BuildOrderBot(BotAI):
         if self.idx >= len(self.steps):
             if self._build_done_at is None:
                 self._build_done_at = self.time
-                print(f"[build] {self._clock():>4}  build complete", flush=True)
+                print(f"[run] {self._clock():>4}  build complete", flush=True)
             elif not self._conceded and self.time - self._build_done_at >= CONCEDE_GRACE:
                 self._conceded = True
-                print(f"[build] {self._clock():>4}  conceding ({int(CONCEDE_GRACE)}s after build)", flush=True)
+                print(f"[run] {self._clock():>4}  conceding ({int(CONCEDE_GRACE)}s after build)", flush=True)
                 await self.client.leave()
 
     # ============================================================ build steps
@@ -213,14 +262,52 @@ class BuildOrderBot(BotAI):
             if not self.trigger_met(step.at):
                 break  # this step (and everything after) isn't due yet
             if not await self.execute(step):
-                break  # hold the line until this step can be done (strict order)
+                break  # stall the line until this step can be done (strict order)
             self._done[i] = True
             note = f"  # {step.note}" if step.note else ""
-            print(f"[build] {self._clock():>4}  sup{self.supply_used:<3} {self._describe(step)}{note}", flush=True)
+            print(f"[step] {self._clock():>4}  sup{self.supply_used:<3} {self._describe(step)}{note}", flush=True)
             i += 1
         # advance the pointer past any leading completed steps
         while self.idx < len(self.steps) and self._done[self.idx]:
             self.idx += 1
+
+    def _check_stall(self) -> None:
+        """When the head step sits stalled for a long while, report WHY — so a
+        build author can see what the queue is waiting on."""
+        if self.idx >= len(self.steps):
+            return
+        if self.idx != self._head_idx:  # advanced to a new head — reset the timer
+            self._head_idx = self.idx
+            self._head_since = self.time
+            self._stall_warned = -1e9
+            return
+        stalled = self.time - self._head_since
+        if stalled < STALL_FIRST or self.time - self._stall_warned < STALL_REPEAT:
+            return
+        self._stall_warned = self.time
+        step = self.steps[self.idx]
+        if not self.trigger_met(step.at):
+            reason = f"waiting on trigger {self._trigger_status(step.at)}"
+        else:
+            reason = self._stall_reason or "handler can't complete yet"
+        print(f"[stall] {self._clock():>4}  step {self.idx} {self._describe(step)} "
+              f"stalled {int(stalled)}s — {reason}", flush=True)
+
+    def _trigger_status(self, at: Trigger) -> str:
+        """A trigger described with its CURRENT value, so a stuck count/resource
+        gate is obvious (e.g. `count HighTemplar=2 (have 0)`)."""
+        if at.count is not None:
+            name, n = next(iter(at.count.items()))
+            return f"count {name}={n} (have {self.all_own_units(_unit(name)).ready.amount})"
+        if at.supply is not None:
+            return f"supply>={at.supply} (have {self.supply_used})"
+        if at.minerals is not None:
+            return f"minerals>={at.minerals} (have {self.minerals})"
+        if at.vespene is not None:
+            return f"vespene>={at.vespene} (have {self.vespene})"
+        if at.time is not None:
+            return f"time>={at.time:.0f} (now {self.time:.0f})"
+        return "?"
 
     def trigger_met(self, at: Trigger) -> bool:
         if at.supply is not None:
@@ -262,6 +349,7 @@ class BuildOrderBot(BotAI):
 
     async def execute(self, step: Step) -> bool:
         self._active_step = step
+        self._stall_reason = ""  # handlers set this when they return False (for [stall])
         handler = getattr(self, f"do_{step.do}")
         return await handler(step)
 
@@ -279,7 +367,7 @@ class BuildOrderBot(BotAI):
             # already_pending() counts EVERY in-progress structure of this type
             # (python-sc2 counts under-construction Protoss buildings), so baseline
             # the ones already in flight from earlier steps — the guard below then
-            # only holds on THIS step's own build, letting several of the same
+            # only stalls on THIS step's own build, letting several of the same
             # structure (e.g. a wall of Gateways) build concurrently instead of
             # strictly one-after-another.
             self._pending_baseline = self.already_pending(unit)
@@ -290,9 +378,11 @@ class BuildOrderBot(BotAI):
             return True
 
         if not self.can_afford(unit):
-            return False  # save for it, holding the line
+            self._stall_reason = f"can't afford {step.what}"
+            return False  # save for it, stalling the line
         if self.already_pending(unit) > self._pending_baseline:
-            return False  # THIS build is en route / warping in — hold, don't re-issue
+            self._stall_reason = f"{step.what} under construction"
+            return False  # THIS build is en route / warping in — stall, don't re-issue
 
         # Builder: an explicitly sent probe (step.label), else the pre-walked
         # reservation, else auto-selected from the free pool — never a sent probe.
@@ -307,7 +397,7 @@ class BuildOrderBot(BotAI):
         if self.debug:
             pos = target.position if isinstance(target, Unit) else target
             d = f" builder dist={builder.distance_to(pos):.1f}" if (builder and pos is not None) else ""
-            print(f"[build*] {self._clock():>4}  issuing {step.what}{d}", flush=True)
+            print(f"[step*] {self._clock():>4}  issuing {step.what}{d}", flush=True)
 
         if unit == U.ASSIMILATOR:
             await self._build_gas(builder, target if isinstance(target, Unit) else None)
@@ -315,11 +405,15 @@ class BuildOrderBot(BotAI):
             loc = target if isinstance(target, Point2) else await self.get_next_expansion()
             if loc is not None:
                 await self.build(U.NEXUS, near=loc, build_worker=builder or self._free_probe_near(loc), placement_step=1)
+            else:
+                self._stall_reason = "no expansion location"
         else:
             loc = target if isinstance(target, Point2) else await self._placement_for(step)
             if loc is not None:
                 await self.build(unit, near=loc, build_worker=builder or self._free_probe_near(loc))
-        return False  # issued; hold the line until the structure appears (confirm)
+            else:
+                self._stall_reason = f"no placement for {step.what}"
+        return False  # issued; stall the line until the structure appears (confirm)
 
     async def _build_gas(self, builder=None, geyser=None) -> bool:
         if geyser is None:
@@ -335,13 +429,15 @@ class BuildOrderBot(BotAI):
     async def do_train(self, step: Step) -> bool:
         unit = _unit(step.what)
         if not self.can_afford(unit):
-            return False  # save for it (costs money + supply), holding the line
+            self._stall_reason = f"can't afford {step.what}"
+            return False  # save for it (costs money + supply), stalling the line
         producer = PRODUCER.get(unit)
         if producer == U.NEXUS or unit == U.PROBE:
             havers = self.townhalls.ready.idle
         else:
             havers = self.structures(producer).ready.idle
         if not havers:
+            self._stall_reason = f"no idle {producer.name if producer else 'producer'}"
             return False  # producer busy — wait for it (correct if the order is right)
         havers.first.train(unit)
         return True  # issued (producer now busy); the next step proceeds concurrently
@@ -363,23 +459,28 @@ class BuildOrderBot(BotAI):
             return True
 
         if not self.can_afford(unit):
-            return False  # save for it (costs money + supply), holding the line
+            self._stall_reason = f"can't afford {step.what}"
+            return False  # save for it (costs money + supply), stalling the line
         ability = WARP_ABILITY[unit]
         warpgates = self.structures(U.WARPGATE).ready
         if not warpgates:
-            return False  # no Warpgate yet (research/morph pending) — hold the line
+            self._stall_reason = "no ready Warpgate (research/morph pending)"
+            return False  # no Warpgate yet (research/morph pending) — stall the line
         avail = await self.get_available_abilities(warpgates)
         ready = [wg for wg, abils in zip(warpgates, avail) if ability in abils]
         if not ready:
-            return False  # all on cooldown — hold until one is up
+            self._stall_reason = "all Warpgates on cooldown"
+            return False  # all on cooldown — stall until one is up
         pylon = self._warp_pylon(step.where)
         if pylon is None:
+            self._stall_reason = f"no powered pylon at {step.where}"
             return False  # no powering pylon at that place yet
         pos = await self.find_placement(ability, near=pylon.position, placement_step=1)
         if pos is None:
+            self._stall_reason = f"no free warp tile at {step.where}"
             return False  # no free powered tile by that pylon right now
         ready[0].warp_in(unit, pos)
-        return False  # issued; hold until the unit appears (confirm above)
+        return False  # issued; stall until the unit appears (confirm above)
 
     def _warp_pylon(self, where: str):
         """The ready pylon nearest the requested place — so `where: proxy` warps
@@ -406,13 +507,14 @@ class BuildOrderBot(BotAI):
             return True  # enough have morphed — done
 
         # issue to idle sources in groups of `consumes` (a converting/merging one
-        # isn't idle, so it's never double-issued); hold until `remaining` appear as
+        # isn't idle, so it's never double-issued); stall until `remaining` appear as
         # `dest`. For the Archon combine, both templar of a pair get the ability and
         # merge into one Archon.
         idle = list(self._morph_sources(spec).idle)
         for i in range(min(remaining, len(idle) // spec.consumes)):
             for s in idle[i * spec.consumes:(i + 1) * spec.consumes]:
                 s(spec.ability)
+        self._stall_reason = f"morphing to {step.to} ({remaining} left)"
         return False
 
     def _morph_sources(self, spec):
@@ -425,25 +527,28 @@ class BuildOrderBot(BotAI):
         if self.already_pending_upgrade(upgrade) > 0 or upgrade in self.state.upgrades:
             return True  # already researching or done
         if not self.can_afford(upgrade):
-            return False  # save for it, holding the line
+            self._stall_reason = f"can't afford {step.what}"
+            return False  # save for it, stalling the line
         self.research(upgrade)  # finds the structure + issues; confirm next frame
         return False
 
     async def do_hallucinate(self, step: Step) -> bool:
         casters = self.units(HALLUCINATION_CASTER).filter(lambda u: u.energy >= HALLUCINATION_ENERGY)
         if not casters:
-            return False  # no Sentry with enough energy yet — hold the line
+            self._stall_reason = f"no Sentry with {HALLUCINATION_ENERGY} energy"
+            return False  # no Sentry with enough energy yet — stall the line
         casters.first(HALLUCINATION_ABILITY)
         return True
 
     async def do_chrono(self, step: Step) -> bool:
-        # Like every step, a chrono HOLDS the line until it fires: if there's no
+        # Like every step, a chrono STALLS until it fires: if there's no
         # Nexus with enough energy, or nothing of the target type is producing yet,
         # it waits. Builds are precise — place a chrono where it will actually have
         # energy and something to boost, not as a best-effort sprinkle.
         target_type = _unit(step.target)
         nexuses = self.townhalls(CHRONO_CASTER).ready.filter(lambda n: n.energy >= CHRONO_ENERGY)
         if not nexuses:
+            self._stall_reason = f"no Nexus with {CHRONO_ENERGY} energy"
             return False  # no Nexus with enough energy yet — wait
         if target_type == U.NEXUS:
             target = next((n for n in self.townhalls(U.NEXUS).ready if n.orders), None)
@@ -451,6 +556,7 @@ class BuildOrderBot(BotAI):
         else:
             target = next((s for s in self.structures(target_type).ready if s.orders), None)
         if target is None:
+            self._stall_reason = f"no {step.target} is producing/researching"
             return False  # nothing of that type is producing yet — wait
         if target.has_buff(CHRONO_BUFF):
             return True  # already boosted — count the action as done
@@ -467,7 +573,8 @@ class BuildOrderBot(BotAI):
         if worker is None:
             worker = self._free_probe_near(dest)
             if worker is None:
-                return False  # no probe available yet — hold the line
+                self._stall_reason = "no free probe to send"
+                return False  # no probe available yet — stall the line
             self.named_probes[step.label] = worker.tag
         worker.move(dest)
         return True
@@ -488,7 +595,8 @@ class BuildOrderBot(BotAI):
     async def do_rally_and_transfer(self, step: Step) -> bool:
         bases = self._ordered_bases()
         if step.base > len(bases):
-            return False  # that base isn't up yet — hold the line until it exists
+            self._stall_reason = f"base {step.base} not up yet (have {len(bases)})"
+            return False  # that base isn't up yet — stall the line until it exists
         self.populating_base_num = step.base
         base = bases[step.base - 1]
         field = self._base_field(base)
