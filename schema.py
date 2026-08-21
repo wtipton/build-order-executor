@@ -97,6 +97,10 @@ class CastStep(_StepBase):
 class ChronoStep(_StepBase):
     do: Literal["chrono"]
     target: str          # structure type to chrono-boost (must be producing/researching)
+    optional: bool = False  # best-effort: if it can't cast now (no energy / nothing to
+                            # boost) SKIP instead of holding the line. Use when sprinkling
+                            # extra boosts (e.g. sustaining a long research) so a chrono
+                            # never blocks production waiting on energy.
 
 
 class SendProbeStep(_StepBase):

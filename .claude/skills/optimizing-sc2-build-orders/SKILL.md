@@ -34,11 +34,18 @@ buffers until the process exits).
 cd ~/projects/build_orders
 .venv/bin/python run.py --build builds/<x>.yaml --fullscreen --debug --time-limit 330 2>&1 \
   | grep -E "\[end\]|zealots done"
-# stability: run 3x — game RNG (money/build timing) swings results ±3-4 units
 ```
 `--fullscreen` is required (windowed is unusably slow under Wine). `--time-limit N` ends
 at N game-seconds; add a trailing step that never fires (or enough production steps) so
-the build doesn't `concede` before the deadline.
+the build doesn't `concede` before the deadline. **Runs are ~deterministic** — one run
+per change is enough; don't burn time re-running for "stability".
+
+**Verify tight deadlines with exact logging, not heartbeats.** `[hb]` prints every 10s —
+too coarse to tell 4:12 from 4:18 against a 4:15 deadline. `bot._note_milestones()` logs
+`[done] M:SS <thing>` the frame a unit/upgrade first completes (Void Ray, Adept#2,
+Warpgate, Charge); grep `\[done\]` and compare to the deadline. The `[end]`/`_army_report`
+line also carries `voidray=`, `adepts=`, `warpgate_done=`, `charge_done=` — but "done by
+end" ≠ "done by the deadline", so use the `[done]` timestamps for hard cutoffs.
 
 ## The executor's step model (and its traps)
 
@@ -60,6 +67,34 @@ the build doesn't `concede` before the deadline.
   `{Gateway: 1}` — not `{Gateway: 3}` — or the opener's gateway sits idle for a minute.
 - **Overlap long walks:** `send_probe where: proxy` (or a prewalk) *early*, before the
   home builds, so a cross-map walk finishes while other steps run.
+- **`count: {X: N}` triggers count READY units**, not started ones. A structure that
+  *starts* at 4:00 isn't ready until +build_time (~4:40 for a Gateway). Gating the back
+  half on `{Gateway: 3}` couples everything to that late ready-time and jams it — gate
+  supply/research on `time:` or a low count instead.
+- **`can_afford` includes GAS.** A "mineral" building (Twilight 150/**100**) silently
+  stalls with 800 minerals banked if gas < 100. When a build won't fire and `min` is
+  huge, check `gas`. Don't over-pull gas→minerals early: it starves the tech that needs
+  gas (Void Ray, Twilight, Charge, morphs). Gas is usually the true limiter.
+- **A slow far build poisons same-type home builds.** `already_pending()` is type-wide,
+  so while a proxy Pylon crawls across the map (walk + build) every *home* Pylon behind
+  it holds (both the prewalk reservation and `do_build` gate on it). Order slow/far
+  builds of a type **after** all the near ones of that type.
+- **A prewalk/reserved builder that must walk far stalls the queue for the walk.** If a
+  build's placement is at an under-saturated base but the free probes are elsewhere,
+  the reserved probe walks ~24s and the step holds the whole time. Place builds where
+  the free probes actually are (auto near the main), or saturate that base first.
+- **`chrono` HOLDS the line when it can't cast** (no 50-energy Nexus, or nothing of that
+  type is producing/researching) — a mid-sequence chrono froze production for ~17s
+  waiting on energy, and one placed after a research finished blocked the steps behind
+  it. Use **`optional: true`** for best-effort boosts (cast if able, else skip) — e.g.
+  sprinkling chronos to sustain a long research without stalling the warps/units after.
+- **Sustaining a long research needs SPREAD chronos.** The buff wears off (~20s), so N
+  chronos on the same frame ≈ 1 boost. To pull Charge (100s) under a deadline, space
+  `optional` chronos ~15-20s apart — a good place is *interleaved with the warp/morph
+  steps*, which naturally span the research's second half.
+- **Two proxy pylons for a warp finish.** One pylon's powered tiles fill with warp-ins
+  and then warp placement returns None (warps stall, minerals bank) — a second proxy
+  pylon (same scout, back-to-back) ~doubles the space so the whole window lands.
 
 ## Grounded SC2 mechanics (patch 5.0.16b — see `reference/protoss_data.md`)
 
@@ -107,12 +142,33 @@ fixing placement (off the mineral line); researching Warp Gate; cutting to 4 gat
 late units arrive instantly instead of walking. ~15 is near the 2-base ceiling for a
 3:00 tech start (≈7 walk in + ≈8 warped).
 
-## Bot-code fixes that came out of this (already applied)
+## Worked example: proxy-zealot + Void Ray + Charge (`builds/pvz_proxy_zealot_voidray.yaml`)
+
+Same opener, but with **hard tech deadlines** on top of the proxy warp finish: 2 Adepts +
+a Void Ray done by 4:15, Charge by 5:45, then max Zealots at the proxy. Result: Void Ray
+~4:08, Charge ~5:36, ~5 at the proxy. The whole build is a fight over a 2-base economy the
+tech tax overloads — key moves:
+- **The two deadlines directly conflict** (Void Ray 250/150 by 4:15 vs Twilight→Charge by
+  5:45 both want the ~3:20–3:50 window). Resolve by *priority*: Void Ray FIRST (tightest)
+  gets the gas/minerals; Twilight right after; Charge starts ~4:26 and is dragged under
+  5:45 with **spread `optional` chronos** (front three + two interleaved with the warps).
+- **Gas is the limiter**, not minerals (minerals banked to 800+ while Twilight stalled on
+  its 100 gas). Keep 6 gas workers through the tech; only pull to minerals ~4:35 for the
+  100-min warp-ins.
+- **Decouple the finish from Gateway-ready** (they aren't ready till ~4:50): gate supply
+  pylons on `time:`, morph on `time:`, and use **two** proxy pylons so warps don't stall.
+- Fewer Gateways (2 new) ready *sooner* beats more Gateways ready late — the warp *window*
+  matters more than gate count once tech eats the early economy.
+
+## Bot-code fixes/features that came out of these builds (already applied)
 
 - `do_build`: baseline `already_pending()` per step so **many same-type structures build
   concurrently** (python-sc2 counts every under-construction building type-wide).
 - `placement.building`: anchor **away from the mineral line**, pack tight.
-- `bot.py`: the `_army_report()` observability (keep it — it's how you measure).
+- `bot.py`: `_army_report()` (with `voidray/adepts/warpgate_done/charge_done`) and
+  `_note_milestones()` (`[done] M:SS`) observability — keep them; they're how you measure.
+- `chrono` step gained **`optional: true`** (best-effort: cast if able, else skip, never
+  block) — for sprinkling boosts (e.g. sustaining a long research) without stalling.
 
 If a build behaves impossibly, suspect a bot bug before contorting the YAML — but confirm
 it by reading the game data / instrumentation first.

@@ -123,6 +123,7 @@ class BuildOrderBot(BotAI):
         self._last_hb = -999
         self._conceded = False
         self._build_done_at: float | None = None  # game-time the last step finished
+        self._milestones: dict[str, float] = {}    # exact completion times (deadline checks)
 
         # pre-walk reservation: a probe sent to the next build's placement ahead
         # of time so construction starts the instant we can afford it.
@@ -160,6 +161,18 @@ class BuildOrderBot(BotAI):
               f"workers={self.workers.amount} idx={self.idx}/{len(self.steps)}", flush=True)
         print(f"[end] {self._army_report()}", flush=True)
 
+    def _note_milestones(self) -> None:
+        """Log the exact game-time key units/upgrades first complete — heartbeats are
+        only every 10s, too coarse to check tight deadlines (Void Ray 4:15, Charge 5:45)."""
+        def hit(key: str, ok: bool):
+            if ok and key not in self._milestones:
+                self._milestones[key] = self.time
+                print(f"[done] {self._clock():>4}  {key}", flush=True)
+        hit("Adept#2", self.units(U.ADEPT).ready.amount >= 2)
+        hit("VoidRay", self.units(U.VOIDRAY).ready.amount >= 1)
+        hit("Warpgate", UpgradeId.WARPGATERESEARCH in self.state.upgrades)
+        hit("Charge", UpgradeId.CHARGE in self.state.upgrades)
+
     def _army_report(self) -> str:
         """Actual, observed army state — so we don't infer counts from supply math."""
         z = self.units(U.ZEALOT)
@@ -171,8 +184,13 @@ class BuildOrderBot(BotAI):
         wg = self.structures(U.WARPGATE).ready.amount
         energy = sum(n.energy for n in self.townhalls(U.NEXUS).ready)
         chronos = int(energy // 50)
+        vr = self.units(U.VOIDRAY).ready.amount
+        ad = self.units(U.ADEPT).ready.amount
+        wgr = "Y" if UpgradeId.WARPGATERESEARCH in self.state.upgrades else "n"
+        chg = "Y" if UpgradeId.CHARGE in self.state.upgrades else "n"
         return (f"zealots done={done} (at_proxy={at_proxy}) in_prod={in_prod} | "
-                f"gateways={gw} warpgates={wg} | gas={self.vespene} "
+                f"gateways={gw} warpgates={wg} | voidray={vr} adepts={ad} "
+                f"warpgate_done={wgr} charge_done={chg} | gas={self.vespene} "
                 f"nexus_energy={energy:.0f}(~{chronos} chronos)")
 
     def _clock(self) -> str:
@@ -208,6 +226,7 @@ class BuildOrderBot(BotAI):
                   f"min={self.minerals} gas={self.vespene} sup_left={self.supply_left} "
                   f"mins[{bases}] next={nxt}", flush=True)
             print(f"[hb] {self._army_report()}", flush=True)
+        self._note_milestones()
         await self.manage_prebuild()
         await self.make_workers()  # probes first: continuous, first claim on minerals each frame
         await self.run_steps()
@@ -453,17 +472,21 @@ class BuildOrderBot(BotAI):
         return True
 
     async def do_chrono(self, step: Step) -> bool:
+        # A best-effort (optional) chrono never holds the line: if it can't cast right
+        # now it SKIPS. Use it to sprinkle extra boosts (e.g. sustaining a long research)
+        # among other steps without a chrono stalling production on missing energy.
+        optional = getattr(step, "optional", False)
         target_type = _unit(step.target)
         nexuses = self.townhalls(U.NEXUS).ready.filter(lambda n: n.energy >= 50)
         if not nexuses:
-            return False  # wait until a Nexus has 50 energy
+            return optional  # no 50-energy Nexus: skip if optional, else wait
         if target_type == U.NEXUS:
             target = next((n for n in self.townhalls(U.NEXUS).ready if n.orders), None)
             target = target or self.townhalls(U.NEXUS).ready.first
         else:
             target = next((s for s in self.structures(target_type).ready if s.orders), None)
         if target is None:
-            return False  # nothing of that type is producing yet
+            return optional  # nothing of that type is producing yet: skip if optional
         if target.has_buff(CHRONO_BUFF):
             return True  # already boosted — count the action as done
         nexuses.first(CHRONO, target)
