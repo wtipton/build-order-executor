@@ -26,10 +26,24 @@ BotAI/game. Tiers: (0) pure schema+catalog, (1) sequencing + handler gating,
       combine)/`chrono`/`gas_workers`/`minerals_cap`/`workers`.
 - [x] Tier 1 remaining handlers: `do_build` + `do_warp` confirm/baseline state
       machines, `do_send_probe`/`return_probe`, `do_rally`/`rally_and_transfer`.
-- [ ] Tier 2 integration (chose: structured JSON summary): bot writes a
-      machine-readable run summary at `on_end` (steps done, milestone times, army
-      counts, stalls); a kitchen-sink build exercising every step + trigger type
-      runs to `idx==len(steps)` with no stall. Mark slow / needs SC2.
+- [x] Tier 2 integration built: `on_end` prints an unconditional `[summary]` JSON
+      line to stdout; `builds/test_all_schema_features.yaml` exercises every step +
+      trigger type; `tests/test_integration.py` (gated on `--run-integration`)
+      asserts it runs to completion + produced Archon/Warpgate/Storm. **It found a
+      real bug** (below) — the test currently fails (repro) until that's fixed.
+
+## Bug — `run_steps` re-gates in-flight steps on their trigger  (found by Tier 2)
+
+- [ ] 🎨 A step's `at:` trigger is re-checked every frame in `run_steps`, even
+      after the step has started and is holding for confirm. If the trigger is a
+      **non-monotonic `count:`** of units the step itself CONSUMES, it goes false
+      mid-flight and the step can never confirm-complete → permanent stall.
+      Repro: `morph archon` gated on `count: {HighTemplar: 2}` — the two HT merge
+      (count→0), so the archon appears but `do_morph`'s confirm never re-runs.
+      Also hits `morph warpgate count: {Gateway: N}` (morph reduces Gateway count).
+      Fix idea: `trigger_met` should gate only STARTING a step; once execute() has
+      begun (returned False once), drive it to completion without re-checking the
+      trigger. Needs a per-step "started" latch in `run_steps`.
 
 ## Phase 3 — Refactor into modules  (Goal 3b + clean design)
 
@@ -50,16 +64,17 @@ BotAI/game. Tiers: (0) pure schema+catalog, (1) sequencing + handler gating,
       gracefully instead of returning `None` and holding the queue forever when a
       base's powered ground fills up (spread / fallback). Document determinism.
 
-## Phase 5 — Clean output + deadlock diagnostics  (Goal 4)
+## Phase 5 — Clean output + deadlock diagnostics  (Goal 4)  ✅ mostly done
 
-- [ ] 🎨 Stall detector: when the head step hasn't advanced in N seconds, emit
-      one clear line naming the step + blocking reason (`can't afford: need 100
-      gas, have 40` / `no idle Gateway` / `placement None` / `on cooldown`).
-      Emit once, not spammy.
-- [ ] Consistent log prefixes + a documented legend; clean split of always-on
-      vs `--debug` output.
-- [ ] Route Wine / sc2 boot noise off stdout (to a file) so third-party output
-      is legible.
+- [x] Stall detector: `[stall]` names the stalled step + reason (trigger status
+      with current value, or a handler `_stall_reason` like `can't afford X` /
+      `no idle Gateway` / `no placement` / `all Warpgates on cooldown`). Fires at
+      60s, re-emits every 30s. Verified live — it cleanly diagnosed the archon bug.
+- [x] Tag rename + legend: `[run]`/`[step]`/`[done]`/`[stall]`/`[end]` always-on,
+      `[hb]`/`[step*]`/`[prewalk]` under `--debug`; one-line legend at startup;
+      "Reading the output" table in README.
+- [x] Noise: python-sc2 loguru dropped to WARNING + a filter for the benign
+      connection-teardown errors our concede provokes. stdout is now just our tags.
 - [ ] Live-run verify the Phase-1 additions that unit tests can't cover: Archon
       morph actually pops an Archon; newly-enabled upgrades (e.g. Storm) research.
 
