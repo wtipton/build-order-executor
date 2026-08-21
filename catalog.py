@@ -13,9 +13,11 @@ correct across patches with no hand maintenance:
   * PROTOSS_UPGRADES (what RESEARCH must cover)         <- UPGRADE_RESEARCHED_FROM
 
 Only the things the tech tree doesn't carry are curated here: friendly upgrade
-names (RESEARCH), self-cast spells with their energy cost (CAST), and the morph
-specs (MORPH). Scope is macro-to-a-timing, so CAST is self-cast only (no targeted
-spells) and MORPH covers gateway<->warpgate plus the Archon combine.
+names (RESEARCH), the morph specs (MORPH), and the two spell steps' caster/energy/
+ability constants (CHRONO_*, HALLUCINATION_*). Scope is macro-to-a-timing, so the
+only spells are the two a build order names — `chrono` and `hallucinate` — and
+MORPH covers gateway<->warpgate plus the Archon combine. No targeted army spells
+(Storm, Feedback, Force Field).
 """
 
 from __future__ import annotations
@@ -23,6 +25,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from sc2.ids.ability_id import AbilityId
+from sc2.ids.buff_id import BuffId
 from sc2.ids.unit_typeid import UnitTypeId as U
 from sc2.ids.upgrade_id import UpgradeId
 from sc2.dicts.unit_trained_from import UNIT_TRAINED_FROM
@@ -121,22 +124,26 @@ RESEARCH: dict[str, UpgradeId] = {
 }
 
 
-# ============================================================ curated: casts
-@dataclass(frozen=True)
-class CastSpec:
-    ability: AbilityId
-    caster: U
-    energy: int
+# ============================================================ curated: spells
+# The only two spells a build order names are Chrono Boost and Hallucination, each
+# a first-class step (`chrono` / `hallucinate`) rather than a generic "cast": this
+# is a build-order executor, not a general playing bot, so there's no army micro /
+# targeted spells (Storm, Feedback, Force Field) to justify a generic verb. Each
+# spell's caster / energy cost / ability lives here so both are specified the same
+# way and bot.py just consumes them.
 
+# Chrono Boost: the Nexus targets one of its own structures that's producing/
+# researching. (CHRONO_BUFF tells us a target is already boosted.)
+CHRONO_CASTER: U = U.NEXUS
+CHRONO_ENERGY: int = 50
+CHRONO_ABILITY: AbilityId = AbilityId.EFFECT_CHRONOBOOSTENERGYCOST
+CHRONO_BUFF: BuffId = BuffId.CHRONOBOOSTENERGYCOST
 
-# Friendly spell name -> how to cast it. Self-casts only (no target needed):
-# Hallucination spawns the fake unit next to the Sentry. Targeted spells (Storm,
-# Feedback, Force Field) are out of macro scope.
-CAST: dict[str, CastSpec] = {
-    "Hallucination": CastSpec(AbilityId.HALLUCINATION_PHOENIX, U.SENTRY, 75),  # default: Phoenix (scout)
-    "HallucinationPhoenix": CastSpec(AbilityId.HALLUCINATION_PHOENIX, U.SENTRY, 75),
-    "HallucinationArchon": CastSpec(AbilityId.HALLUCINATION_ARCHON, U.SENTRY, 75),
-}
+# Hallucination: a build order only ever hallucinates a Phoenix (a fast flying
+# scout), so it's a single fixed command with no unit to choose.
+HALLUCINATION_CASTER: U = U.SENTRY
+HALLUCINATION_ENERGY: int = 75
+HALLUCINATION_ABILITY: AbilityId = AbilityId.HALLUCINATION_PHOENIX
 
 
 # ============================================================ curated: morphs
@@ -190,10 +197,6 @@ def _require_key(name: str, mapping: dict[str, object], kind: str) -> str:
 
 def require_research(name: str) -> str:
     return _require_key(name, RESEARCH, "research")
-
-
-def require_cast(name: str) -> str:
-    return _require_key(name, CAST, "cast")
 
 
 def require_morph(name: str) -> str:

@@ -101,11 +101,8 @@ class ResearchStep(_StepBase):
     _check = field_validator("what")(staticmethod(catalog.require_research))
 
 
-class CastStep(_StepBase):
-    do: Literal["cast"]
-    what: str            # spell friendly name (e.g. Hallucination) — cast by the appropriate unit
-
-    _check = field_validator("what")(staticmethod(catalog.require_cast))
+class HallucinateStep(_StepBase):
+    do: Literal["hallucinate"]  # Sentry hallucinates a Phoenix (scout) — no options
 
 
 class ChronoStep(_StepBase):
@@ -159,7 +156,7 @@ class WorkersStep(_StepBase):
 
 Step = Annotated[
     Union[
-        BuildStep, TrainStep, WarpStep, MorphStep, ResearchStep, CastStep,
+        BuildStep, TrainStep, WarpStep, MorphStep, ResearchStep, HallucinateStep,
         ChronoStep, SendProbeStep, ReturnProbeStep, RallyStep, RallyAndTransferStep,
         GasWorkersStep, MineralsCapStep, WorkersStep,
     ],

@@ -6,7 +6,7 @@ schema.py + builds/*.yaml). Nothing about a specific build is hard-coded here.
 Two layers:
 
   * STEPS  — the deliberate actions a human performs and must learn: build,
-             train, warp, morph, research, cast, chrono, send_probe/return_probe,
+             train, warp, morph, research, hallucinate, chrono, send_probe/return_probe,
              rally, rally_and_transfer, plus economy overrides. Each step has a
              trigger and fires once, in order.
   * ECONOMY — automatic behaviour the bot runs on its own unless a step
@@ -23,23 +23,33 @@ import os
 
 from sc2.bot_ai import BotAI
 from sc2.ids.ability_id import AbilityId
-from sc2.ids.buff_id import BuffId
 from sc2.ids.unit_typeid import UnitTypeId as U
 from sc2.ids.upgrade_id import UpgradeId
 from sc2.position import Point2
 from sc2.unit import Unit
 
-from catalog import CAST, MORPH, PRODUCER, RESEARCH, WARP_ABILITY, unit_id as _unit
+from catalog import (
+    CHRONO_ABILITY,
+    CHRONO_BUFF,
+    CHRONO_CASTER,
+    CHRONO_ENERGY,
+    HALLUCINATION_ABILITY,
+    HALLUCINATION_CASTER,
+    HALLUCINATION_ENERGY,
+    MORPH,
+    PRODUCER,
+    RESEARCH,
+    WARP_ABILITY,
+    unit_id as _unit,
+)
 from placement import Placement
 from schema import BuildConfig, Step, Trigger, load_build  # noqa: F401  (re-exported for run.py)
 
-# Name -> game-object tables (PRODUCER, WARP_ABILITY, MORPH, RESEARCH, CAST) live
-# in catalog.py — the single source of truth shared with schema.py's load-time
-# validation, so every `what`/`to`/`target` a build names is checked before the
-# game starts (see catalog.require_*). bot.py only consumes them.
-
-CHRONO = AbilityId.EFFECT_CHRONOBOOSTENERGYCOST
-CHRONO_BUFF = BuffId.CHRONOBOOSTENERGYCOST
+# Name -> game-object tables and the spell constants (PRODUCER, WARP_ABILITY,
+# MORPH, RESEARCH, CHRONO_*, HALLUCINATION_*) live in catalog.py — the single
+# source of truth shared with schema.py's load-time validation, so every
+# `what`/`to`/`target` a build names is checked before the game starts (see
+# catalog.require_*). bot.py only consumes them.
 
 # Grace period (game-seconds) between the build finishing and conceding, so the
 # last actions land and are watchable rather than cutting out instantly.
@@ -131,7 +141,7 @@ class BuildOrderBot(BotAI):
         gw = self.structures(U.GATEWAY).ready.amount
         wg = self.structures(U.WARPGATE).ready.amount
         energy = sum(n.energy for n in self.townhalls(U.NEXUS).ready)
-        chronos = int(energy // 50)
+        chronos = int(energy // CHRONO_ENERGY)
         vr = self.units(U.VOIDRAY).ready.amount
         ad = self.units(U.ADEPT).ready.amount
         wgr = "Y" if UpgradeId.WARPGATERESEARCH in self.state.upgrades else "n"
@@ -419,12 +429,11 @@ class BuildOrderBot(BotAI):
         self.research(upgrade)  # finds the structure + issues; confirm next frame
         return False
 
-    async def do_cast(self, step: Step) -> bool:
-        spec = CAST[step.what]
-        casters = self.units(spec.caster).filter(lambda u: u.energy >= spec.energy)
+    async def do_hallucinate(self, step: Step) -> bool:
+        casters = self.units(HALLUCINATION_CASTER).filter(lambda u: u.energy >= HALLUCINATION_ENERGY)
         if not casters:
-            return False  # no caster with enough energy yet — hold the line
-        casters.first(spec.ability)
+            return False  # no Sentry with enough energy yet — hold the line
+        casters.first(HALLUCINATION_ABILITY)
         return True
 
     async def do_chrono(self, step: Step) -> bool:
@@ -433,9 +442,9 @@ class BuildOrderBot(BotAI):
         # among other steps without a chrono stalling production on missing energy.
         optional = getattr(step, "optional", False)
         target_type = _unit(step.target)
-        nexuses = self.townhalls(U.NEXUS).ready.filter(lambda n: n.energy >= 50)
+        nexuses = self.townhalls(CHRONO_CASTER).ready.filter(lambda n: n.energy >= CHRONO_ENERGY)
         if not nexuses:
-            return optional  # no 50-energy Nexus: skip if optional, else wait
+            return optional  # no Nexus with enough energy: skip if optional, else wait
         if target_type == U.NEXUS:
             target = next((n for n in self.townhalls(U.NEXUS).ready if n.orders), None)
             target = target or self.townhalls(U.NEXUS).ready.first
@@ -445,7 +454,7 @@ class BuildOrderBot(BotAI):
             return optional  # nothing of that type is producing yet: skip if optional
         if target.has_buff(CHRONO_BUFF):
             return True  # already boosted — count the action as done
-        nexuses.first(CHRONO, target)
+        nexuses.first(CHRONO_ABILITY, target)
         return True
 
     async def do_send_probe(self, step: Step) -> bool:
