@@ -11,20 +11,18 @@ cd ~/projects/build_orders && .venv/bin/python run.py --fullscreen
 ```
 
 `run.py` launches SC2 itself (via Wine/Lutris — paths are baked into `run.py`),
-plays the build vs the built-in AI, saves a replay, then concedes when the build
+plays the build vs a passive do-nothing opponent (so the build runs undisturbed
+and the game doesn't end instantly), saves a replay, then concedes when the build
 is done.
 
 All flags, set explicitly (`--fullscreen` is needed — windowed is unusably slow
-under Wine; `--realtime` watches live; `--debug` adds a 10s economy heartbeat):
+under Wine; `--debug` adds a 10s economy heartbeat):
 
 ```bash
 cd ~/projects/build_orders && .venv/bin/python run.py \
   --build builds/pvz_opening_8worker.yaml \
   --map LockdownLE \
-  --opponent zerg \
-  --difficulty easy \
   --fullscreen \
-  --no-realtime \
   --debug
 ```
 
