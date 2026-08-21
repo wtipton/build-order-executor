@@ -110,10 +110,6 @@ class ChronoStep(_StepBase):
     target: str          # structure type to chrono-boost (must be producing/researching)
 
     _check = field_validator("target")(staticmethod(catalog.require_chrono_target))
-    optional: bool = False  # best-effort: if it can't cast now (no energy / nothing to
-                            # boost) SKIP instead of holding the line. Use when sprinkling
-                            # extra boosts (e.g. sustaining a long research) so a chrono
-                            # never blocks production waiting on energy.
 
 
 class SendProbeStep(_StepBase):

@@ -437,21 +437,21 @@ class BuildOrderBot(BotAI):
         return True
 
     async def do_chrono(self, step: Step) -> bool:
-        # A best-effort (optional) chrono never holds the line: if it can't cast right
-        # now it SKIPS. Use it to sprinkle extra boosts (e.g. sustaining a long research)
-        # among other steps without a chrono stalling production on missing energy.
-        optional = getattr(step, "optional", False)
+        # Like every step, a chrono HOLDS the line until it fires: if there's no
+        # Nexus with enough energy, or nothing of the target type is producing yet,
+        # it waits. Builds are precise — place a chrono where it will actually have
+        # energy and something to boost, not as a best-effort sprinkle.
         target_type = _unit(step.target)
         nexuses = self.townhalls(CHRONO_CASTER).ready.filter(lambda n: n.energy >= CHRONO_ENERGY)
         if not nexuses:
-            return optional  # no Nexus with enough energy: skip if optional, else wait
+            return False  # no Nexus with enough energy yet — wait
         if target_type == U.NEXUS:
             target = next((n for n in self.townhalls(U.NEXUS).ready if n.orders), None)
             target = target or self.townhalls(U.NEXUS).ready.first
         else:
             target = next((s for s in self.structures(target_type).ready if s.orders), None)
         if target is None:
-            return optional  # nothing of that type is producing yet: skip if optional
+            return False  # nothing of that type is producing yet — wait
         if target.has_buff(CHRONO_BUFF):
             return True  # already boosted — count the action as done
         nexuses.first(CHRONO_ABILITY, target)

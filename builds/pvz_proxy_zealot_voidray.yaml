@@ -142,18 +142,20 @@ steps:
   # AND walk 30s). Morph all 3 Gateways to Warp Gates as soon as they're up + Warpgate
   # research is done, and WARP the whole remaining window straight onto the proxy —
   # warp-ins arrive AT the two proxy pylons instantly, ~2 cooldown rounds x 3 gates.
-  # Measured result: VoidRay done ~4:08, Charge ~5:36, ~5 Zealots at the proxy by 5:45.
+  # Measured result (with the old best-effort chronos): VoidRay done ~4:08, Charge
+  # ~5:36, ~5 Zealots at the proxy by 5:45. Charge now ~5:47 (see note below).
   - {at: {time: 273}, do: morph, to: warpgate, count: 3, note: "warp finish — morph all 3 (25 min+25 gas/gate)"}
-  # Charge chronos #4/#5, interleaved with the early warps (~5:00-5:15) to boost Charge's
-  # SECOND half — 3 front-loaded chronos alone left it at 5:47 (2s over). optional:true so
-  # they're BEST-EFFORT: once Charge finishes (Twilight idle) they SKIP instead of holding
-  # the line and stalling the warps (which is exactly what a plain chrono did -> 0 at proxy).
+  # Charge is boosted by the 3 front-loaded chronos in the research section. The
+  # old build sprinkled 2 more best-effort chronos here (interleaved with the warps)
+  # to shave Charge from ~5:47 to ~5:36 — but that relied on `optional` (skip if the
+  # Twilight is already idle). With chronos now mandatory (a build order is precise),
+  # a chrono placed here would stall the warps once Charge finishes, so it's dropped.
+  # Charge therefore lands ~5:47 (just over 5:45) until it's re-tuned with a chrono
+  # that's *guaranteed* to hit the Twilight mid-research. See TODOs / live-run verify.
   - {at: {count: {WarpGate: 1}}, do: warp, what: Zealot, where: proxy}
   - {at: {count: {WarpGate: 1}}, do: warp, what: Zealot, where: proxy}
-  - {at: {count: {WarpGate: 1}}, do: chrono, target: TwilightCouncil, optional: true, note: "chrono Charge #4 (~5:05)"}
   - {at: {count: {WarpGate: 1}}, do: warp, what: Zealot, where: proxy}
   - {at: {count: {WarpGate: 1}}, do: warp, what: Zealot, where: proxy}
-  - {at: {count: {WarpGate: 1}}, do: chrono, target: TwilightCouncil, optional: true, note: "chrono Charge #5 (~5:15)"}
   - {at: {count: {WarpGate: 1}}, do: warp, what: Zealot, where: proxy}
   - {at: {count: {WarpGate: 1}}, do: warp, what: Zealot, where: proxy}
   - {at: {count: {WarpGate: 1}}, do: warp, what: Zealot, where: proxy}

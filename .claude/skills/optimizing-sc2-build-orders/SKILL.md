@@ -86,12 +86,13 @@ end" ≠ "done by the deadline", so use the `[done]` timestamps for hard cutoffs
 - **`chrono` HOLDS the line when it can't cast** (no 50-energy Nexus, or nothing of that
   type is producing/researching) — a mid-sequence chrono froze production for ~17s
   waiting on energy, and one placed after a research finished blocked the steps behind
-  it. Use **`optional: true`** for best-effort boosts (cast if able, else skip) — e.g.
-  sprinkling chronos to sustain a long research without stalling the warps/units after.
+  it. There is no best-effort/optional chrono: a build order is precise, so place each
+  chrono where it will *actually* have energy and something to boost. Don't put a chrono
+  behind steps that might reach it after its target has gone idle.
 - **Sustaining a long research needs SPREAD chronos.** The buff wears off (~20s), so N
   chronos on the same frame ≈ 1 boost. To pull Charge (100s) under a deadline, space
-  `optional` chronos ~15-20s apart — a good place is *interleaved with the warp/morph
-  steps*, which naturally span the research's second half.
+  chronos ~15-20s apart on triggers (`time:` / `count:`) that guarantee the structure is
+  still researching when the line reaches each one — so none of them stalls waiting.
 - **Two proxy pylons for a warp finish.** One pylon's powered tiles fill with warp-ins
   and then warp placement returns None (warps stall, minerals bank) — a second proxy
   pylon (same scout, back-to-back) ~doubles the space so the whole window lands.
@@ -150,8 +151,10 @@ a Void Ray done by 4:15, Charge by 5:45, then max Zealots at the proxy. Result: 
 tech tax overloads — key moves:
 - **The two deadlines directly conflict** (Void Ray 250/150 by 4:15 vs Twilight→Charge by
   5:45 both want the ~3:20–3:50 window). Resolve by *priority*: Void Ray FIRST (tightest)
-  gets the gas/minerals; Twilight right after; Charge starts ~4:26 and is dragged under
-  5:45 with **spread `optional` chronos** (front three + two interleaved with the warps).
+  gets the gas/minerals; Twilight right after; Charge starts ~4:26 and is dragged toward
+  5:45 with **spread chronos** — precisely placed so each fires while Twilight is still
+  researching (it lands ~5:47 on front-loaded chronos alone; closing that last ~2s wants
+  a chrono guaranteed to hit the Twilight's second half without stalling the warps).
 - **Gas is the limiter**, not minerals (minerals banked to 800+ while Twilight stalled on
   its 100 gas). Keep 6 gas workers through the tech; only pull to minerals ~4:35 for the
   100-min warp-ins.
@@ -167,8 +170,6 @@ tech tax overloads — key moves:
 - `placement.building`: anchor **away from the mineral line**, pack tight.
 - `bot.py`: `_army_report()` (with `voidray/adepts/warpgate_done/charge_done`) and
   `_note_milestones()` (`[done] M:SS`) observability — keep them; they're how you measure.
-- `chrono` step gained **`optional: true`** (best-effort: cast if able, else skip, never
-  block) — for sprinkling boosts (e.g. sustaining a long research) without stalling.
 
 If a build behaves impossibly, suspect a bot bug before contorting the YAML — but confirm
 it by reading the game data / instrumentation first.
