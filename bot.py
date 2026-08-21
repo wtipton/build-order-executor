@@ -29,8 +29,14 @@ from sc2.ids.upgrade_id import UpgradeId
 from sc2.position import Point2
 from sc2.unit import Unit
 
+from catalog import CAST, MORPH, PRODUCER, RESEARCH, WARP_ABILITY, unit_id as _unit
 from placement import Placement
 from schema import BuildConfig, Step, Trigger, load_build  # noqa: F401  (re-exported for run.py)
+
+# Name -> game-object tables (PRODUCER, WARP_ABILITY, MORPH, RESEARCH, CAST) live
+# in catalog.py — the single source of truth shared with schema.py's load-time
+# validation, so every `what`/`to`/`target` a build names is checked before the
+# game starts (see catalog.require_*). bot.py only consumes them.
 
 CHRONO = AbilityId.EFFECT_CHRONOBOOSTENERGYCOST
 CHRONO_BUFF = BuffId.CHRONOBOOSTENERGYCOST
@@ -38,64 +44,6 @@ CHRONO_BUFF = BuffId.CHRONOBOOSTENERGYCOST
 # Grace period (game-seconds) between the build finishing and conceding, so the
 # last actions land and are watchable rather than cutting out instantly.
 CONCEDE_GRACE = 10.0
-
-# Which producer builds/trains a given unit.
-PRODUCER: dict[U, U] = {
-    U.PROBE: U.NEXUS,
-    U.ZEALOT: U.GATEWAY,
-    U.STALKER: U.GATEWAY,
-    U.SENTRY: U.GATEWAY,
-    U.ADEPT: U.GATEWAY,
-    U.HIGHTEMPLAR: U.GATEWAY,
-    U.DARKTEMPLAR: U.GATEWAY,
-    U.IMMORTAL: U.ROBOTICSFACILITY,
-    U.OBSERVER: U.ROBOTICSFACILITY,
-    U.WARPPRISM: U.ROBOTICSFACILITY,
-    U.COLOSSUS: U.ROBOTICSFACILITY,
-    U.DISRUPTOR: U.ROBOTICSFACILITY,
-    U.PHOENIX: U.STARGATE,
-    U.ORACLE: U.STARGATE,
-    U.VOIDRAY: U.STARGATE,
-    U.TEMPEST: U.STARGATE,
-    U.CARRIER: U.STARGATE,
-}
-
-# Warp-in ability per unit (checked against get_available_abilities to know when
-# a Warpgate is off cooldown for that unit). Unit.warp_in() maps the ability
-# itself; this table is only for the readiness check.
-WARP_ABILITY: dict[U, AbilityId] = {
-    U.ZEALOT: AbilityId.WARPGATETRAIN_ZEALOT,
-    U.STALKER: AbilityId.WARPGATETRAIN_STALKER,
-    U.SENTRY: AbilityId.WARPGATETRAIN_SENTRY,
-    U.HIGHTEMPLAR: AbilityId.WARPGATETRAIN_HIGHTEMPLAR,
-    U.DARKTEMPLAR: AbilityId.WARPGATETRAIN_DARKTEMPLAR,
-    U.ADEPT: AbilityId.TRAINWARP_ADEPT,
-}
-
-# morph `to` -> (source structure, destination structure, morph ability).
-MORPH: dict[str, tuple[U, U, AbilityId]] = {
-    "warpgate": (U.GATEWAY, U.WARPGATE, AbilityId.MORPH_WARPGATE),
-    "gateway": (U.WARPGATE, U.GATEWAY, AbilityId.MORPH_GATEWAY),
-}
-
-# Friendly research names -> UpgradeId (issued via self.research()).
-RESEARCH: dict[str, UpgradeId] = {
-    "Warpgate": UpgradeId.WARPGATERESEARCH,
-    "Blink": UpgradeId.BLINKTECH,
-    "Charge": UpgradeId.CHARGE,
-}
-
-# Friendly spell names -> (ability, caster unit type, energy cost). Instant self-
-# casts (Hallucination spawns the fake unit next to the Sentry; no target needed).
-CAST: dict[str, tuple[AbilityId, U, int]] = {
-    "Hallucination": (AbilityId.HALLUCINATION_PHOENIX, U.SENTRY, 75),  # default: Phoenix (scout)
-    "HallucinationPhoenix": (AbilityId.HALLUCINATION_PHOENIX, U.SENTRY, 75),
-    "HallucinationArchon": (AbilityId.HALLUCINATION_ARCHON, U.SENTRY, 75),
-}
-
-
-def _unit(name: str) -> U:
-    return U[name.upper()]
 
 
 class BuildOrderBot(BotAI):
@@ -432,27 +380,35 @@ class BuildOrderBot(BotAI):
         return pylons.closest_to(self._resolve_place(where))
 
     async def do_morph(self, step: Step) -> bool:
-        src, dst, ability = MORPH[step.to]
+        spec = MORPH[step.to]
         if self._morph_step is not step:
-            # start: how many to convert (all currently-built source structures if
-            # no count given), and the destination-count baseline to measure against
+            # start: how many `dest` to make — every ready source for a 1:1 convert
+            # (gateway<->warpgate), or as many pairs as we have for a 2:1 combine
+            # (2 HT/DT -> 1 Archon) — and the dest-count baseline to measure against.
             self._morph_step = step
-            self._morph_target = step.count if step.count is not None else self.structures(src).ready.amount
-            self._morph_baseline = self.structures(dst).amount
+            ready = self._morph_sources(spec).ready.amount
+            self._morph_target = step.count if step.count is not None else ready // spec.consumes
+            self._morph_baseline = self.all_own_units(spec.dest).amount
 
-        remaining = self._morph_target - (self.structures(dst).amount - self._morph_baseline)
+        remaining = self._morph_target - (self.all_own_units(spec.dest).amount - self._morph_baseline)
         if remaining <= 0:
             self._morph_step = None
-            return True  # enough have converted — done
+            return True  # enough have morphed — done
 
-        # issue the morph to that many idle source buildings (a busy/converting one
-        # isn't idle, so it's never double-issued); hold until `remaining` convert
-        for s in self.structures(src).ready.idle:
-            if remaining <= 0:
-                break
-            s(ability)
-            remaining -= 1
+        # issue to idle sources in groups of `consumes` (a converting/merging one
+        # isn't idle, so it's never double-issued); hold until `remaining` appear as
+        # `dest`. For the Archon combine, both templar of a pair get the ability and
+        # merge into one Archon.
+        idle = list(self._morph_sources(spec).idle)
+        for i in range(min(remaining, len(idle) // spec.consumes)):
+            for s in idle[i * spec.consumes:(i + 1) * spec.consumes]:
+                s(spec.ability)
         return False
+
+    def _morph_sources(self, spec):
+        """Ready units/structures that can morph into `spec.dest` (both HT and DT
+        for the Archon combine; the single source structure for a conversion)."""
+        return self.all_own_units(set(spec.sources)).ready
 
     async def do_research(self, step: Step) -> bool:
         upgrade = RESEARCH[step.what]
@@ -464,11 +420,11 @@ class BuildOrderBot(BotAI):
         return False
 
     async def do_cast(self, step: Step) -> bool:
-        ability, caster_type, energy = CAST[step.what]
-        casters = self.units(caster_type).filter(lambda u: u.energy >= energy)
+        spec = CAST[step.what]
+        casters = self.units(spec.caster).filter(lambda u: u.energy >= spec.energy)
         if not casters:
             return False  # no caster with enough energy yet — hold the line
-        casters.first(ability)
+        casters.first(spec.ability)
         return True
 
     async def do_chrono(self, step: Step) -> bool:

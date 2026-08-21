@@ -12,7 +12,9 @@ from pathlib import Path
 from typing import Annotated, Literal, Union
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+import catalog
 
 _TRIGGER_KEYS = ("supply", "time", "minerals", "vespene", "count")
 
@@ -66,10 +68,14 @@ class BuildStep(_StepBase):
     label: str | None = None        # build with a specific sent probe (see send_probe) instead of auto-selecting
     prewalk: Trigger | None = None  # when to pre-walk the builder into place (defaults to `at`)
 
+    _check = field_validator("what")(staticmethod(catalog.require_structure))
+
 
 class TrainStep(_StepBase):
     do: Literal["train"]
     what: str            # unit (UnitTypeId name, e.g. Adept)
+
+    _check = field_validator("what")(staticmethod(catalog.require_trainable))
 
 
 class WarpStep(_StepBase):
@@ -77,26 +83,36 @@ class WarpStep(_StepBase):
     what: str            # unit to warp in (Zealot, Stalker, Sentry, Adept, HighTemplar, DarkTemplar)
     where: Place = "proxy"  # which pylon to warp at (the ready pylon nearest this place)
 
+    _check = field_validator("what")(staticmethod(catalog.require_warpable))
+
 
 class MorphStep(_StepBase):
     do: Literal["morph"]
-    to: Literal["warpgate", "gateway"]  # convert Gateways<->Warpgates (needs Warpgate research for ->warpgate)
-    count: int | None = None            # how many to convert; omit = all of them
+    to: str              # warpgate | gateway (convert 1:1) | archon (combine 2 HT/DT). ->warpgate needs Warpgate research.
+    count: int | None = None  # how many to make; omit = as many as possible (all sources / all pairs)
+
+    _check = field_validator("to")(staticmethod(catalog.require_morph))
 
 
 class ResearchStep(_StepBase):
     do: Literal["research"]
-    what: str            # upgrade friendly name (Warpgate, Blink, Charge)
+    what: str            # upgrade friendly name (Warpgate, Blink, Charge, Storm, GroundWeapons1, ...)
+
+    _check = field_validator("what")(staticmethod(catalog.require_research))
 
 
 class CastStep(_StepBase):
     do: Literal["cast"]
     what: str            # spell friendly name (e.g. Hallucination) — cast by the appropriate unit
 
+    _check = field_validator("what")(staticmethod(catalog.require_cast))
+
 
 class ChronoStep(_StepBase):
     do: Literal["chrono"]
     target: str          # structure type to chrono-boost (must be producing/researching)
+
+    _check = field_validator("target")(staticmethod(catalog.require_chrono_target))
     optional: bool = False  # best-effort: if it can't cast now (no energy / nothing to
                             # boost) SKIP instead of holding the line. Use when sprinkling
                             # extra boosts (e.g. sustaining a long research) so a chrono
