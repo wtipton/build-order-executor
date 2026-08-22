@@ -74,6 +74,11 @@ class PassiveBot(BotAI):
 # Keep replays out of the real SC2 replay folder for now.
 REPLAY_DIR = Path.home() / "replays" / "bot"
 
+# Fixed RNG seed for the game engine: a build order is deterministic (no army micro,
+# passive opponent), and we want identical runs to reproduce exactly — the same seed
+# fixes spawn assignment and any engine RNG. There's no upside to randomizing it.
+GAME_SEED = 42
+
 
 def main():
     ap = argparse.ArgumentParser()
@@ -119,6 +124,7 @@ def main():
             Bot(Race.Terran, PassiveBot(), name="PassiveBot"),
         ],
         realtime=False,
+        random_seed=GAME_SEED,
         save_replay_as=str(replay_path),
         game_time_limit=args.time_limit or None,
     )

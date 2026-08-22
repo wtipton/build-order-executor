@@ -148,7 +148,8 @@ class WorldMixin:
         # the prewalk machinery then walks a probe there ahead of time for free.
         where = getattr(step, "where", None)
         if where is not None:
-            return await self.find_placement(unit, near=self._resolve_place(where), max_distance=20)
+            return await self.find_placement(unit, near=self._resolve_place(where), max_distance=20,
+                                             random_alternative=False)
         if unit == U.NEXUS:
             return self._next_expansion()
         if unit == U.ASSIMILATOR:

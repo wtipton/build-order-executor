@@ -234,7 +234,8 @@ class StepsMixin:
         if pylon is None:
             self._stall_reason = f"no powered pylon at {step.where}"
             return False  # no powering pylon at that place yet
-        pos = await self.find_placement(ability, near=pylon.position, placement_step=1)
+        pos = await self.find_placement(ability, near=pylon.position, placement_step=1,
+                                        random_alternative=False)
         if pos is None:
             self._stall_reason = f"no free warp tile at {step.where}"
             return False  # no free powered tile by that pylon right now

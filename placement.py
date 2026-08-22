@@ -24,6 +24,13 @@ from sc2.position import Point2
 # Structures that train units — leave a tile in front so units can exit.
 PRODUCTION = {U.GATEWAY, U.WARPGATE, U.ROBOTICSFACILITY, U.STARGATE}
 
+# Deterministic anchor offsets for packing buildings around a pylon: the tight spot
+# first, then step out in fixed directions. Used to retry when the nearest spot would
+# seal a producer, WITHOUT random_alternative — so placement is a pure function of
+# game state (identical runs reproduce exactly; see run.py GAME_SEED).
+_PACK_OFFSETS = ((0, 0), (2, 0), (0, 2), (-2, 0), (0, -2),
+                 (3, 3), (-3, 3), (3, -3), (-3, -3))
+
 
 class Placement:
     def __init__(self, bot):
@@ -45,7 +52,8 @@ class Placement:
             if not bot.structures(U.PYLON).closer_than(9, nexus):
                 toward = self._mineral_center(nexus) or bot.game_info.map_center
                 anchor = nexus.position.towards(toward, -5)  # 5 tiles AWAY from minerals
-                pos = await bot.find_placement(U.PYLON, near=anchor, max_distance=7)
+                pos = await bot.find_placement(U.PYLON, near=anchor, max_distance=7,
+                                               random_alternative=False)
                 if pos is not None:
                     return pos
 
@@ -72,7 +80,8 @@ class Placement:
 
         # 3) fallback: anything near the main toward the map center
         return await bot.find_placement(
-            U.PYLON, near=main.position.towards(bot.game_info.map_center, 6), max_distance=12
+            U.PYLON, near=main.position.towards(bot.game_info.map_center, 6), max_distance=12,
+            random_alternative=False,
         )
 
     # -------------------------------------------------------------- buildings
@@ -90,18 +99,16 @@ class Placement:
                 anchor = pylon.position.towards(near_min.center, -3)
             else:
                 anchor = pylon.position.towards(bot.game_info.map_center, 3)
-            # Pack tight (placement_step=1, no random spread) so many buildings fit
-            # per pylon — but never take the LAST exit of a nearby production
-            # building. Sample a few candidates and return the first that keeps every
-            # nearby producer's exit open (falls through to the next pylon otherwise).
-            for attempt in range(6):
+            # Pack tight (placement_step=1) so many buildings fit per pylon — but never
+            # take the LAST exit of a nearby production building. Sweep the fixed anchor
+            # offsets (deterministic — no random spread) and return the first buildable
+            # spot that keeps every nearby producer's exit open (else the next pylon).
+            for dx, dy in _PACK_OFFSETS:
                 pos = await bot.find_placement(
-                    unit, near=anchor, max_distance=10, placement_step=1,
-                    random_alternative=attempt > 0,
+                    unit, near=Point2((anchor.x + dx, anchor.y + dy)),
+                    max_distance=10, placement_step=1, random_alternative=False,
                 )
-                if pos is None:
-                    break
-                if not self._would_seal_producer(pos):
+                if pos is not None and not self._would_seal_producer(pos):
                     return pos
         return None
 
