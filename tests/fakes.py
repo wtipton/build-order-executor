@@ -42,6 +42,13 @@ class FakeUnits(list):
     def tags_not_in(self, tags) -> "FakeUnits":
         return FakeUnits(u for u in self if getattr(u, "tag", None) not in tags)
 
+    @property
+    def gathering(self) -> "FakeUnits":
+        return FakeUnits(u for u in self if u.is_gathering)
+
+    def closest_to(self, pos):
+        return min(self, key=lambda u: u.position.distance_to(pos))
+
 
 def fake_unit(**attrs) -> MagicMock:
     """A stand-in game unit. It's callable (so `unit(ability)` records a call) and

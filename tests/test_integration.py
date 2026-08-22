@@ -57,6 +57,31 @@ def test_all_units_and_structures_produced():
 
 
 @pytest.mark.integration
+def test_all_base_locations():
+    """Expand to 6 bases, populate them all, and drop a Pylon at every named
+    location — our bases (main..sixth) and the enemy/proxy spots."""
+    data = _run("builds/test_all_base_locations.yaml", time_limit=750)
+    assert data["completed"], (
+        f"stalled on {data['next_step']!r} at {data['final_time']}s "
+        f"({data['steps_done']}/{data['steps_total']}) — a named location may not resolve/place"
+    )
+    assert data["census"].get("NEXUS", 0) >= 6, f"expected 6 bases (census={data['census']})"
+    bases = data.get("bases", [])
+    assert len(bases) >= 6 and all(w > 0 for w in bases[:6]), f"a base is unpopulated: {bases}"
+    # a Pylon landed at each distinct named location (guards the re-issue/placement
+    # bug where enemy pylons ended up clustered at the proxy instead)
+    by_place = data.get("pylons_by_place", {})
+    for place in ["main", "natural", "third", "fourth", "fifth", "sixth",
+                  "enemy_main", "enemy_natural", "proxy"]:
+        assert by_place.get(place, 0) >= 1, f"no pylon at {place}: {by_place}"
+    # the Nth Nexus and `where: <Nth base>` must agree — a Nexus sits at every
+    # named base (guards the get_next_expansion-vs-_expansion_near mismatch)
+    nexus_at = data.get("nexus_by_place", {})
+    for place in ["main", "natural", "third", "fourth", "fifth", "sixth"]:
+        assert nexus_at.get(place, 0) >= 1, f"no Nexus at {place}: {nexus_at}"
+
+
+@pytest.mark.integration
 def test_all_upgrades_researched():
     """Every Protoss upgrade completes."""
     data = _run("builds/test_all_upgrades.yaml", time_limit=1100)

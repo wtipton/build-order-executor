@@ -8,10 +8,26 @@ from __future__ import annotations
 from bot import BuildOrderBot
 from sc2.ids.ability_id import AbilityId
 from sc2.ids.unit_typeid import UnitTypeId as U
+from sc2.position import Point2
 
 from fakes import FakeUnits, fake_bot, fake_unit
 
 DEST = object()  # sentinel returned by a stubbed _resolve_place
+
+
+# ------------------------------------------------------------------ _free_probe_near
+def test_free_probe_near_reuses_idle_probe_at_target():
+    # A probe that just gave up / finished right AT the target should be reused
+    # instead of pulling a gathering probe from home (which sent a second probe
+    # across the map to re-build an enemy/proxy pylon).
+    target = Point2((100.0, 100.0))
+    idle_at_target = fake_unit(tag=1, position=Point2((101.0, 100.0)),
+                               is_idle=True, is_gathering=False, is_carrying_minerals=False)
+    gathering_home = fake_unit(tag=2, position=Point2((10.0, 10.0)),
+                               is_idle=False, is_gathering=True, is_carrying_minerals=False)
+    fake = fake_bot(workers=FakeUnits([idle_at_target, gathering_home]),
+                    _excluded_tags=lambda: set())
+    assert BuildOrderBot._free_probe_near(fake, target).tag == 1
 
 
 # ------------------------------------------------------------------ send_probe

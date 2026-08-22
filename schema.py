@@ -19,13 +19,15 @@ import catalog
 _TRIGGER_KEYS = ("supply", "time", "minerals", "vespene", "count")
 
 # Symbolic locations resolved by the bot at runtime (bot._resolve_place):
-#   main          -> our start location
-#   natural       -> our natural expansion
+#   main..sixth   -> our bases by distance from our start (main, natural, third,
+#                    fourth, fifth, sixth) — the Nth-nearest expansion, clamped to
+#                    what the map provides.
 #   enemy_main    -> the enemy start location (for scouting)
 #   enemy_natural -> the enemy natural expansion
 #   proxy         -> out near the enemy but off their doorstep (their ~4th base) —
 #                    for proxying a pylon/building and warping units in there.
-Place = Literal["main", "natural", "enemy_main", "enemy_natural", "proxy"]
+Place = Literal["main", "natural", "third", "fourth", "fifth", "sixth",
+                "enemy_main", "enemy_natural", "proxy"]
 
 
 class Trigger(BaseModel):

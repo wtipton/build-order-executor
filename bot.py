@@ -118,10 +118,12 @@ class BuildOrderBot(BotAI):
         self._build_target = None      # Point2 (placement) or geyser Unit (gas)
         self._active_step: Step | None = None
 
-        # confirm a build actually starts (re-issue if a probe blocked the tile)
+        # confirm a build actually starts (re-issue if a probe blocked the tile);
+        # _build_builder_tag = the probe committed to the current build, so we wait
+        # for it (even a long walk) instead of re-issuing and spawning duplicates.
         self._building_step: Step | None = None
         self._build_baseline = 0
-        self._pending_baseline = 0  # same-type builds already in flight when a build step starts
+        self._build_builder_tag: int | None = None
 
         # confirm a warp-in actually happened (a Warpgate looks off-cooldown to
         # get_available_abilities right after we've used it, so issuing != warped;
@@ -181,9 +183,24 @@ class BuildOrderBot(BotAI):
             "census": census,
             "upgrades": upgrades,
             "researching": researching,
+            "bases": [int(t.assigned_harvesters) for t in self._ordered_bases()],
+            "pylons_by_place": self._pylons_by_place(),
+            "nexus_by_place": {p: 1 for p in self.BASE_RANK
+                               if self.townhalls.closer_than(6, self._resolve_place(p)).exists},
             "workers": self.workers.amount,
             "supply_used": self.supply_used,
         }
+
+    def _pylons_by_place(self) -> dict:
+        """Count our Pylons near each named location — so a build placing pylons at
+        `enemy_main`/`proxy`/etc. can be verified to have put one at each distinct
+        spot (not all clustered in one place)."""
+        out = {}
+        for place in list(self.BASE_RANK) + ["enemy_main", "enemy_natural", "proxy"]:
+            n = self.structures(U.PYLON).closer_than(12, self._resolve_place(place)).amount
+            if n:
+                out[place] = n
+        return out
 
     def _note_milestones(self) -> None:
         """Log the exact game-time key units/upgrades first complete — heartbeats are
@@ -377,32 +394,35 @@ class BuildOrderBot(BotAI):
     async def do_build(self, step: Step) -> bool:
         unit = _unit(step.what)
 
-        # A build isn't "done" when the command is issued — a probe walking over
-        # the tile can block placement and the order is dropped silently. Confirm
-        # the structure actually appears (count grows past the baseline captured
-        # when this step started), and re-issue whenever nothing is in flight.
+        # A build isn't "done" when the command is issued — the probe may walk a
+        # long way, and a probe over the tile can block placement so the order is
+        # dropped. Confirm the structure actually appears: the type's count grows
+        # past the baseline captured when this step started.
         if self._building_step is not step:
             self._building_step = step
             self._build_baseline = self.structures(unit).amount
-            # already_pending() counts EVERY in-progress structure of this type
-            # (python-sc2 counts under-construction Protoss buildings), so baseline
-            # the ones already in flight from earlier steps — the guard below then
-            # only stalls on THIS step's own build, letting several of the same
-            # structure (e.g. a wall of Gateways) build concurrently instead of
-            # strictly one-after-another.
-            self._pending_baseline = self.already_pending(unit)
+            self._build_builder_tag = None
 
         if self.structures(unit).amount > self._build_baseline:
             self._building_step = None
+            self._build_builder_tag = None
             self._clear_reservation()
             return True
 
         if not self.can_afford(unit):
             self._stall_reason = f"can't afford {step.what}"
             return False  # save for it, stalling the line
-        if self.already_pending(unit) > self._pending_baseline:
+
+        # Don't re-issue while the probe we already sent is still carrying out the
+        # build (walking to the spot — possibly across the map — or placing it);
+        # re-issue only once it's died or dropped the order without a structure
+        # appearing. Re-issuing every frame during a long walk spawned duplicate
+        # builds in the wrong place and spurious structures that falsely satisfied
+        # the (type-wide) count confirm.
+        builder = self._worker_by_tag(self._build_builder_tag)
+        if builder is not None and not (builder.is_idle or builder.is_gathering):
             self._stall_reason = f"{step.what} under construction"
-            return False  # THIS build is en route / warping in — stall, don't re-issue
+            return False
 
         # Builder: an explicitly sent probe (step.label), else the pre-walked
         # reservation, else auto-selected from the free pool — never a sent probe.
@@ -420,31 +440,44 @@ class BuildOrderBot(BotAI):
             print(f"[step*] {self._clock():>4}  issuing {step.what}{d}", flush=True)
 
         if unit == U.ASSIMILATOR:
-            await self._build_gas(builder, target if isinstance(target, Unit) else None)
+            chosen = await self._build_gas(builder, target if isinstance(target, Unit) else None)
         elif unit == U.NEXUS:
-            loc = target if isinstance(target, Point2) else await self.get_next_expansion()
-            if loc is not None:
-                await self.build(U.NEXUS, near=loc, build_worker=builder or self._free_probe_near(loc), placement_step=1)
-            else:
+            loc = target if isinstance(target, Point2) else self._next_expansion()
+            if loc is None:
                 self._stall_reason = "no expansion location"
+                return False
+            chosen = builder or self._free_probe_near(loc)
+            if chosen is not None:
+                await self.build(U.NEXUS, near=loc, build_worker=chosen, placement_step=1)
         else:
             loc = target if isinstance(target, Point2) else await self._placement_for(step)
-            if loc is not None:
-                await self.build(unit, near=loc, build_worker=builder or self._free_probe_near(loc))
-            else:
+            if loc is None:
                 self._stall_reason = f"no placement for {step.what}"
+                return False
+            chosen = builder or self._free_probe_near(loc)
+            if chosen is not None:
+                await self.build(unit, near=loc, build_worker=chosen)
+
+        # Remember the committed probe so we wait for it instead of re-issuing.
+        if chosen is not None:
+            self._build_builder_tag = chosen.tag
+        if self.debug:
+            where = getattr(step, "where", None)
+            print(f"[dispatch] {self._clock():>4}  {step.what}"
+                  f"{'/' + where if where else ''} <- probe {chosen.tag if chosen else None}", flush=True)
         return False  # issued; stall the line until the structure appears (confirm)
 
-    async def _build_gas(self, builder=None, geyser=None) -> bool:
+    async def _build_gas(self, builder=None, geyser=None):
+        """Issue an Assimilator on a free geyser; returns the worker used (or None)."""
         if geyser is None:
             geyser = self._free_geyser()
         if geyser is None:
-            return False
+            return None
         worker = builder or self._free_probe_near(geyser.position)
         if worker is None:
-            return False
+            return None
         worker.build_gas(geyser)
-        return True
+        return worker
 
     async def do_train(self, step: Step) -> bool:
         unit = _unit(step.what)
@@ -661,11 +694,13 @@ class BuildOrderBot(BotAI):
     # aim a few bases out toward the middle of the map.
     PROXY_BASE_RANK = 3
 
+    # Our bases named by distance-rank from our start (0 = main, 1 = natural, ...).
+    BASE_RANK = {"main": 0, "natural": 1, "third": 2, "fourth": 3, "fifth": 4, "sixth": 5}
+
     def _resolve_place(self, where: str):
-        if where == "main":
-            return self.start_location
-        if where == "natural":
-            return self._expansion_near(self.start_location, 1)
+        rank = self.BASE_RANK.get(where)
+        if rank is not None:
+            return self.start_location if rank == 0 else self._expansion_near(self.start_location, rank)
         if where == "enemy_main":
             return self._enemy_start()
         if where == "enemy_natural":
@@ -683,6 +718,16 @@ class BuildOrderBot(BotAI):
         if not exps:
             return base
         return exps[min(rank, len(exps) - 1)]
+
+    def _next_expansion(self):
+        """The nearest expansion we haven't taken yet, using the SAME ordering as
+        `_expansion_near` (distance from our start). We roll this rather than the
+        library's `get_next_expansion` (which orders by pathing distance) so that
+        the Nth Nexus lands on exactly the base `where: <Nth base>` resolves to."""
+        for e in sorted(self.expansion_locations_list, key=lambda e: e.distance_to(self.start_location)):
+            if not self.townhalls.closer_than(3.0, e):
+                return e
+        return None
 
     # =========================================================== named probes
     def _worker_by_tag(self, tag: int | None):
@@ -706,10 +751,13 @@ class BuildOrderBot(BotAI):
         return tags
 
     def _free_probe_near(self, pos):
-        """Nearest probe available to automation (not a sent/reserved one)."""
+        """Nearest probe available to automation (not a sent/reserved one). Consider
+        idle probes too, not just gathering ones, and pick the CLOSEST — so a probe
+        that just finished or gave up right at `pos` (e.g. a far enemy/proxy build)
+        is reused, instead of pulling a fresh one across the map."""
         pool = self.workers.tags_not_in(self._excluded_tags())
-        cands = pool.filter(lambda w: w.is_gathering and not w.is_carrying_minerals)
-        cands = cands or pool.gathering or pool
+        cands = pool.filter(lambda w: (w.is_gathering or w.is_idle) and not w.is_carrying_minerals)
+        cands = cands or pool.filter(lambda w: w.is_gathering or w.is_idle) or pool
         return cands.closest_to(pos) if cands else None
 
     # ========================================================= pre-walk builder
@@ -732,11 +780,9 @@ class BuildOrderBot(BotAI):
             return
 
         # do_build may have already issued this build itself (its trigger fired
-        # before prewalk got to reserve — e.g. a research/train/warp step just
-        # ahead of it completed on the same frame, so _next_build_step only now
-        # returns this step). A probe is then en route with the build order, which
-        # for Protoss is exactly what already_pending() counts — don't reserve a
-        # SECOND probe on top of it.
+        # before prewalk got to reserve). A probe is then en route with the build
+        # order, which for Protoss is what already_pending() counts — don't reserve
+        # a SECOND probe on top of it.
         if self.already_pending(_unit(step.what)):
             return
 
@@ -753,7 +799,7 @@ class BuildOrderBot(BotAI):
         worker.move(pos)
         if self.debug:
             print(f"[prewalk] {self._clock():>4}  sup{self.supply_used} min={self.minerals} "
-                  f"reserved probe for {step.what} @ ({pos.x:.0f},{pos.y:.0f}) "
+                  f"reserved probe {worker.tag} for {step.what} @ ({pos.x:.0f},{pos.y:.0f}) "
                   f"(build at {self._trig_str(step.at)})", flush=True)
 
     def _next_build_step(self) -> Step | None:
@@ -776,7 +822,7 @@ class BuildOrderBot(BotAI):
         if where is not None:
             return await self.find_placement(unit, near=self._resolve_place(where), max_distance=20)
         if unit == U.NEXUS:
-            return await self.get_next_expansion()
+            return self._next_expansion()
         if unit == U.ASSIMILATOR:
             return self._free_geyser()
         if unit == U.PYLON:
