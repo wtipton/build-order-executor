@@ -15,15 +15,15 @@ from sc2.ids.unit_typeid import UnitTypeId as U
 from sc2.position import Point2
 
 from fakes import FakeUnits, fake_bot, fake_unit
+from state import BuildConfirm, Reservation, WarpConfirm
 
 
 # ============================================================ do_build
 def _build_bot(*, struct_amount, afford, builder=None, **over):
-    # builder = the probe already committed to this build (via _build_builder_tag),
+    # builder = the probe already committed to this build (via _build.builder_tag),
     # looked up by _worker_by_tag; None means no build in flight yet.
     base = dict(
-        _building_step=None, _build_baseline=0, _build_builder_tag=None,
-        _reserved_step=None, _active_step=None, debug=False,
+        _build=BuildConfirm(), _reservation=Reservation(), _active_step=None, debug=False,
         structures=lambda t: FakeUnits([object()] * struct_amount),
         can_afford=lambda u: afford,
         _worker_by_tag=lambda tag: builder,
@@ -40,17 +40,17 @@ async def test_build_captures_baseline_on_first_sight_then_holds():
     step = fake_bot(what="Pylon", label=None)
     fake = _build_bot(struct_amount=0, afford=False)
     assert await BuildOrderBot.do_build(fake, step) is False
-    assert fake._building_step is step  # baseline captured for this step
-    assert fake._build_baseline == 0 and fake._build_builder_tag is None
+    assert fake._build.step is step  # baseline captured for this step
+    assert fake._build.baseline == 0 and fake._build.builder_tag is None
 
 
 async def test_build_confirms_when_structure_appears():
     step = fake_bot(what="Pylon", label=None)
     fake = _build_bot(struct_amount=1, afford=True)
-    fake._building_step = step          # already in progress
-    fake._build_baseline = 0            # ...and one has now appeared (amount 1 > 0)
+    fake._build.step = step          # already in progress
+    fake._build.baseline = 0         # ...and one has now appeared (amount 1 > 0)
     assert await BuildOrderBot.do_build(fake, step) is True
-    assert fake._building_step is None
+    assert fake._build.step is None
     fake._clear_reservation.assert_called_once()
 
 
@@ -60,28 +60,28 @@ async def test_build_holds_without_reissue_while_builder_walks():
     walking = fake_unit(is_idle=False, is_gathering=False)
     step = fake_bot(what="Pylon", label=None)
     fake = _build_bot(struct_amount=0, afford=True, builder=walking)
-    fake._building_step = step
-    fake._build_baseline = 0
-    fake._build_builder_tag = 7
+    fake._build.step = step
+    fake._build.baseline = 0
+    fake._build.builder_tag = 7
     assert await BuildOrderBot.do_build(fake, step) is False
     fake.build.assert_not_awaited()
 
 
 async def test_build_reissues_when_no_builder_committed():
     step = fake_bot(what="Pylon", label=None)
-    fake = _build_bot(struct_amount=0, afford=True)   # _build_builder_tag None
+    fake = _build_bot(struct_amount=0, afford=True)   # _build.builder_tag None
     fake._active_step = step  # not the reserved step -> auto-select a builder
     assert await BuildOrderBot.do_build(fake, step) is False  # issued, holds for confirm
     fake.build.assert_awaited_once()
-    assert fake._building_step is step
-    assert fake._build_builder_tag == 99  # remembered the committed probe
+    assert fake._build.step is step
+    assert fake._build.builder_tag == 99  # remembered the committed probe
 
 
 # ============================================================ do_warp
 def _warp_bot(*, unit_amount, afford, warpgates, ready_abilities, placement, **over):
     ability = WARP_ABILITY[U.ZEALOT]
     base = dict(
-        _warping_step=None, _warp_baseline=0,
+        _warp=WarpConfirm(),
         units=lambda t: FakeUnits([object()] * unit_amount),
         can_afford=lambda u: afford,
         structures=lambda t: FakeUnits(warpgates),
@@ -100,10 +100,10 @@ def _zealot_step():
 async def test_warp_confirms_when_unit_appears():
     step = _zealot_step()
     fake, _ = _warp_bot(unit_amount=1, afford=True, warpgates=[], ready_abilities=[], placement=None)
-    fake._warping_step = step
-    fake._warp_baseline = 0
+    fake._warp.step = step
+    fake._warp.baseline = 0
     assert await BuildOrderBot.do_warp(fake, step) is True
-    assert fake._warping_step is None
+    assert fake._warp.step is None
 
 
 async def test_warp_holds_when_no_warpgate():

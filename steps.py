@@ -1,0 +1,397 @@
+"""The step executor for BuildOrderBot: the strict-order engine (trigger gating,
+confirm/stall, prewalk hand-off) and every `do_<action>` handler.
+
+`StepsMixin` is mixed into `BuildOrderBot` (see bot.py); its methods run on the
+live bot via `self` and lean on the other mixins' helpers (`_free_probe_near`,
+`_ordered_bases`, `_resolve_place`, `_describe`, …).
+"""
+
+from __future__ import annotations
+
+from sc2.ids.ability_id import AbilityId
+from sc2.ids.unit_typeid import UnitTypeId as U
+from sc2.position import Point2
+from sc2.unit import Unit
+
+from catalog import (
+    CHRONO_ABILITY,
+    CHRONO_BUFF,
+    CHRONO_CASTER,
+    CHRONO_ENERGY,
+    HALLUCINATION_ABILITY,
+    HALLUCINATION_CASTER,
+    HALLUCINATION_ENERGY,
+    MORPH,
+    PRODUCER,
+    RESEARCH,
+    WARP_ABILITY,
+    unit_id as _unit,
+)
+
+
+class StepsMixin:
+    # ============================================================ engine
+    async def run_steps(self):
+        i = self.idx
+        while i < len(self.steps):
+            if self._done[i]:
+                i += 1
+                continue
+            step = self.steps[i]
+            if not self._started[i]:
+                if not self.trigger_met(step.at):
+                    break  # not due yet — this step (and everything after) waits
+                self._started[i] = True  # trigger fired: commit; don't re-gate it
+            if not await self.execute(step):
+                break  # stall the line until this step can be done (strict order)
+            self._done[i] = True
+            note = f"  # {step.note}" if step.note else ""
+            print(f"[step] {self._clock():>4}  sup{self.supply_used:<3} {self._describe(step)}{note}", flush=True)
+            i += 1
+        # advance the pointer past any leading completed steps
+        while self.idx < len(self.steps) and self._done[self.idx]:
+            self.idx += 1
+
+    def trigger_met(self, at) -> bool:
+        if at.supply is not None:
+            return self.supply_used >= at.supply
+        if at.time is not None:
+            return self.time >= at.time
+        if at.minerals is not None:
+            return self.minerals >= at.minerals
+        if at.vespene is not None:
+            return self.vespene >= at.vespene
+        if at.count is not None:
+            name, n = next(iter(at.count.items()))
+            return self.all_own_units(_unit(name)).ready.amount >= n
+        return True
+
+    def _prewalk_due(self, step) -> bool:
+        """Whether to start walking the builder. For a resource-based prewalk
+        ({minerals}/{vespene}) we reserve the cost of the probes still needed to
+        reach the build's supply, then check the threshold against what's left —
+        i.e. the minerals we'd have AFTER committing those probes, not minerals
+        that are about to be spent on them. (Probes cost 50 minerals / 0 gas.)
+        Other trigger forms use trigger_met directly."""
+        trig = getattr(step, "prewalk", None) or step.at
+        if trig.minerals is not None or trig.vespene is not None:
+            reserved = 0
+            if step.at.supply is not None:
+                # supply_used already counts in-production probes (supply is
+                # reserved the moment training starts), so DON'T also subtract
+                # already_pending — that double-counts the building probe and
+                # fires the pull one supply early.
+                need = step.at.supply - self.supply_used
+                reserved = 50 * max(0, need)
+            if trig.minerals is not None and self.minerals - reserved < trig.minerals:
+                return False
+            if trig.vespene is not None and self.vespene < trig.vespene:
+                return False
+            return True
+        return self.trigger_met(trig)
+
+    async def execute(self, step) -> bool:
+        self._active_step = step
+        self._stall_reason = ""  # handlers set this when they return False (for [stall])
+        handler = getattr(self, f"do_{step.do}")
+        return await handler(step)
+
+    # ----------------------------------------------------------- step handlers
+    async def do_build(self, step) -> bool:
+        unit = _unit(step.what)
+
+        # A build isn't "done" when the command is issued — the probe may walk a
+        # long way, and a probe over the tile can block placement so the order is
+        # dropped. Confirm the structure actually appears: the type's count grows
+        # past the baseline captured when this step started.
+        if self._build.step is not step:
+            self._build.step = step
+            self._build.baseline = self.structures(unit).amount
+            self._build.builder_tag = None
+
+        if self.structures(unit).amount > self._build.baseline:
+            self._build.step = None
+            self._build.builder_tag = None
+            self._clear_reservation()
+            return True
+
+        if not self.can_afford(unit):
+            self._stall_reason = f"can't afford {step.what}"
+            return False  # save for it, stalling the line
+
+        # Don't re-issue while the probe we already sent is still carrying out the
+        # build (walking to the spot — possibly across the map — or placing it);
+        # re-issue only once it's died or dropped the order without a structure
+        # appearing. Re-issuing every frame during a long walk spawned duplicate
+        # builds in the wrong place and spurious structures that falsely satisfied
+        # the (type-wide) count confirm.
+        builder = self._worker_by_tag(self._build.builder_tag)
+        if builder is not None and not (builder.is_idle or builder.is_gathering):
+            self._stall_reason = f"{step.what} under construction"
+            return False
+
+        # Builder: an explicitly sent probe (step.label), else the pre-walked
+        # reservation, else auto-selected from the free pool — never a sent probe.
+        label = getattr(step, "label", None)
+        if label is not None:
+            builder = self._named_worker(label)  # may be None if it died -> auto-select
+            target = None
+        else:
+            reserved = self._reservation.step is self._active_step
+            builder = self._reserved_worker() if reserved else None
+            target = self._reservation.target if reserved else None
+        if self.debug:
+            pos = target.position if isinstance(target, Unit) else target
+            d = f" builder dist={builder.distance_to(pos):.1f}" if (builder and pos is not None) else ""
+            print(f"[step*] {self._clock():>4}  issuing {step.what}{d}", flush=True)
+
+        if unit == U.ASSIMILATOR:
+            chosen = await self._build_gas(builder, target if isinstance(target, Unit) else None)
+        elif unit == U.NEXUS:
+            loc = target if isinstance(target, Point2) else self._next_expansion()
+            if loc is None:
+                self._stall_reason = "no expansion location"
+                return False
+            chosen = builder or self._free_probe_near(loc)
+            if chosen is not None:
+                await self.build(U.NEXUS, near=loc, build_worker=chosen, placement_step=1)
+        else:
+            loc = target if isinstance(target, Point2) else await self._placement_for(step)
+            if loc is None:
+                self._stall_reason = f"no placement for {step.what}"
+                return False
+            chosen = builder or self._free_probe_near(loc)
+            if chosen is not None:
+                await self.build(unit, near=loc, build_worker=chosen)
+
+        # Remember the committed probe so we wait for it instead of re-issuing.
+        if chosen is not None:
+            self._build.builder_tag = chosen.tag
+        if self.debug:
+            where = getattr(step, "where", None)
+            print(f"[dispatch] {self._clock():>4}  {step.what}"
+                  f"{'/' + where if where else ''} <- probe {chosen.tag if chosen else None}", flush=True)
+        return False  # issued; stall the line until the structure appears (confirm)
+
+    async def _build_gas(self, builder=None, geyser=None):
+        """Issue an Assimilator on a free geyser; returns the worker used (or None)."""
+        if geyser is None:
+            geyser = self._free_geyser()
+        if geyser is None:
+            return None
+        worker = builder or self._free_probe_near(geyser.position)
+        if worker is None:
+            return None
+        worker.build_gas(geyser)
+        return worker
+
+    async def do_train(self, step) -> bool:
+        unit = _unit(step.what)
+        if not self.can_afford(unit):
+            self._stall_reason = f"can't afford {step.what}"
+            return False  # save for it (costs money + supply), stalling the line
+        producer = PRODUCER.get(unit)
+        if producer == U.NEXUS or unit == U.PROBE:
+            havers = self.townhalls.ready.idle
+        else:
+            havers = self.structures(producer).ready.idle
+        if not havers:
+            self._stall_reason = f"no idle {producer.name if producer else 'producer'}"
+            return False  # producer busy — wait for it (correct if the order is right)
+        havers.first.train(unit)
+        return True  # issued (producer now busy); the next step proceeds concurrently
+
+    async def do_warp(self, step) -> bool:
+        unit = _unit(step.what)
+
+        # A warp isn't "done" when we issue it: a Warpgate still reads as
+        # off-cooldown to get_available_abilities on the frame(s) right after we
+        # warp from it, so trusting the issue would over-warp (mark N steps done
+        # with only 2 gates). Confirm the unit actually appears — its count grows
+        # past the baseline captured when this step started — and only then advance.
+        if self._warp.step is not step:
+            self._warp.step = step
+            self._warp.baseline = self.units(unit).amount
+
+        if self.units(unit).amount > self._warp.baseline:
+            self._warp.step = None
+            return True
+
+        if not self.can_afford(unit):
+            self._stall_reason = f"can't afford {step.what}"
+            return False  # save for it (costs money + supply), stalling the line
+        ability = WARP_ABILITY[unit]
+        warpgates = self.structures(U.WARPGATE).ready
+        if not warpgates:
+            self._stall_reason = "no ready Warpgate (research/morph pending)"
+            return False  # no Warpgate yet (research/morph pending) — stall the line
+        avail = await self.get_available_abilities(warpgates)
+        ready = [wg for wg, abils in zip(warpgates, avail) if ability in abils]
+        if not ready:
+            self._stall_reason = "all Warpgates on cooldown"
+            return False  # all on cooldown — stall until one is up
+        pylon = self._warp_pylon(step.where)
+        if pylon is None:
+            self._stall_reason = f"no powered pylon at {step.where}"
+            return False  # no powering pylon at that place yet
+        pos = await self.find_placement(ability, near=pylon.position, placement_step=1)
+        if pos is None:
+            self._stall_reason = f"no free warp tile at {step.where}"
+            return False  # no free powered tile by that pylon right now
+        ready[0].warp_in(unit, pos)
+        return False  # issued; stall until the unit appears (confirm above)
+
+    def _warp_pylon(self, where: str):
+        """The ready pylon nearest the requested place — so `where: proxy` warps
+        at the proxy pylon out on the map, `main` at home, etc."""
+        pylons = self.structures(U.PYLON).ready
+        if not pylons:
+            return None
+        return pylons.closest_to(self._resolve_place(where))
+
+    async def do_morph(self, step) -> bool:
+        spec = MORPH[step.to]
+        if self._morph.step is not step:
+            # start: how many `dest` to make — every ready source for a 1:1 convert
+            # (gateway<->warpgate), or as many pairs as we have for a 2:1 combine
+            # (2 HT/DT -> 1 Archon) — and the dest-count baseline to measure against.
+            self._morph.step = step
+            ready = self._morph_sources(spec).ready.amount
+            self._morph.target = step.count if step.count is not None else ready // spec.consumes
+            self._morph.baseline = self.all_own_units(spec.dest).amount
+
+        remaining = self._morph.target - (self.all_own_units(spec.dest).amount - self._morph.baseline)
+        if remaining <= 0:
+            self._morph.step = None
+            return True  # enough have morphed — done
+
+        # issue to idle sources in groups of `consumes` (a converting/merging one
+        # isn't idle, so it's never double-issued); stall until `remaining` appear as
+        # `dest`. For the Archon combine, both templar of a pair get the ability and
+        # merge into one Archon.
+        idle = list(self._morph_sources(spec).idle)
+        for i in range(min(remaining, len(idle) // spec.consumes)):
+            for s in idle[i * spec.consumes:(i + 1) * spec.consumes]:
+                s(spec.ability)
+        self._stall_reason = f"morphing to {step.to} ({remaining} left)"
+        return False
+
+    def _morph_sources(self, spec):
+        """Ready units/structures that can morph into `spec.dest` (both HT and DT
+        for the Archon combine; the single source structure for a conversion)."""
+        return self.all_own_units(set(spec.sources)).ready
+
+    async def do_research(self, step) -> bool:
+        upgrade = RESEARCH[step.what]
+        if self.already_pending_upgrade(upgrade) > 0 or upgrade in self.state.upgrades:
+            return True  # already researching or done
+        if not self.can_afford(upgrade):
+            self._stall_reason = f"can't afford {step.what}"
+            return False  # save for it, stalling the line
+        self.research(upgrade)  # finds the structure + issues; confirm next frame
+        return False
+
+    async def do_hallucinate(self, step) -> bool:
+        casters = self.units(HALLUCINATION_CASTER).filter(lambda u: u.energy >= HALLUCINATION_ENERGY)
+        if not casters:
+            self._stall_reason = f"no Sentry with {HALLUCINATION_ENERGY} energy"
+            return False  # no Sentry with enough energy yet — stall the line
+        casters.first(HALLUCINATION_ABILITY)
+        return True
+
+    async def do_chrono(self, step) -> bool:
+        # Like every step, a chrono STALLS until it fires: if there's no
+        # Nexus with enough energy, or nothing of the target type is producing yet,
+        # it waits. Builds are precise — place a chrono where it will actually have
+        # energy and something to boost, not as a best-effort sprinkle.
+        target_type = _unit(step.target)
+        nexuses = self.townhalls(CHRONO_CASTER).ready.filter(lambda n: n.energy >= CHRONO_ENERGY)
+        if not nexuses:
+            self._stall_reason = f"no Nexus with {CHRONO_ENERGY} energy"
+            return False  # no Nexus with enough energy yet — wait
+        if target_type == U.NEXUS:
+            target = next((n for n in self.townhalls(U.NEXUS).ready if n.orders), None)
+            target = target or self.townhalls(U.NEXUS).ready.first
+        else:
+            target = next((s for s in self.structures(target_type).ready if s.orders), None)
+        if target is None:
+            self._stall_reason = f"no {step.target} is producing/researching"
+            return False  # nothing of that type is producing yet — wait
+        if target.has_buff(CHRONO_BUFF):
+            return True  # already boosted — count the action as done
+        nexuses.first(CHRONO_ABILITY, target)
+        return True
+
+    async def do_send_probe(self, step) -> bool:
+        # Reuse the probe already under this label if it's still alive (e.g. move
+        # the "scout" from the enemy main out to the proxy), else pull a fresh one.
+        # A sent probe is held out of automation until a return_probe (see
+        # _excluded_tags), so it stays put/on-task rather than drifting back to mine.
+        dest = self._resolve_place(step.where)
+        worker = self._named_worker(step.label)
+        if worker is None:
+            worker = self._free_probe_near(dest)
+            if worker is None:
+                self._stall_reason = "no free probe to send"
+                return False  # no probe available yet — stall the line
+            self.named_probes[step.label] = worker.tag
+        self._named_binds.setdefault(step.label, set()).add(worker.tag)  # track probes bound per label
+        worker.move(dest)
+        return True
+
+    async def do_return_probe(self, step) -> bool:
+        tag = self.named_probes.pop(step.label, None)
+        worker = self._worker_by_tag(tag) if tag is not None else None
+        if worker is not None:
+            field = self._populating_field()  # our currently-populating base, never enemy minerals
+            if field is not None:
+                worker.gather(field)
+        return True
+
+    async def do_rally(self, step) -> bool:
+        self.rally_target = self._resolve_place(step.where)
+        return True
+
+    async def do_rally_and_transfer(self, step) -> bool:
+        bases = self._ordered_bases()
+        if step.base > len(bases):
+            self._stall_reason = f"base {step.base} not up yet (have {len(bases)})"
+            return False  # that base isn't up yet — stall the line until it exists
+        self.populating_base_num = step.base
+        base = bases[step.base - 1]
+        field = self._base_field(base)
+        if field is None:
+            return True
+        # rally every Nexus's new probes onto this base's minerals
+        for nexus in self.townhalls(U.NEXUS).ready:
+            nexus(AbilityId.RALLY_WORKERS, field)
+        # transfer every OTHER base's excess mineral workers here, leaving each at
+        # the cap. assigned_harvesters is the accurate count, so moving exactly
+        # (assigned - cap) of that base's workers lands it on the cap. Prefer ones
+        # not carrying (no wasted trip), but include carriers if needed to reach it.
+        pool = self.workers.tags_not_in(self._excluded_tags()).filter(lambda w: w.is_gathering)
+        for th in bases:
+            if th.tag == base.tag:
+                continue
+            excess = th.assigned_harvesters - self.minerals_per_base
+            if excess <= 0:
+                continue
+            near = pool.closer_than(10, th).sorted(key=lambda w: w.is_carrying_minerals)
+            for w in near:
+                if excess <= 0:
+                    break
+                w.gather(field)
+                excess -= 1
+        return True
+
+    async def do_gas_workers(self, step) -> bool:
+        self.gas_target = step.count
+        return True
+
+    async def do_minerals_cap(self, step) -> bool:
+        self.minerals_per_base = step.count
+        return True
+
+    async def do_workers(self, step) -> bool:
+        self.continuous_workers = step.state == "start"
+        return True

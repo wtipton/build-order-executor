@@ -16,6 +16,7 @@ from sc2.ids.unit_typeid import UnitTypeId as U
 from sc2.ids.upgrade_id import UpgradeId
 
 from fakes import FakeUnits, fake_bot, fake_unit
+from state import MorphState
 
 
 # ------------------------------------------------------------------ do_train
@@ -93,8 +94,7 @@ def _morph_bot(sources, dest_units):
     (the dest, for the baseline/confirm count)."""
     def all_own_units(sel):
         return FakeUnits(sources) if isinstance(sel, (set, frozenset)) else FakeUnits(dest_units)
-    return fake_bot(all_own_units=all_own_units, _morph_step=None,
-                    _morph_target=0, _morph_baseline=0)
+    return fake_bot(all_own_units=all_own_units, _morph=MorphState())
 
 
 async def test_morph_converts_each_idle_source_1to1():
@@ -120,10 +120,10 @@ async def test_morph_archon_combines_two_templar_per_archon():
 async def test_morph_done_when_dest_count_reached():
     step = fake_bot(to="archon", count=1)
     fake = _morph_bot([], dest_units=[fake_unit()])  # 1 archon now exists
-    fake._morph_step = step  # already in progress
-    fake._morph_target, fake._morph_baseline = 1, 0
+    fake._morph.step = step  # already in progress
+    fake._morph.target, fake._morph.baseline = 1, 0
     assert await BuildOrderBot.do_morph(fake, step) is True
-    assert fake._morph_step is None
+    assert fake._morph.step is None
 
 
 # ------------------------------------------------------------------ do_chrono

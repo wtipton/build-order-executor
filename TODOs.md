@@ -11,19 +11,6 @@ Legend: `[ ]` todo · 🎨 = needs genuine design work.
 
 ---
 
-## Phase 3 — Refactor into modules  (Goal 3b + clean design)
-
-- [ ] 🎨 Extract modules: `steps.py` (handlers), `economy.py`, `observe.py`
-      (army report / milestones / heartbeat); keep `placement.py`.
-      `BuildOrderBot` becomes a thin orchestrator. Design the module seams.
-- [ ] 🎨 Fold the scattered confirm/reservation instance vars into small
-      dataclasses (`BuildConfirm`, `WarpConfirm`, `MorphState`, `Reservation`).
-- [ ] Preserve the observability `SKILL.md` relies on: `_army_report()`,
-      `_note_milestones()`, `[done] M:SS` lines — keep working through the refactor.
-- [ ] Expand tests against the now-decoupled pieces.
-- [ ] Consider lifting `optional:` (best-effort skip) from chrono-only to a
-      general step attribute.
-
 ## Phase 4 — Correctness of the unspecified  (Goal 2)
 
 - [ ] 🎨 `placement.building()`/pylon/expansion still return `None` (and stall)
