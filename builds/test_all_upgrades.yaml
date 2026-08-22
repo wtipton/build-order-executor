@@ -1,0 +1,81 @@
+# Regression fixture: research EVERY Protoss upgrade (all 27). A tech/upgrade
+# coverage probe — no army, so upgrades start as soon as their building is up and
+# don't queue behind unit production. Extra Forges (3) + Cores (2) let the leveled
+# up/downgrades research in parallel. A final time gate keeps the game alive until
+# they finish (a `research` step completes when the upgrade STARTS, and there's no
+# upgrade-done trigger). Asserted via [summary] upgrades in tests/test_integration.py.
+# Expect [stall] lines during the final wait — that's the deliberate hold.
+
+name: All Upgrades
+
+economy:
+  continuous_workers: true
+  minerals_per_base: 16
+
+steps:
+  # ===================== economy: 2 bases, full gas (upgrades are gas-heavy) =====================
+  - {at: {time: 5},   do: chrono, target: Nexus}
+  - {at: {supply: 13}, do: build, what: Pylon}
+  - {at: {count: {Pylon: 1}}, do: build, what: Gateway}
+  - {at: {time: 35},  do: build, what: Assimilator}
+  - {at: {time: 45},  do: build, what: Nexus, note: "natural"}
+  - {at: {count: {Gateway: 1}}, do: build, what: CyberneticsCore}
+  - {at: {count: {Assimilator: 1}}, do: gas_workers, count: 3}
+  - {at: {time: 55},  do: build, what: Pylon}
+  - {at: {time: 62},  do: build, what: Assimilator, note: "main gas 2"}
+  - {at: {count: {Assimilator: 2}}, do: gas_workers, count: 6}
+  - {at: {count: {Nexus: 2}}, do: rally_and_transfer, base: 2}
+  - {at: {count: {Nexus: 2}}, do: build, what: Assimilator, note: "natural gas 1"}
+  - {at: {count: {Nexus: 2}}, do: build, what: Assimilator, note: "natural gas 2"}
+  - {at: {count: {Assimilator: 4}}, do: gas_workers, count: 12}
+  - {at: {time: 150}, do: workers, state: stop, note: "cap probes — this build is gas-bound, not supply-bound"}
+
+  # ===================== tech: all upgrade buildings (extra forges/cores for parallelism) =====================
+  - {at: {count: {Gateway: 1}}, do: build, what: CyberneticsCore, note: "2nd core (parallel air upgrades)"}
+  - {at: {count: {CyberneticsCore: 1}}, do: build, what: Forge}
+  - {at: {count: {CyberneticsCore: 1}}, do: build, what: Forge}
+  - {at: {count: {CyberneticsCore: 1}}, do: build, what: Forge}
+  - {at: {count: {CyberneticsCore: 1}}, do: build, what: TwilightCouncil}
+  - {at: {count: {CyberneticsCore: 1}}, do: build, what: RoboticsFacility}
+  - {at: {count: {CyberneticsCore: 1}}, do: build, what: Stargate}
+  - {at: {time: 120}, do: build, what: Pylon}
+  - {at: {time: 160}, do: build, what: Pylon}
+  - {at: {count: {TwilightCouncil: 1}}, do: build, what: TemplarArchive}
+  - {at: {count: {TwilightCouncil: 1}}, do: build, what: DarkShrine}
+  - {at: {count: {RoboticsFacility: 1}}, do: build, what: RoboticsBay}
+  - {at: {count: {Stargate: 1}}, do: build, what: FleetBeacon}
+
+  # ===================== research: every upgrade =====================
+  # wave 1 — one per building (issue as each building comes up)
+  - {at: {count: {CyberneticsCore: 1}}, do: research, what: Warpgate}
+  - {at: {count: {Forge: 3}}, do: research, what: GroundWeapons1}
+  - {at: {count: {Forge: 3}}, do: research, what: GroundArmor1}
+  - {at: {count: {Forge: 3}}, do: research, what: Shields1}
+  - {at: {count: {CyberneticsCore: 2}}, do: research, what: AirWeapons1}
+  - {at: {count: {CyberneticsCore: 2}}, do: research, what: AirArmor1}
+  - {at: {count: {TwilightCouncil: 1}}, do: research, what: Blink}
+  - {at: {count: {TemplarArchive: 1}}, do: research, what: Storm}
+  - {at: {count: {DarkShrine: 1}}, do: research, what: ShadowStride}
+  - {at: {count: {RoboticsBay: 1}}, do: research, what: ThermalLance}
+  - {at: {count: {FleetBeacon: 1}}, do: research, what: PhoenixRange}
+  # wave 2 — L2 + second-per-building (hold until the wave-1 upgrade on that building finishes)
+  - {at: {count: {Forge: 3}}, do: research, what: GroundWeapons2}
+  - {at: {count: {Forge: 3}}, do: research, what: GroundArmor2}
+  - {at: {count: {Forge: 3}}, do: research, what: Shields2}
+  - {at: {count: {CyberneticsCore: 2}}, do: research, what: AirWeapons2}
+  - {at: {count: {CyberneticsCore: 2}}, do: research, what: AirArmor2}
+  - {at: {count: {TwilightCouncil: 1}}, do: research, what: Charge}
+  - {at: {count: {RoboticsBay: 1}}, do: research, what: GraviticDrive}
+  - {at: {count: {FleetBeacon: 1}}, do: research, what: VoidRaySpeed}
+  # wave 3 — L3 + third-per-building
+  - {at: {count: {Forge: 3}}, do: research, what: GroundWeapons3}
+  - {at: {count: {Forge: 3}}, do: research, what: GroundArmor3}
+  - {at: {count: {Forge: 3}}, do: research, what: Shields3}
+  - {at: {count: {CyberneticsCore: 2}}, do: research, what: AirWeapons3}
+  - {at: {count: {CyberneticsCore: 2}}, do: research, what: AirArmor3}
+  - {at: {count: {TwilightCouncil: 1}}, do: research, what: Glaives}
+  - {at: {count: {RoboticsBay: 1}}, do: research, what: GraviticBooster}
+  - {at: {count: {FleetBeacon: 1}}, do: research, what: TempestGroundAttack}
+
+  # keep the game alive until the upgrades finish (no upgrade-done trigger exists)
+  - {at: {time: 1000}, do: minerals_cap, count: 16, note: "final wait for all upgrades to complete"}

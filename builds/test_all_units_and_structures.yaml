@@ -1,0 +1,88 @@
+# Regression fixture: build EVERY Protoss structure and train EVERY Protoss unit
+# (+ the Archon morph). A production-coverage probe (upgrades are covered
+# separately by test_all_upgrades.yaml) — it exercises the PRODUCER table, every
+# tech dependency, building placement + exit-rally at scale, vs a passive
+# opponent. Trailing count-gated sentinels wait for the slow units to be READY so
+# the end-of-run [summary] census is complete. Asserted in tests/test_integration.py.
+
+name: All Units and Structures
+
+economy:
+  continuous_workers: true
+  minerals_per_base: 18
+
+steps:
+  # ===================== economy: 3 bases, full gas =====================
+  - {at: {time: 5},   do: chrono, target: Nexus}
+  - {at: {supply: 13}, do: build, what: Pylon}
+  - {at: {count: {Pylon: 1}}, do: build, what: Gateway}
+  - {at: {time: 35},  do: build, what: Assimilator}
+  - {at: {time: 45},  do: build, what: Nexus,  note: "natural"}
+  - {at: {count: {Gateway: 1}}, do: build, what: CyberneticsCore}
+  - {at: {time: 55},  do: build, what: Pylon}
+  - {at: {time: 62},  do: build, what: Assimilator, note: "main gas 2"}
+  - {at: {count: {Assimilator: 2}}, do: gas_workers, count: 6}
+  - {at: {count: {Nexus: 2}}, do: rally_and_transfer, base: 2}
+  - {at: {time: 90},  do: build, what: Nexus,  note: "third"}
+  - {at: {count: {Nexus: 3}}, do: rally_and_transfer, base: 3}
+  - {at: {time: 180}, do: workers, state: stop, note: "cap probes (~45) — leave supply for the full army"}
+
+  # ===================== tech off the Core =====================
+  - {at: {count: {CyberneticsCore: 1}}, do: build, what: Forge}
+  - {at: {count: {CyberneticsCore: 1}}, do: build, what: TwilightCouncil}
+  - {at: {count: {CyberneticsCore: 1}}, do: build, what: Stargate}
+  - {at: {count: {CyberneticsCore: 1}}, do: build, what: RoboticsFacility}
+  - {at: {count: {CyberneticsCore: 1}}, do: build, what: ShieldBattery}
+  - {at: {count: {Forge: 1}}, do: build, what: PhotonCannon}
+
+  # natural + third gas (6 geysers total)
+  - {at: {count: {Nexus: 3}}, do: build, what: Assimilator}
+  - {at: {count: {Nexus: 3}}, do: build, what: Assimilator}
+  - {at: {count: {Nexus: 3}}, do: build, what: Assimilator}
+  - {at: {count: {Nexus: 3}}, do: build, what: Assimilator}
+  - {at: {count: {Assimilator: 6}}, do: gas_workers, count: 18}
+
+  # ===================== tier-2 tech =====================
+  - {at: {count: {TwilightCouncil: 1}}, do: build, what: TemplarArchive}
+  - {at: {count: {TwilightCouncil: 1}}, do: build, what: DarkShrine}
+  - {at: {count: {RoboticsFacility: 1}}, do: build, what: RoboticsBay}
+  - {at: {count: {Stargate: 1}}, do: build, what: FleetBeacon}
+
+  # supply pylons on a timer (a full army is supply-hungry)
+  - {at: {time: 130}, do: build, what: Pylon}
+  - {at: {time: 160}, do: build, what: Pylon}
+  - {at: {time: 200}, do: build, what: Pylon}
+  - {at: {time: 240}, do: build, what: Pylon}
+  - {at: {time: 300}, do: build, what: Pylon}
+  - {at: {time: 360}, do: build, what: Pylon}
+
+  # ===================== units: one of everything =====================
+  - {at: {count: {Gateway: 1}}, do: train, what: Zealot}
+  - {at: {count: {CyberneticsCore: 1}}, do: train, what: Stalker}
+  - {at: {count: {CyberneticsCore: 1}}, do: train, what: Sentry}
+  - {at: {count: {CyberneticsCore: 1}}, do: train, what: Adept}
+  - {at: {count: {RoboticsFacility: 1}}, do: train, what: Immortal}
+  - {at: {count: {RoboticsFacility: 1}}, do: train, what: Observer}
+  - {at: {count: {RoboticsFacility: 1}}, do: train, what: WarpPrism}
+  - {at: {count: {RoboticsBay: 1}}, do: train, what: Colossus}
+  - {at: {count: {RoboticsBay: 1}}, do: train, what: Disruptor}
+  - {at: {count: {Stargate: 1}}, do: train, what: Phoenix}
+  - {at: {count: {Stargate: 1}}, do: train, what: Oracle}
+  - {at: {count: {Stargate: 1}}, do: train, what: VoidRay}
+  - {at: {count: {FleetBeacon: 1}}, do: train, what: Tempest}
+  - {at: {count: {FleetBeacon: 1}}, do: train, what: Carrier}
+  # templar: 2 HT -> Archon, then one HT and one DT that persist
+  - {at: {count: {TemplarArchive: 1}}, do: train, what: HighTemplar}
+  - {at: {count: {TemplarArchive: 1}}, do: train, what: HighTemplar}
+  - {at: {count: {HighTemplar: 2}}, do: morph, to: archon, count: 1}
+  - {at: {count: {TemplarArchive: 1}}, do: train, what: HighTemplar, note: "persists"}
+  - {at: {count: {DarkShrine: 1}}, do: train, what: DarkTemplar, note: "persists"}
+  - {at: {count: {FleetBeacon: 1}}, do: train, what: Mothership}
+
+  # ===================== wait for the slow units to finish (complete census) =====================
+  - {at: {count: {VoidRay: 1}}, do: minerals_cap, count: 18}
+  - {at: {count: {Tempest: 1}}, do: minerals_cap, count: 18}
+  - {at: {count: {Carrier: 1}}, do: minerals_cap, count: 18}
+  - {at: {count: {HighTemplar: 1}}, do: minerals_cap, count: 18}
+  - {at: {count: {DarkTemplar: 1}}, do: minerals_cap, count: 18}
+  - {at: {count: {Mothership: 1}}, do: minerals_cap, count: 18}

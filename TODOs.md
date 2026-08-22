@@ -52,9 +52,14 @@ BotAI/game. Tiers: (0) pure schema+catalog, (1) sequencing + handler gating,
 
 ## Phase 4 — Correctness of the unspecified  (Goal 2)
 
-- [ ] 🎨 `placement.building()` (and pylon/expansion placement) degrade
-      gracefully instead of returning `None` and holding the queue forever when a
-      base's powered ground fills up (spread / fallback). Document determinism.
+- [x] Production exits: `placement.building()` never takes the last exit of a
+      nearby production building (`_would_seal_producer`), and every production
+      building auto-rallies its units off the spawn tile toward open ground
+      (`apply_rally`, `RALLY_OFFSET`). Fixes the gateway/robo jam the all-units
+      build hit. Verified: the full-roster build now completes.
+- [ ] 🎨 `placement.building()`/pylon/expansion still return `None` (and stall)
+      if a base's powered ground genuinely fills up — graceful spread/fallback
+      across bases not yet done. Document determinism.
 
 ## Phase 5 — Clean output + deadlock diagnostics  (Goal 4)  ✅ mostly done
 
@@ -67,8 +72,14 @@ BotAI/game. Tiers: (0) pure schema+catalog, (1) sequencing + handler gating,
       "Reading the output" table in README.
 - [x] Noise: python-sc2 loguru dropped to WARNING + a filter for the benign
       connection-teardown errors our concede provokes. stdout is now just our tags.
-- [ ] Live-run verify the Phase-1 additions that unit tests can't cover: Archon
-      morph actually pops an Archon; newly-enabled upgrades (e.g. Storm) research.
+- [x] Full-roster regression builds (integration, `--run-integration`):
+      `test_all_units_and_structures.yaml` (every structure + unit + Archon —
+      verified complete census) and `test_all_upgrades.yaml` (all 27 upgrades —
+      verified 27/27). Summary gained a `researching` field (in-progress upgrades)
+      so "started" vs "never reached" is visible.
+- [ ] Integration runs occasionally hit a transient python-sc2 launch crash
+      (`run_game` AssertionError before any step) — a Wine/SC2 flake, not our code.
+      Consider a one-shot retry in the test's `_run` helper.
 
 ## Phase 6 — Docs pass
 

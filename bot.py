@@ -44,7 +44,7 @@ from catalog import (
     WARP_ABILITY,
     unit_id as _unit,
 )
-from placement import Placement
+from placement import PRODUCTION, Placement
 from schema import BuildConfig, Step, Trigger, load_build  # noqa: F401  (re-exported for run.py)
 
 # Name -> game-object tables and the spell constants (PRODUCER, WARP_ABILITY,
@@ -56,6 +56,10 @@ from schema import BuildConfig, Step, Trigger, load_build  # noqa: F401  (re-exp
 # Grace period (game-seconds) between the build finishing and conceding, so the
 # last actions land and are watchable rather than cutting out instantly.
 CONCEDE_GRACE = 10.0
+
+# How far (tiles) a production building rallies its units by default — off the
+# spawn tile toward open ground, so units don't pile up and jam the exit.
+RALLY_OFFSET = 10.0
 
 # Stall diagnostics: how long the head step may stall before we report why, and
 # how often to re-report while it's still stuck. Set high so legitimate long
@@ -86,6 +90,7 @@ class BuildOrderBot(BotAI):
         self.gas_target: int = 0  # no workers in gas until a `gas_workers` step says so
 
         self.rally_target = None
+        self._rallied: set[int] = set()  # production buildings given their default exit-clearing rally
         # label -> probe tag for probes sent out via `send_probe`. These are held
         # OUT of all worker automation (mining, prewalk, build auto-select) until a
         # `return_probe` step hands them back.
@@ -157,6 +162,13 @@ class BuildOrderBot(BotAI):
                 census[t.name] = n
         friendly = {v: k for k, v in RESEARCH.items()}
         upgrades = sorted(friendly.get(u, u.name) for u in self.state.upgrades)
+        # Upgrades that STARTED but haven't finished — so "researched but unfinished"
+        # is distinguishable from "never started" (already_pending_upgrade is the
+        # research progress in [0,1)).
+        researching = sorted(
+            name for name, u in RESEARCH.items()
+            if 0 < self.already_pending_upgrade(u) < 1
+        )
         return {
             "name": self.cfg.name,
             "result": str(result),
@@ -168,6 +180,7 @@ class BuildOrderBot(BotAI):
             "milestones": {k: round(v, 1) for k, v in self._milestones.items()},
             "census": census,
             "upgrades": upgrades,
+            "researching": researching,
             "workers": self.workers.amount,
             "supply_used": self.supply_used,
         }
@@ -915,7 +928,15 @@ class BuildOrderBot(BotAI):
         return None
 
     def apply_rally(self):
-        if self.rally_target is None:
-            return
-        for gw in self.structures(U.GATEWAY).ready:
-            gw(AbilityId.RALLY_BUILDING, self.rally_target)
+        # Keep production exits clear: the instant a production building is up, rally
+        # its units a few tiles toward open ground so they walk off the spawn tile
+        # rather than piling on it and jamming the building (a finished unit can't
+        # pop out through a blocked exit). Set once per building.
+        for b in self.structures(PRODUCTION).ready:
+            if b.tag not in self._rallied:
+                self._rallied.add(b.tag)
+                b(AbilityId.RALLY_BUILDING, b.position.towards(self.game_info.map_center, RALLY_OFFSET))
+        # An explicit `rally` step overrides where gateway units gather.
+        if self.rally_target is not None:
+            for gw in self.structures(U.GATEWAY).ready:
+                gw(AbilityId.RALLY_BUILDING, self.rally_target)

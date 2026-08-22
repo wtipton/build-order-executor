@@ -5,8 +5,10 @@ Kept deliberately simple (no walling yet — just "make it easy to fit buildings
   * pylon():    give every Nexus a nearby pylon (offset off the mineral line so
                 it's not buried in the minerals), then spread further pylons out
                 across the base so there's powered room everywhere.
-  * building(): pack a building tight against a powering pylon; for production
-                structures, bias toward open ground so trained units can get out.
+  * building(): pack buildings tight against a powering pylon, but never place one
+                where it would take the last exit of an existing production building
+                (PRODUCTION) — units must have somewhere to spawn (the bot also
+                auto-rallies them off the exit — see apply_rally).
 
 All methods take the live bot via `self.bot` and return a Point2 (or None if no
 spot is available yet, e.g. before a pylon exists).
@@ -82,16 +84,48 @@ class Placement:
         # try pylons nearest the main first so the base grows outward from home
         for pylon in pylons.sorted(key=lambda p: p.distance_to(bot.start_location)):
             # Anchor on the side of the pylon AWAY from any nearby minerals, so we
-            # don't build into the mineral line and block mining. Pack tight
-            # (placement_step=1, no random spread) so many buildings fit per pylon.
+            # don't build into the mineral line and block mining.
             near_min = bot.mineral_field.closer_than(15, pylon)
             if near_min:
                 anchor = pylon.position.towards(near_min.center, -3)
             else:
                 anchor = pylon.position.towards(bot.game_info.map_center, 3)
-            pos = await bot.find_placement(
-                unit, near=anchor, max_distance=10, placement_step=1, random_alternative=False
-            )
-            if pos is not None:
-                return pos
+            # Pack tight (placement_step=1, no random spread) so many buildings fit
+            # per pylon — but never take the LAST exit of a nearby production
+            # building. Sample a few candidates and return the first that keeps every
+            # nearby producer's exit open (falls through to the next pylon otherwise).
+            for attempt in range(6):
+                pos = await bot.find_placement(
+                    unit, near=anchor, max_distance=10, placement_step=1,
+                    random_alternative=attempt > 0,
+                )
+                if pos is None:
+                    break
+                if not self._would_seal_producer(pos):
+                    return pos
         return None
+
+    def _open_exits(self, center: Point2) -> list[Point2]:
+        """Perimeter points (8 compass directions, ~2.5 tiles out) a unit could step
+        onto to leave a building: walkable terrain not already under a structure."""
+        bot = self.bot
+        pts = []
+        for k in range(8):
+            ang = k * math.pi / 4
+            e = Point2((center.x + 2.5 * math.cos(ang), center.y + 2.5 * math.sin(ang)))
+            if bot.in_pathing_grid(e) and not bot.structures.closer_than(1.5, e):
+                pts.append(e)
+        return pts
+
+    def _would_seal_producer(self, pos: Point2) -> bool:
+        """Would a building at `pos` remove the LAST exit of a nearby production
+        building? We keep tight packing but never fully wall a producer in — units
+        must have somewhere to spawn (the bot then rallies them off it)."""
+        bot = self.bot
+        for prod in bot.structures(PRODUCTION):
+            if prod.position.distance_to(pos) > 6:
+                continue
+            exits = self._open_exits(prod.position)
+            if exits and all(e.distance_to(pos) < 2.0 for e in exits):
+                return True  # the new building would cover every remaining exit
+        return False
