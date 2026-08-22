@@ -95,6 +95,7 @@ class BuildOrderBot(BotAI):
         # OUT of all worker automation (mining, prewalk, build auto-select) until a
         # `return_probe` step hands them back.
         self.named_probes: dict[str, int] = {}
+        self._named_binds: dict[str, set[int]] = {}  # every probe tag ever bound per label (re-send should reuse one)
         # The base a returned/idle worker mines at (1 = main, 2 = natural, ...).
         # `rally_and_transfer` moves it; workers never fall back to random minerals.
         self.populating_base_num: int = 1
@@ -187,6 +188,8 @@ class BuildOrderBot(BotAI):
             "pylons_by_place": self._pylons_by_place(),
             "nexus_by_place": {p: 1 for p in self.BASE_RANK
                                if self.townhalls.closer_than(6, self._resolve_place(p)).exists},
+            "named_probe_binds": {k: len(v) for k, v in self._named_binds.items()},
+            "named_probes_held": sorted(self.named_probes),
             "workers": self.workers.amount,
             "supply_used": self.supply_used,
         }
@@ -629,6 +632,7 @@ class BuildOrderBot(BotAI):
                 self._stall_reason = "no free probe to send"
                 return False  # no probe available yet — stall the line
             self.named_probes[step.label] = worker.tag
+        self._named_binds.setdefault(step.label, set()).add(worker.tag)  # track probes bound per label
         worker.move(dest)
         return True
 

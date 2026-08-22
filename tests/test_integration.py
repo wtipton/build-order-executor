@@ -82,6 +82,24 @@ def test_all_base_locations():
 
 
 @pytest.mark.integration
+def test_probe_naming():
+    """Named probes: re-sending a label moves the SAME probe, `label:` builds use a
+    named probe, and return_probe hands them all back."""
+    data = _run("builds/test_probe_naming.yaml", time_limit=400)
+    assert data["completed"], (
+        f"stalled on {data['next_step']!r} at {data['final_time']}s "
+        f"({data['steps_done']}/{data['steps_total']})"
+    )
+    binds = data.get("named_probe_binds", {})
+    for label in ["scout1", "scout2", "builder"]:
+        assert binds.get(label) == 1, f"{label} bound to {binds.get(label)} probes (re-send must reuse one): {binds}"
+    assert data.get("named_probes_held") == [], f"probes not returned to mining: {data.get('named_probes_held')}"
+    # the builder probe actually built its home structures
+    for s in ("PYLON", "GATEWAY", "CYBERNETICSCORE"):
+        assert data["census"].get(s, 0) >= 1, f"builder didn't build {s}: {data['census']}"
+
+
+@pytest.mark.integration
 def test_all_upgrades_researched():
     """Every Protoss upgrade completes."""
     data = _run("builds/test_all_upgrades.yaml", time_limit=1100)

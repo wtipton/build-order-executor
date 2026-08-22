@@ -33,7 +33,7 @@ def test_free_probe_near_reuses_idle_probe_at_target():
 # ------------------------------------------------------------------ send_probe
 async def test_send_probe_reuses_named_probe():
     existing = fake_unit(tag=1)
-    fake = fake_bot(_resolve_place=lambda w: DEST, named_probes={"scout": 1},
+    fake = fake_bot(_resolve_place=lambda w: DEST, named_probes={"scout": 1}, _named_binds={},
                     _named_worker=lambda label: existing, _free_probe_near=lambda p: None)
     assert await BuildOrderBot.do_send_probe(fake, fake_bot(where="proxy", label="scout")) is True
     existing.move.assert_called_once_with(DEST)
@@ -42,7 +42,7 @@ async def test_send_probe_reuses_named_probe():
 
 async def test_send_probe_pulls_and_registers_fresh_probe():
     fresh = fake_unit(tag=7)
-    fake = fake_bot(_resolve_place=lambda w: DEST, named_probes={},
+    fake = fake_bot(_resolve_place=lambda w: DEST, named_probes={}, _named_binds={},
                     _named_worker=lambda label: None, _free_probe_near=lambda p: fresh)
     assert await BuildOrderBot.do_send_probe(fake, fake_bot(where="proxy", label="scout")) is True
     assert fake.named_probes == {"scout": 7}  # registered so it's held out of automation
@@ -50,7 +50,7 @@ async def test_send_probe_pulls_and_registers_fresh_probe():
 
 
 async def test_send_probe_holds_when_no_probe_available():
-    fake = fake_bot(_resolve_place=lambda w: DEST, named_probes={},
+    fake = fake_bot(_resolve_place=lambda w: DEST, named_probes={}, _named_binds={},
                     _named_worker=lambda label: None, _free_probe_near=lambda p: None)
     assert await BuildOrderBot.do_send_probe(fake, fake_bot(where="proxy", label="scout")) is False
 
