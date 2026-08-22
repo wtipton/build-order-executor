@@ -2,15 +2,19 @@
 """Launch SC2 and run the opening bot.
 
 Most-natural python-sc2 usage: the library launches its own SC2 instance,
-creates a game vs a passive (do-nothing) opponent, and runs our bot. On Linux
-with a Wine/Lutris install we just tell the library how to launch:
+creates a game vs a passive (do-nothing) opponent, and runs our bot. We support
+two launch TARGETS (select with --target or SC2_TARGET; default: wine):
 
-    SC2PF=WineLinux        -> use the Windows SC2_x64.exe under Wine
-    WINE=/path/to/wine     -> the wine binary (Lutris ships its own)
-    SC2PATH=/path/to/...   -> the "StarCraft II" folder inside the wine prefix
+    wine   -> local Lutris/Wine install running the CURRENT retail patch, for
+              personal build optimization. Uses the Windows SC2_x64.exe under Wine
+              (SC2PF=WineLinux + WINE + WINEPREFIX + SC2PATH).
+    linux  -> Blizzard's headless Linux build (e.g. game version 4.10) inside
+              Docker, for reproducible agent evals. Native SC2_x64 binary, NO Wine
+              (SC2PF=Linux); the game version is whatever's installed under SC2PATH.
 
-These are read by sc2.paths at import time, so we set sensible defaults here
-*before* importing sc2. Override any of them in your shell.
+The library reads these env vars in sc2.paths at import time, so the selected
+target's defaults are applied here (via setdefault) *before* importing sc2. Any
+single var can still be overridden in the shell / Docker ENV.
 
 The game always runs NON-realtime: the simulation advances as fast as the bot
 steps it (no render bottleneck), then saves a replay you watch in SC2 at native
@@ -30,24 +34,52 @@ import sys
 from datetime import datetime
 
 # --- configure the launcher BEFORE importing sc2 ----------------------------
-# These are read by sc2.paths at import time. Defaults match this machine's
-# Lutris install; override any of them in your shell.
+# sc2.paths reads these env vars at import time, so the launch target must be
+# resolved and applied here, ahead of the sc2 imports below. --target is declared
+# in argparse too (for --help), but parsed there is too late — so pre-scan argv.
 HOME = os.path.expanduser("~")
-DEFAULTS = {
-    "SC2PF": "WineLinux",
-    "SC2PATH": f"{HOME}/Games/nobak/sc2_bot/drive_c/Program Files (x86)/StarCraft II",
-    # Dedicated prefix for the bot (separate from the one you watch replays in),
-    # so python-sc2's `wineserver -k` teardown only kills the bot's own game.
-    # python-sc2's launcher does NOT set WINEPREFIX itself, so we must.
-    "WINEPREFIX": f"{HOME}/Games/nobak/sc2_bot",
-    "WINE": f"{HOME}/.local/share/lutris/runners/wine/GE-Proton10-34/files/bin/wine",
+TARGETS = {
+    # Local Lutris/Wine install, CURRENT retail patch. Uses a dedicated wine prefix
+    # (separate from the one you watch replays in) so python-sc2's `wineserver -k`
+    # teardown only kills the bot's own game; the launcher does NOT set WINEPREFIX
+    # itself, so we must.
+    "wine": {
+        "SC2PF": "WineLinux",
+        "SC2PATH": f"{HOME}/Games/nobak/sc2_bot/drive_c/Program Files (x86)/StarCraft II",
+        "WINEPREFIX": f"{HOME}/Games/nobak/sc2_bot",
+        "WINE": f"{HOME}/.local/share/lutris/runners/wine/GE-Proton10-34/files/bin/wine",
+    },
+    # Blizzard's headless Linux build inside Docker. SC2PF=Linux selects the native
+    # SC2_x64 binary (no Wine, no WINE/WINEPREFIX). SC2PATH falls through to the
+    # library default (~/StarCraftII) unless set in the environment; the game
+    # version is whatever's installed there (each image ships exactly one).
+    "linux": {
+        "SC2PF": "Linux",
+    },
 }
+
+
+def _select_target() -> str:
+    """The launch target from --target (argv) or SC2_TARGET, default 'wine'."""
+    argv = sys.argv[1:]
+    for i, a in enumerate(argv):
+        if a == "--target" and i + 1 < len(argv):
+            return argv[i + 1]
+        if a.startswith("--target="):
+            return a.split("=", 1)[1]
+    return os.environ.get("SC2_TARGET", "wine")
+
+
+_TARGET = _select_target()
+if _TARGET not in TARGETS:
+    sys.exit(f"[run] unknown --target {_TARGET!r}; valid: {', '.join(TARGETS)}")
 if os.name != "nt":
-    for k, v in DEFAULTS.items():
+    for k, v in TARGETS[_TARGET].items():
         os.environ.setdefault(k, v)
 
 from pathlib import Path  # noqa: E402
 
+from sc2 import maps as sc2_maps  # noqa: E402
 from sc2.maps import Map  # noqa: E402
 from sc2.bot_ai import BotAI  # noqa: E402
 from sc2.data import Race  # noqa: E402
@@ -80,8 +112,23 @@ REPLAY_DIR = Path.home() / "replays" / "bot"
 GAME_SEED = 42
 
 
+def resolve_map(name: str):
+    """Locate the map named `name` for the current target. The native (headless)
+    client opens the exact path we hand it, so we resolve to an absolute path with
+    maps.get (its maps sit in per-season subfolders); the Windows client under Wine
+    resolves a bare relative name itself and can't open an absolute Linux path."""
+    if os.environ.get("SC2PF") != "WineLinux":
+        try:
+            return sc2_maps.get(name)
+        except KeyError:
+            pass
+    return Map(Path(f"{name}.SC2Map"))
+
+
 def main():
     ap = argparse.ArgumentParser()
+    ap.add_argument("--target", default=_TARGET, choices=sorted(TARGETS),
+                    help="launch target (also via SC2_TARGET env); resolved before sc2 import")
     ap.add_argument("--build", default="builds/pvz_opening_8worker.yaml", help="build-order config")
     ap.add_argument("--map", default="LockdownLE", help="map filename without .SC2Map")
     ap.add_argument("--fullscreen", action="store_true", help="launch SC2 fullscreen (-displayMode 1)")
@@ -100,10 +147,11 @@ def main():
     _loguru.add(sys.stderr, level="WARNING",
                 filter=lambda r: not any(s in r["message"] for s in _TEARDOWN_NOISE))
 
-    # Pass a bare map filename; SC2 locates it among its own map roots.
-    game_map = Map(Path(f"{args.map}.SC2Map"))
+    game_map = resolve_map(args.map)
 
     build = load_build(args.build)
+    print(f"[run] target={_TARGET} SC2PF={os.environ.get('SC2PF')} "
+          f"SC2PATH={os.environ.get('SC2PATH', '(library default)')}")
     print(f"[run] build loaded: {build.name}")
     print(OUTPUT_LEGEND)
 

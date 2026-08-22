@@ -10,6 +10,7 @@ shows up as a stall (completed=false) or a missing artifact in the census/upgrad
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 
@@ -17,11 +18,16 @@ import pytest
 
 import catalog
 
+# Map to run these on. Defaults to the local (wine) map; override with SC2_TEST_MAP
+# to run the same suite against another target — e.g. CatalystLE for the 4.10 image.
+TEST_MAP = os.environ.get("SC2_TEST_MAP", "LockdownLE")
+
 
 def _run(build: str, time_limit: int) -> dict:
     """Run a build to completion and return its parsed [summary] JSON."""
     proc = subprocess.run(
-        [sys.executable, "run.py", "--build", build, "--fullscreen", "--time-limit", str(time_limit)],
+        [sys.executable, "run.py", "--build", build, "--fullscreen",
+         "--map", TEST_MAP, "--time-limit", str(time_limit)],
         check=True, timeout=1800, capture_output=True, text=True,
     )
     line = next(l for l in proc.stdout.splitlines() if l.startswith("[summary] "))
@@ -30,15 +36,30 @@ def _run(build: str, time_limit: int) -> dict:
 
 @pytest.mark.integration
 def test_all_schema_features_runs_to_completion():
-    """Every step type + every trigger type, run to the end."""
+    """(Nearly) every step type + every trigger type, run to the end. Train-based so
+    the one build is valid on both current retail and 4.10 (see the build's header:
+    warp / morph-warpgate diverge between versions and are omitted here)."""
     data = _run("builds/test_all_schema_features.yaml", time_limit=750)
     assert data["completed"], (
         f"stalled on {data['next_step']!r} at {data['final_time']}s "
         f"({data['steps_done']}/{data['steps_total']})"
     )
     assert data["census"].get("ARCHON", 0) >= 1, f"no Archon (census={data['census']})"
-    assert data["census"].get("WARPGATE", 0) >= 1, f"no Warpgate (census={data['census']})"
-    assert "Warpgate" in data["upgrades"], f"Warpgate not researched (upgrades={data['upgrades']})"
+    # No Warpgate assertion: the build doesn't research Warpgate at all (it auto-morphs
+    # Gateways in 4.10 but not modern, so it's version-specific — see the build header).
+
+
+@pytest.mark.integration
+def test_warp_in():
+    """Warp a unit in from a Warpgate — one build valid on both versions (the morph step
+    starts before Warpgate research finishes, so it completes via the manual morph on
+    modern or the auto-morph on 4.10; see the build header)."""
+    data = _run("builds/test_warp_in.yaml", time_limit=400)
+    assert data["completed"], (
+        f"stalled on {data['next_step']!r} at {data['final_time']}s "
+        f"({data['steps_done']}/{data['steps_total']})"
+    )
+    assert data["census"].get("ZEALOT", 0) >= 1, f"no warped-in Zealot (census={data['census']})"
 
 
 @pytest.mark.integration
@@ -101,10 +122,14 @@ def test_probe_naming():
 
 @pytest.mark.integration
 def test_all_upgrades_researched():
-    """Every Protoss upgrade completes."""
-    data = _run("builds/test_all_upgrades.yaml", time_limit=1100)
+    """Every Protoss upgrade researchable in BOTH game versions completes."""
+    data = _run("builds/test_all_upgrades.yaml", time_limit=1400)
     done = set(data["upgrades"])
-    missing = sorted(set(catalog.RESEARCH) - done)
+    # These two aren't researchable in the 4.10 headless build (TempestGroundAttack's id
+    # is absent; VoidRaySpeed's id exists but has no research ability), so they're commented
+    # out of the build and not required — keeps this one build valid on both versions.
+    expected = set(catalog.RESEARCH) - {"TempestGroundAttack", "VoidRaySpeed"}
+    missing = sorted(expected - done)
     assert not missing, (
         f"upgrades not completed: {missing} "
         f"(still researching: {data.get('researching')}, completed: {sorted(done)})"

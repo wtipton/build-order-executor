@@ -1,10 +1,18 @@
-# Integration-test fixture: exercises EVERY step type and EVERY trigger type,
-# run to completion against a (passive) real game. Not a strategy — a coverage
-# probe. Asserted on via the [summary] stdout line (see tests/test_integration.py).
+# Integration-test fixture: exercises (nearly) every step type and every trigger type,
+# run to completion against a (passive) real game. Not a strategy — a coverage probe.
+# Asserted on via the [summary] stdout line (see tests/test_integration.py).
 #
-# Step types: build, train, warp, morph (warpgate + archon), research (x2),
-#   hallucinate, chrono, send_probe, return_probe, rally, rally_and_transfer,
-#   gas_workers, minerals_cap, workers (stop + start).
+# CROSS-VERSION: this one build must run identically on current retail AND the 4.10
+# headless build. That rules out anything touching Warpgate: in 4.10, finishing Warpgate
+# research AUTO-morphs every Gateway to a Warpgate (modern needs a manual morph), so
+# `warp`, `morph warpgate`, AND `research Warpgate` all behave differently across versions.
+# The fixture is therefore TRAIN-based and never researches Warpgate — Gateways stay
+# Gateways in both, so every `train` step is valid.
+#
+# Step types: build, train, morph (archon), research (Storm), hallucinate, chrono,
+#   send_probe, return_probe, rally, rally_and_transfer, gas_workers, minerals_cap,
+#   workers (stop + start). (warp / morph-warpgate / Warpgate research are version-
+#   specific — omitted; see above.)
 # Trigger types: time, supply, count, minerals, vespene.
 
 name: All Schema Features
@@ -31,8 +39,6 @@ steps:
   - {at: {count: {Nexus: 2}}, do: build, what: Assimilator, note: "natural gas 2"}
   - {at: {count: {Assimilator: 4}}, do: gas_workers, count: 12}
   - {at: {count: {CyberneticsCore: 1}}, do: rally, where: natural, note: "step:rally"}
-  - {at: {count: {CyberneticsCore: 1}}, do: research, what: Warpgate, note: "step:research #1"}
-  - {at: {count: {CyberneticsCore: 1}}, do: chrono, target: CyberneticsCore, note: "chrono research"}
   - {at: {count: {CyberneticsCore: 1}}, do: train, what: Adept, note: "step:train"}
   - {at: {count: {CyberneticsCore: 1}}, do: train, what: Sentry, note: "for hallucinate"}
   - {at: {count: {CyberneticsCore: 1}}, do: build, what: Gateway, note: "2nd gateway"}
@@ -43,13 +49,12 @@ steps:
   - {at: {time: 175}, do: build, what: Pylon}
   - {at: {vespene: 120}, do: workers, state: stop, note: "trigger:vespene + step:workers stop"}
   - {at: {time: 200}, do: workers, state: start, note: "step:workers start"}
-  - {at: {time: 210}, do: build, what: Pylon}
   - {at: {count: {Sentry: 1}}, do: hallucinate, note: "step:hallucinate (holds for 75 energy)"}
-  - {at: {count: {TemplarArchive: 1}}, do: research, what: Storm, note: "step:research #2"}
+  - {at: {count: {TemplarArchive: 1}}, do: research, what: Storm, note: "step:research #1"}
   - {at: {count: {TemplarArchive: 1}}, do: chrono, target: TemplarArchive, note: "chrono Storm"}
+  # Train the templar from Gateways (both game versions still have Gateways here —
+  # Warpgate isn't researched yet), then combine them into an Archon.
   - {at: {count: {TemplarArchive: 1}}, do: train, what: HighTemplar, note: "HT 1"}
   - {at: {count: {TemplarArchive: 1}}, do: train, what: HighTemplar, note: "HT 2"}
   - {at: {time: 260}, do: build, what: Pylon}
   - {at: {count: {HighTemplar: 2}}, do: morph, to: archon, count: 1, note: "step:morph archon"}
-  - {at: {count: {Gateway: 2}}, do: morph, to: warpgate, count: 1, note: "step:morph warpgate (needs Warpgate research)"}
-  - {at: {count: {WarpGate: 1}}, do: warp, what: Zealot, where: main, note: "step:warp"}

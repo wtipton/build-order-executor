@@ -66,3 +66,24 @@ def dump(bot) -> None:
             print(f"UPG\t{up}\t{c.minerals}\t{c.vespene}\t{_secs(c):.1f}", flush=True)
         except Exception as e:
             print(f"UPG\t{up}\tERR\t{e}", flush=True)
+    # The FULL set of upgrade ids this client defines (id + library name if known),
+    # so two game versions can be diffed to find ids present in one but not the other.
+    for k in sorted(gd.upgrades):
+        try:
+            nm = UpgradeId(k).name
+        except ValueError:
+            nm = "?"
+        print(f"UPGID\t{k}\t{nm}", flush=True)
+    # Which of OUR named RESEARCH upgrades are actually researchable in THIS client:
+    # ABSENT = id not in game data (e.g. TempestGroundAttack in 4.10); NO_ABILITY = id
+    # exists but has no research ability (e.g. VoidRaySpeed in 4.10 — can't be started).
+    from catalog import RESEARCH
+    for name, up in RESEARCH.items():
+        v = up.value
+        if v not in gd.upgrades:
+            status = "ABSENT"
+        elif gd.upgrades[v].research_ability is None:
+            status = "NO_ABILITY"
+        else:
+            status = "ok"
+        print(f"RESEARCHABLE\t{name}\t{status}", flush=True)

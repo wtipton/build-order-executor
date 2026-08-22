@@ -54,3 +54,21 @@ well under a second.
 .venv/bin/pip install pytest pytest-asyncio   # one-time dev deps
 cd ~/projects/build_orders && .venv/bin/python -m pytest
 ```
+
+### Integration tests (launch real SC2)
+
+Gated behind `--run-integration` (slow — each launches a game). The same suite is
+validated against **both** game versions:
+
+```bash
+# Current retail, via local Wine (fullscreen; ~6 min):
+cd ~/projects/build_orders && .venv/bin/python -m pytest tests/test_integration.py --run-integration
+
+# Game version 4.10, via the headless Docker image (~3 min; see docker/):
+docker run --rm -e SC2_TEST_MAP=CatalystLE -v "$PWD":/app build-orders-headless \
+  python -m pytest tests/test_integration.py --run-integration
+```
+
+`SC2_TEST_MAP` selects a map that ships with the 4.10 build (the local run defaults to
+`LockdownLE`). A couple of upgrades don't exist in 4.10, so the one suite covers only what's
+valid in both — see the build/test headers.

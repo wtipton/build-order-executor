@@ -66,7 +66,9 @@ steps:
   - {at: {count: {CyberneticsCore: 2}}, do: research, what: AirArmor2}
   - {at: {count: {TwilightCouncil: 1}}, do: research, what: Charge}
   - {at: {count: {RoboticsBay: 1}}, do: research, what: GraviticDrive}
-  - {at: {count: {FleetBeacon: 1}}, do: research, what: VoidRaySpeed}
+  # VoidRaySpeed (Flux Vanes) exists as an id in 4.10 but has no research ability there
+  # (added later), so the executor can't start it and would stall — like TempestGroundAttack.
+  # - {at: {count: {FleetBeacon: 1}}, do: research, what: VoidRaySpeed}
   # wave 3 — L3 + third-per-building
   - {at: {count: {Forge: 3}}, do: research, what: GroundWeapons3}
   - {at: {count: {Forge: 3}}, do: research, what: GroundArmor3}
@@ -75,7 +77,9 @@ steps:
   - {at: {count: {CyberneticsCore: 2}}, do: research, what: AirArmor3}
   - {at: {count: {TwilightCouncil: 1}}, do: research, what: Glaives}
   - {at: {count: {RoboticsBay: 1}}, do: research, what: GraviticBooster}
-  - {at: {count: {FleetBeacon: 1}}, do: research, what: TempestGroundAttack}
+  # TempestGroundAttack doesn't exist in the 4.10 headless build (added later), so the
+  # executor can't research it there and would stall forever on this step.
+  # - {at: {count: {FleetBeacon: 1}}, do: research, what: TempestGroundAttack}
 
   # keep the game alive until the upgrades finish (no upgrade-done trigger exists)
   - {at: {time: 1000}, do: minerals_cap, count: 16, note: "final wait for all upgrades to complete"}

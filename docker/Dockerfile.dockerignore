@@ -1,0 +1,11 @@
+# Keep the build context small and reproducible: never ship the local virtualenv,
+# caches, or run artifacts into the image (deps are installed from requirements.txt).
+.venv/
+__pycache__/
+**/__pycache__/
+*.py[cod]
+*.log
+.benchmarks/
+.pytest_cache/
+.jj/
+replays/

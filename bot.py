@@ -110,7 +110,16 @@ class BuildOrderBot(StepsMixin, EconomyMixin, WorldMixin, ObserveMixin, BotAI):
         print(f"[end] {self._army_report()}", flush=True)
         # Machine-readable summary as one tagged line on stdout, so a caller can
         # grep `^[summary] ` and json.loads the rest.
-        print(f"[summary] {json.dumps(self._run_summary(result))}", flush=True)
+        # Always emit a parseable [summary] line (eval graders key on it), and never
+        # let a summary bug escape on_end: python-sc2 folds an on_end exception into
+        # the game result, then asserts every result is a Result — crashing the run.
+        try:
+            summary = self._run_summary(result)
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            summary = {"name": self.cfg.name, "result": str(result), "error": repr(e)}
+        print(f"[summary] {json.dumps(summary)}", flush=True)
 
     async def on_step(self, iteration: int):
         if not self.townhalls:

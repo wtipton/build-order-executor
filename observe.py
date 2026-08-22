@@ -42,10 +42,12 @@ class ObserveMixin:
         upgrades = sorted(friendly.get(u, u.name) for u in self.state.upgrades)
         # Upgrades that STARTED but haven't finished — so "researched but unfinished"
         # is distinguishable from "never started" (already_pending_upgrade is the
-        # research progress in [0,1)).
+        # research progress in [0,1)). Skip any upgrade the running client doesn't
+        # define: an older game (e.g. the 4.10 headless build) lacks upgrade IDs the
+        # library knows, and already_pending_upgrade would KeyError on game_data.
         researching = sorted(
             name for name, u in RESEARCH.items()
-            if 0 < self.already_pending_upgrade(u) < 1
+            if u.value in self.game_data.upgrades and 0 < self.already_pending_upgrade(u) < 1
         )
         return {
             "name": self.cfg.name,
