@@ -74,6 +74,11 @@ class BuildOrderBot(BotAI):
         self.placement = Placement(self)
         self.steps: list[Step] = config.steps
         self._done: list[bool] = [False] * len(self.steps)
+        # A step's trigger gates only STARTING it; once fired we commit (`_started`)
+        # and drive it to completion without re-checking the trigger — otherwise a
+        # non-monotonic count trigger (e.g. morph archon gated on HighTemplar:2,
+        # which the morph consumes) would go false mid-flight and strand the step.
+        self._started: list[bool] = [False] * len(self.steps)
         self.idx = 0
 
         self.continuous_workers: bool = config.economy.continuous_workers
@@ -259,8 +264,10 @@ class BuildOrderBot(BotAI):
                 i += 1
                 continue
             step = self.steps[i]
-            if not self.trigger_met(step.at):
-                break  # this step (and everything after) isn't due yet
+            if not self._started[i]:
+                if not self.trigger_met(step.at):
+                    break  # not due yet — this step (and everything after) waits
+                self._started[i] = True  # trigger fired: commit; don't re-gate it
             if not await self.execute(step):
                 break  # stall the line until this step can be done (strict order)
             self._done[i] = True
@@ -286,7 +293,7 @@ class BuildOrderBot(BotAI):
             return
         self._stall_warned = self.time
         step = self.steps[self.idx]
-        if not self.trigger_met(step.at):
+        if not self._started[self.idx]:
             reason = f"waiting on trigger {self._trigger_status(step.at)}"
         else:
             reason = self._stall_reason or "handler can't complete yet"

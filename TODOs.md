@@ -29,21 +29,13 @@ BotAI/game. Tiers: (0) pure schema+catalog, (1) sequencing + handler gating,
 - [x] Tier 2 integration built: `on_end` prints an unconditional `[summary]` JSON
       line to stdout; `builds/test_all_schema_features.yaml` exercises every step +
       trigger type; `tests/test_integration.py` (gated on `--run-integration`)
-      asserts it runs to completion + produced Archon/Warpgate/Storm. **It found a
-      real bug** (below) — the test currently fails (repro) until that's fixed.
-
-## Bug — `run_steps` re-gates in-flight steps on their trigger  (found by Tier 2)
-
-- [ ] 🎨 A step's `at:` trigger is re-checked every frame in `run_steps`, even
-      after the step has started and is holding for confirm. If the trigger is a
-      **non-monotonic `count:`** of units the step itself CONSUMES, it goes false
-      mid-flight and the step can never confirm-complete → permanent stall.
-      Repro: `morph archon` gated on `count: {HighTemplar: 2}` — the two HT merge
-      (count→0), so the archon appears but `do_morph`'s confirm never re-runs.
-      Also hits `morph warpgate count: {Gateway: N}` (morph reduces Gateway count).
-      Fix idea: `trigger_met` should gate only STARTING a step; once execute() has
-      begun (returned False once), drive it to completion without re-checking the
-      trigger. Needs a per-step "started" latch in `run_steps`.
+      asserts it runs to completion + produced Archon/Warpgate. Found a real bug
+      (fixed below) — now passes.
+- [x] Fixed `run_steps` re-gating in-flight steps: a step's trigger now gates only
+      STARTING it (`_started` latch); once fired it's driven to completion without
+      re-checking. Fixes non-monotonic `count:` triggers on consumed units (morph
+      archon gated on `HighTemplar:2`, morph warpgate on `Gateway:N`). Regression
+      test in `test_sequencing.py`; integration test now green.
 
 ## Phase 3 — Refactor into modules  (Goal 3b + clean design)
 

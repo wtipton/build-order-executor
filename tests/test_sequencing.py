@@ -18,9 +18,9 @@ def _step(at=None, **kw):
 
 
 def _seq_bot(steps, done, trigger_met, execute):
-    fake = fake_bot(steps=steps, _done=list(done), idx=0, supply_used=0,
-                    trigger_met=trigger_met, _clock=lambda: "0:00",
-                    _describe=lambda s: "step")
+    fake = fake_bot(steps=steps, _done=list(done), _started=[False] * len(steps),
+                    idx=0, supply_used=0, trigger_met=trigger_met,
+                    _clock=lambda: "0:00", _describe=lambda s: "step")
     fake.execute = execute
     return fake
 
@@ -67,3 +67,28 @@ async def test_idx_advances_past_leading_done_steps():
     await BuildOrderBot.run_steps(fake)
     assert fake._done == [True, True, True]
     assert fake.idx == 3
+
+
+async def test_started_step_completes_even_if_trigger_goes_false():
+    # Regression for the morph-archon bug: the trigger (count of units the step
+    # consumes) is true when the step starts, then goes false — but once started,
+    # the step must be driven to completion WITHOUT re-checking the trigger.
+    steps = [_step()]
+    trig_calls, exec_calls = [], []
+
+    def trigger_met(at):
+        trig_calls.append(1)
+        return len(trig_calls) == 1  # true only on the first (start) check
+
+    async def execute(step):
+        exec_calls.append(1)
+        return len(exec_calls) >= 2  # holds once (in progress), then confirms
+
+    fake = _seq_bot(steps, [False], trigger_met=trigger_met, execute=execute)
+
+    await BuildOrderBot.run_steps(fake)          # frame 1: start + execute holds
+    assert fake._started == [True] and fake._done == [False]
+
+    await BuildOrderBot.run_steps(fake)          # frame 2: trigger now false, but committed
+    assert fake._done == [True] and fake.idx == 1
+    assert len(trig_calls) == 1, "trigger was re-checked after the step started"

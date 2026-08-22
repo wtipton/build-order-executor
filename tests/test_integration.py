@@ -35,5 +35,9 @@ def test_all_schema_features_runs_to_completion():
     # the confirm state machines actually produced the hard artifacts:
     assert data["census"].get("ARCHON", 0) >= 1, f"no Archon (census={data['census']})"
     assert data["census"].get("WARPGATE", 0) >= 1, f"no Warpgate (census={data['census']})"
+    # Warpgate research must have COMPLETED — the morph->warpgate step can't finish
+    # until it does — which also proves the research path end-to-end.
     assert "Warpgate" in data["upgrades"], f"Warpgate not researched (upgrades={data['upgrades']})"
-    assert "Storm" in data["upgrades"], f"Storm not researched (upgrades={data['upgrades']})"
+    # (We don't assert Storm *completes*: `research Storm` finishing only means the
+    # upgrade STARTED, and the bot concedes ~10s after the build, before a 79s
+    # research would finish. completed==True already proves Storm research started.)
