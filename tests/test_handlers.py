@@ -8,6 +8,7 @@ the SC2 API then behaves as expected — that's for integration.
 
 from __future__ import annotations
 
+from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import catalog
@@ -20,69 +21,31 @@ from state import StepState
 
 
 # ------------------------------------------------------------------ do_train
+# NB: WHICH producer gets the unit is Scheduler's job now — see tests/test_scheduler.py.
+# These cover only do_train's own decision: afford, delegate, issue.
+def _train_bot(producer):
+    return fake_bot(can_afford=lambda u: True,
+                    scheduler=SimpleNamespace(producer_for=lambda unit: producer))
+
+
 async def test_train_holds_when_cant_afford():
     fake = fake_bot(can_afford=lambda u: False)
     assert await BuildOrderBot.do_train(fake, fake_bot(what="Zealot")) is False
 
 
-async def test_train_holds_when_no_idle_producer():
-    fake = fake_bot(can_afford=lambda u: True, _issued_this_frame=set(),
-                    structures=lambda t: FakeUnits(), townhalls=FakeUnits())
+async def test_train_holds_when_every_producer_queue_is_full():
+    # scheduler returning None means "no producer with queue space" — ordering past the
+    # game's limit is silently dropped, so the step must stall instead.
+    fake = _train_bot(None)
+    fake._status = ""
     assert await BuildOrderBot.do_train(fake, fake_bot(what="Zealot")) is False
 
 
-async def test_train_issues_to_idle_gateway():
+async def test_train_issues_to_the_producer_the_scheduler_picked():
     gw = fake_unit(tag=1)
-    fake = fake_bot(can_afford=lambda u: True, _issued_this_frame=set(),
-                    structures=lambda t: FakeUnits([gw]), townhalls=FakeUnits())
+    fake = _train_bot(gw)
     assert await BuildOrderBot.do_train(fake, fake_bot(what="Zealot")) is True
     gw.train.assert_called_once_with(U.ZEALOT)
-
-
-async def test_train_spreads_across_producers_within_a_frame():
-    """The observation cache doesn't refresh mid-frame, so a Gateway we just ordered
-    still reads as idle. Consecutive train steps in one frame must therefore walk to
-    the NEXT producer rather than all stacking onto the first."""
-    gws = [fake_unit(tag=1), fake_unit(tag=2), fake_unit(tag=3)]
-    fake = fake_bot(can_afford=lambda u: True, _issued_this_frame=set(),
-                    structures=lambda t: FakeUnits(gws), townhalls=FakeUnits())
-    for _ in gws:
-        assert await BuildOrderBot.do_train(fake, fake_bot(what="Zealot")) is True
-    for gw in gws:
-        gw.train.assert_called_once_with(U.ZEALOT)
-
-
-async def test_train_producer_choice_ignores_observation_order():
-    """Same producers, opposite list order — the tag tie-break must pick the same one.
-    `.first` here made which Gateway got the unit a coin flip between runs."""
-    for reverse in (False, True):
-        a, b = fake_unit(tag=1), fake_unit(tag=2)
-        gws = [b, a] if reverse else [a, b]
-        fake = fake_bot(can_afford=lambda u: True, _issued_this_frame=set(),
-                        structures=lambda t: FakeUnits(gws), townhalls=FakeUnits())
-        assert await BuildOrderBot.do_train(fake, fake_bot(what="Zealot")) is True
-        a.train.assert_called_once_with(U.ZEALOT)
-        b.train.assert_not_called()
-
-
-async def test_train_stacks_rather_than_stalling_once_all_producers_used():
-    """Spreading is a PREFERENCE, not a gate. Once every producer has been used this
-    frame the step must still issue (queuing on one) — stalling here starves the step
-    queue, so everything ordered behind a run of train steps crawls."""
-    gw = fake_unit(tag=1)
-    fake = fake_bot(can_afford=lambda u: True, _issued_this_frame=set(),
-                    structures=lambda t: FakeUnits([gw]), townhalls=FakeUnits())
-    assert await BuildOrderBot.do_train(fake, fake_bot(what="Zealot")) is True
-    assert await BuildOrderBot.do_train(fake, fake_bot(what="Zealot")) is True
-    assert gw.train.call_count == 2
-
-
-async def test_train_probe_uses_a_townhall():
-    nx = fake_unit(tag=1)
-    fake = fake_bot(can_afford=lambda u: True, _issued_this_frame=set(),
-                    townhalls=FakeUnits([nx]), structures=lambda t: FakeUnits())
-    assert await BuildOrderBot.do_train(fake, fake_bot(what="Probe")) is True
-    nx.train.assert_called_once_with(U.PROBE)
 
 
 # ------------------------------------------------------------------ do_research
@@ -165,14 +128,15 @@ async def test_morph_done_when_dest_count_reached():
 
 # ------------------------------------------------------------------ do_chrono
 def _chrono_bot(nexus_energy, target_structs):
+    """WHICH Nexus casts (and its energy accounting) is Scheduler's job — see
+    tests/test_scheduler.py. Here the scheduler just hands back a caster, or None when
+    nothing can pay, so these cover do_chrono's own job: picking the TARGET."""
     nexus = fake_unit(energy=nexus_energy, tag=99)
-
-    def townhalls(t):
-        return FakeUnits([nexus])
-
-    fake = fake_bot(townhalls=townhalls,
+    fake = fake_bot(townhalls=lambda t: FakeUnits([nexus]),
                     structures=lambda t: FakeUnits(target_structs),
-                    _chrono_cast_this_frame=set())
+                    scheduler=SimpleNamespace(
+                        chrono_caster=lambda: nexus if nexus_energy >= catalog.CHRONO_ENERGY else None))
+    fake._status = ""
     return fake, nexus
 
 
@@ -238,35 +202,6 @@ async def test_chrono_target_choice_ignores_observation_order():
         fake, nexus, expected = pick(order)
         assert await BuildOrderBot.do_chrono(fake, fake_bot(target="Gateway")) is True
         nexus.assert_called_once_with(catalog.CHRONO_ABILITY, expected)
-
-
-async def test_chrono_spends_from_the_fullest_nexus():
-    """The observation's townhall ordering isn't stable between runs, so casting from
-    `.first` drained a different Nexus each run. Always spend from the fullest — which
-    also keeps a Nexus off the 200 cap, where further regen is thrown away."""
-    low = fake_unit(energy=60, tag=1)
-    high = fake_unit(energy=190, tag=2)
-    gw = fake_unit(orders=[object()], has_buff=lambda b: False)
-    fake = fake_bot(townhalls=lambda t: FakeUnits([low, high]),
-                    structures=lambda t: FakeUnits([gw]),
-                    _chrono_cast_this_frame=set())
-    assert await BuildOrderBot.do_chrono(fake, fake_bot(target="Gateway")) is True
-    high.assert_called_once_with(catalog.CHRONO_ABILITY, gw)
-    low.assert_not_called()
-
-
-async def test_chrono_does_not_double_spend_one_nexus_in_a_frame():
-    """Energy reads pre-spend until the next frame, so two chrono steps firing in the
-    same frame would both cast from a Nexus that can only afford one — the second
-    silently no-ops while its step is marked done. The second must hold instead."""
-    nexus = fake_unit(energy=50, tag=1)
-    gw = fake_unit(orders=[object()], has_buff=lambda b: False)
-    fake = fake_bot(townhalls=lambda t: FakeUnits([nexus]),
-                    structures=lambda t: FakeUnits([gw]),
-                    _chrono_cast_this_frame=set())
-    assert await BuildOrderBot.do_chrono(fake, fake_bot(target="Gateway")) is True
-    assert await BuildOrderBot.do_chrono(fake, fake_bot(target="Gateway")) is False
-    nexus.assert_called_once_with(catalog.CHRONO_ABILITY, gw)
 
 
 async def test_chrono_boosts_a_producing_structure():

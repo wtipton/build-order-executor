@@ -20,6 +20,12 @@ class FakeUnits(list):
     the units a real filter would have already yielded (we're testing the gating
     decision, not python-sc2's own filtering)."""
 
+    def __call__(self, *types) -> "FakeUnits":
+        """Real `Units` is callable to filter by type (`townhalls(NEXUS)`). Like
+        `.ready`/`.idle` this returns self — the test supplies exactly what the filter
+        would have yielded."""
+        return self
+
     @property
     def ready(self) -> "FakeUnits":
         return self

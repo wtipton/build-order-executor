@@ -35,6 +35,19 @@ from sc2.dicts.upgrade_researched_from import UPGRADE_RESEARCHED_FROM
 # Count of mineral workers to fully saturate one base.
 FULL_MINERAL_SATURATION = 16
 
+# Game frames per second — the unit for every `cost.time` in game data.
+FRAMES_PER_SEC = 22.4
+
+# Warp Gate research cuts GATEWAY unit train time by exactly 50% (5.0.16b patch notes;
+# was 40%). The static `cost.time` in game data is the PRE-research base and does NOT
+# reflect it, so anything reasoning about production time must apply this itself.
+WARPGATE_TRAIN_SPEEDUP = 0.5
+
+# How many units a production structure holds in its queue. Not exposed in game data or
+# the protocol, so unlike the tables below this is hand-maintained. Ordering past it is
+# silently dropped by the game, which is why the scheduler refuses rather than over-commit.
+MAX_PRODUCTION_QUEUE = 5
+
 # Protoss buildings that produce units (their `trained_from` == one of these).
 PRODUCTION_BUILDINGS: frozenset[U] = frozenset(
     {U.NEXUS, U.GATEWAY, U.WARPGATE, U.ROBOTICSFACILITY, U.STARGATE}
@@ -84,6 +97,15 @@ BUILDABLE_STRUCTURES: frozenset[U] = frozenset(
 # unit -> the warp-in readiness ability (for get_available_abilities checks).
 WARP_ABILITY: dict[U, AbilityId] = {
     u: info["ability"] for u, info in TRAIN_INFO[U.WARPGATE].items()
+}
+
+# train/build ability -> what it produces. The reverse of TRAIN_INFO, so a structure's
+# queued orders can be mapped back to what they're building, and hence how long they take.
+# Derived like the tables above — no hand maintenance.
+TRAIN_ABILITY_UNIT: dict[AbilityId, U] = {
+    info["ability"]: unit
+    for units in TRAIN_INFO.values()
+    for unit, info in units.items()
 }
 
 # Types a `count:` trigger may reference — anything the player can OWN: every

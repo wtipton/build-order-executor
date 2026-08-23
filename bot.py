@@ -39,6 +39,7 @@ from sc2.position import Point2
 from economy import EconomyMixin
 from observe import STATUS_INTERVAL, ObserveMixin
 from placement import Placement
+from scheduler import Scheduler
 from schema import BuildConfig, load_build  # noqa: F401  (load_build re-exported for run.py)
 from state import PrewalkState, StepState
 from steps import StepsMixin
@@ -60,6 +61,7 @@ class BuildOrderBot(StepsMixin, EconomyMixin, WorldMixin, ObserveMixin, BotAI):
         self.step_state = StepState()
         self.prewalk_state = PrewalkState()  # Probe rep-walk reservation system state.
         self.placement = Placement(self)
+        self.scheduler = Scheduler(self)
 
         # Info tracking build completion
         self._build_done_at: float | None = None  # game-time the last step finished
@@ -102,16 +104,6 @@ class BuildOrderBot(StepsMixin, EconomyMixin, WorldMixin, ObserveMixin, BotAI):
         # maybe do something to ensure it stays that way.
         self._status = ""
 
-        # Producer tags already given an order THIS frame — the observation cache
-        # doesn't refresh mid-frame, so do_train uses this to spread production
-        # across idle producers instead of stacking onto the first one.
-        self._issued_this_frame: set[int] = set()
-        # Nexus tags that already cast a chrono THIS frame. Same stale-cache problem:
-        # their energy still reads pre-spend, so two chrono steps firing in one frame
-        # would both cast from the same Nexus on 50 energy — one silently no-ops and
-        # both steps get marked done. Tracked separately from _issued_this_frame so a
-        # Nexus can still train a probe and chrono in the same frame.
-        self._chrono_cast_this_frame: set[int] = set()
 
     async def on_start(self) -> None:
         self.client.game_step = 4
@@ -137,8 +129,7 @@ class BuildOrderBot(StepsMixin, EconomyMixin, WorldMixin, ObserveMixin, BotAI):
     async def on_step(self, iteration: int) -> None:
         if not self.townhalls:
             return
-        self._issued_this_frame.clear()
-        self._chrono_cast_this_frame.clear()
+        self.scheduler.new_frame()
         if self.time - self._last_status >= STATUS_INTERVAL:
             self._last_status = self.time
             self._status_report()

@@ -17,7 +17,6 @@ from sc2.units import Units
 from catalog import (
     CHRONO_ABILITY,
     CHRONO_BUFF,
-    CHRONO_CASTER,
     CHRONO_ENERGY,
     HALLUCINATION_ABILITY,
     HALLUCINATION_CASTER,
@@ -211,29 +210,12 @@ class StepsMixin:
         if not self.can_afford(unit):
             self._status = f"can't afford {step.what}"
             return False  # save for it (costs money + supply), stalling the line
-        producer = PRODUCER.get(unit)
-        if producer == U.NEXUS or unit == U.PROBE:
-            havers = self.townhalls.ready.idle
-        else:
-            havers = self.structures(producer).ready.idle
-        if not havers:
-            self._status = f"no idle {producer.name if producer else 'producer'}"
-            return False  # producer busy — wait for it (correct if the order is right)
-        # The unit cache doesn't refresh mid-frame, so a producer we just ordered still
-        # reads as idle. Without preferring one we haven't used this frame, a burst of
-        # train steps all stack onto havers.first while its siblings sit empty
-        # (measured: 5 Gateways at queue depths [1,1,2,2,4] instead of [1,1,1,1,1]).
-        # This is a PREFERENCE, not a gate: once every producer has been used this
-        # frame we still issue (queuing on one) rather than stalling. Stalling here
-        # starves the step queue — each train step would then have to wait for a
-        # genuinely idle producer, so everything ordered behind the trains crawls.
-        # Pick by tag, never by list position: the observation's structure order is not
-        # stable between runs, so `.first` made which Gateway got the unit a coin flip.
-        fresh = havers.tags_not_in(self._issued_this_frame)
-        chosen = min(fresh or havers, key=lambda p: p.tag)
-        self._issued_this_frame.add(chosen.tag)
-        chosen.train(unit)
-        return True  # issued (producer now busy); the next step proceeds concurrently
+        producer = self.scheduler.producer_for(unit)
+        if producer is None:
+            self._status = f"every {PRODUCER.get(unit, 'producer')} queue is full"
+            return False
+        producer.train(unit)
+        return True
 
     async def do_warp(self, step: Step) -> bool:
         unit = _unit(step.what)
@@ -337,11 +319,6 @@ class StepsMixin:
         # precise — place a chrono where it will actually have energy and something to
         # boost, not as a best-effort sprinkle. A chrono step ALWAYS spends a chrono.
         target_type = _unit(step.target)
-        nexuses = self.townhalls(CHRONO_CASTER).ready.filter(
-            lambda n: n.energy >= CHRONO_ENERGY and n.tag not in self._chrono_cast_this_frame)
-        if not nexuses:
-            self._status = f"no Nexus with {CHRONO_ENERGY} energy"
-            return False  # no Nexus with enough energy yet — wait
         pool = (self.townhalls(U.NEXUS) if target_type == U.NEXUS
                 else self.structures(target_type)).ready
         if not pool:
@@ -352,11 +329,12 @@ class StepsMixin:
         # observation's structure order is not stable between runs, so without a fixed
         # tie-break the same build boosts a different Gateway each run.
         target = min(pool, key=lambda s: (s.has_buff(CHRONO_BUFF), not s.orders, s.tag))
-        # Spend from the FULLEST Nexus, not whichever happens to be first in the
-        # observation list. Draining the fullest also keeps any one Nexus off the
-        # 200-energy cap, where further regen is thrown away.
-        caster = max(nexuses, key=lambda n: (n.energy, n.tag))
-        self._chrono_cast_this_frame.add(caster.tag)
+        # Ask AFTER we know there's something to boost: the scheduler commits the energy
+        # when it hands back a caster, so bailing out later would waste it for this frame.
+        caster = self.scheduler.chrono_caster()
+        if caster is None:
+            self._status = f"no Nexus with {CHRONO_ENERGY} energy left this frame"
+            return False
         caster(CHRONO_ABILITY, target)
         return True
 
