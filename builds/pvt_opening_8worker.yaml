@@ -12,10 +12,6 @@
 name: Protoss 8-worker economic opening (PvT)
 race: Protoss
 
-economy:
-  continuous_workers: true
-  minerals_per_base: 16
-
 steps:
   - {at: {time: 7},     do: chrono, target: Nexus, note: "1st chrono on probes (~6.5s)"}
   - {at: {supply: 12},  do: build,  what: Pylon,   prewalk: {minerals: 75},  note: "Pylon=100"}
@@ -47,4 +43,4 @@ steps:
   - {at: {count: {TwilightCouncil: 1}}, do: chrono,   target: TwilightCouncil, note: "chrono Blink"}
   - {at: {count: {TwilightCouncil: 1}}, do: hallucinate, note: "Sentry hallucinates a Phoenix"}
   # once the natural finishes, transfer workers onto it and rally new probes there
-  - {at: {count: {Nexus: 2}}, do: rally_and_transfer, base: 2, note: "saturate the natural"}
+  - {at: {count: {Nexus: 2}}, do: rally_and_transfer_probes, base: 2, note: "saturate the natural"}

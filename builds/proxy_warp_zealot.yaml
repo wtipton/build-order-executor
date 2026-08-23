@@ -20,10 +20,6 @@
 
 name: Proxy Warpgate Zealot pressure
 
-economy:
-  continuous_workers: true
-  minerals_per_base: 16
-
 steps:
   - {at: {time: 7},     do: chrono, target: Nexus, note: "1st chrono on probes"}
   - {at: {supply: 12},  do: build,  what: Pylon,   prewalk: {minerals: 75},  note: "home Pylon=100"}
@@ -51,4 +47,4 @@ steps:
   - {at: {supply: 18},  do: warp, what: Zealot, where: proxy}
   - {at: {supply: 18},  do: warp, what: Zealot, where: proxy}
   - {at: {supply: 18},  do: warp, what: Zealot, where: proxy}
-  - {at: {supply: 18},  do: rally, where: proxy, note: "rally reinforcements to the proxy"}
+  - {at: {supply: 18},  do: set_rally_point, where: proxy, note: "rally reinforcements to the proxy"}

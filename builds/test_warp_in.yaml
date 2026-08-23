@@ -9,10 +9,6 @@
 # this point, so the auto-morph removing the Gateway is fine.
 name: Warp-in
 
-economy:
-  continuous_workers: true
-  minerals_per_base: 16
-
 steps:
   - {at: {time: 5}, do: chrono, target: Nexus}
   - {at: {supply: 13}, do: build, what: Pylon}
@@ -30,4 +26,4 @@ steps:
   # completes via our manual morph (modern) OR the research-complete auto-morph (4.10).
   - {at: {count: {Gateway: 1}}, do: morph, to: warpgate, count: 1}
   - {at: {count: {WarpGate: 1}}, do: warp, what: Zealot, where: main}
-  - {at: {time: 250}, do: minerals_cap, count: 16, note: "keep alive until the Zealot warps in"}
+  - {at: {time: 250}, do: wait, note: "keep alive until the Zealot warps in"}

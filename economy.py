@@ -1,5 +1,5 @@
 """The automatic economy for BuildOrderBot: make probes, saturate minerals then
-gas, keep no worker idle, and rally production exits clear.
+gas, and keep no worker idle.
 
 `EconomyMixin` is mixed into `BuildOrderBot` (see bot.py); its methods run on the
 live bot via `self`.
@@ -7,29 +7,26 @@ live bot via `self`.
 
 from __future__ import annotations
 
-from sc2.ids.ability_id import AbilityId
 from sc2.ids.unit_typeid import UnitTypeId as U
+from sc2.unit import Unit
+from sc2.units import Units
 
-from placement import PRODUCTION
-
-# How far (tiles) a production building rallies its units by default — off the
-# spawn tile toward open ground, so units don't pile up and jam the exit.
-RALLY_OFFSET = 10.0
+from catalog import FULL_MINERAL_SATURATION
 
 
 class EconomyMixin:
-    async def make_workers(self):
+    async def make_workers(self) -> None:
         # Make probes continuously, full stop. If a build needs to pause worker
         # production it says so with a `workers: stop` step (which clears
-        # continuous_workers). No target/cap maths — supply blocking from the
+        # continuously_build_workers). No target/cap maths — supply blocking from the
         # build's own pylons is the only thing that throttles it.
-        if not self.continuous_workers or self.supply_left <= 0:
+        if not self.continuously_build_workers or self.supply_left <= 0:
             return
         for nexus in self.townhalls.ready.idle:
             if self.can_afford(U.PROBE):
                 nexus.train(U.PROBE)
 
-    async def manage_economy(self):
+    async def manage_economy(self) -> None:
         """Saturate minerals up to the per-base cap, then fill gas to gas_target,
         and keep no worker idle."""
         workers = self._econ_workers()
@@ -89,34 +86,34 @@ class EconomyMixin:
             if field is not None:
                 w.gather(field)
 
-    def _minerals_under_cap(self):
+    def _minerals_under_cap(self) -> Units | None:
         """Mineral fields of the first (in base order: main, natural, third, ...)
         base below the per-base cap — so bases fill up in order."""
         for th in self._ordered_bases():
-            if th.assigned_harvesters < self.minerals_per_base:
+            if th.assigned_harvesters < FULL_MINERAL_SATURATION:
                 fields = self.mineral_field.closer_than(10, th)
                 if fields:
                     return fields
         return None
 
-    def _ordered_bases(self):
+    def _ordered_bases(self) -> Units:
         """Our ready bases in expansion order (nearest our start first = base 1)."""
         return self.townhalls.ready.sorted(key=lambda t: t.distance_to(self.start_location))
 
-    def _populating_base(self):
+    def _populating_base(self) -> Unit | None:
         bases = self._ordered_bases()
         if not bases:
             return None
         return bases[min(self.populating_base_num, len(bases)) - 1]
 
-    def _base_field(self, base):
+    def _base_field(self, base: Unit | None) -> Unit | None:
         """A mineral field at `base` (closest patch to it), or None."""
         if base is None:
             return None
         fields = self.mineral_field.closer_than(10, base)
         return fields.closest_to(base) if fields else None
 
-    def _populating_field(self):
+    def _populating_field(self) -> Unit | None:
         """Where homeless workers mine: the populating base's minerals, else any of
         our bases in order. Never the nearest field on the map (could be the enemy's)."""
         f = self._base_field(self._populating_base())
@@ -128,22 +125,8 @@ class EconomyMixin:
                 return f
         return None
 
-    def _econ_workers(self):
+    def _econ_workers(self) -> Units:
         """Workers available to the economy — excludes the prewalk builder and any
         probes sent out via send_probe, so they aren't yanked back to mining."""
         ex = self._excluded_tags()
         return self.workers.tags_not_in(ex) if ex else self.workers
-
-    def apply_rally(self):
-        # Keep production exits clear: the instant a production building is up, rally
-        # its units a few tiles toward open ground so they walk off the spawn tile
-        # rather than piling on it and jamming the building (a finished unit can't
-        # pop out through a blocked exit). Set once per building.
-        for b in self.structures(PRODUCTION).ready:
-            if b.tag not in self._rallied:
-                self._rallied.add(b.tag)
-                b(AbilityId.RALLY_BUILDING, b.position.towards(self.game_info.map_center, RALLY_OFFSET))
-        # An explicit `rally` step overrides where gateway units gather.
-        if self.rally_target is not None:
-            for gw in self.structures(U.GATEWAY).ready:
-                gw(AbilityId.RALLY_BUILDING, self.rally_target)

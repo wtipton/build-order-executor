@@ -1,6 +1,6 @@
 # PvZ proxy-Zealot all-in with a Void Ray + Charge — goal: most Zealots AT the
 # proxy pylon by 5:45, under three hard constraints:
-#   (a) opening identical to pvz_opening_8worker.yaml (through rally_and_transfer),
+#   (a) opening identical to pvz_opening_8worker.yaml (through rally_and_transfer_probes),
 #   (b) 2 Adepts + 1 Void Ray all COMPLETE by 4:15,
 #   (c) Charge researched by 5:45.
 #
@@ -13,7 +13,7 @@
 #
 # Executor traps (see the optimizing-sc2-build-orders skill):
 #  - EVERY step blocks the line until done, incl. waiting for its trigger -> the
-#    opener's `rally_and_transfer` (gated on Nexus 2, ~3:15) is relocated out of the
+#    opener's `rally_and_transfer_probes` (gated on Nexus 2, ~3:15) is relocated out of the
 #    critical path; trailing the opener it stalled ALL tech behind it for ~40s.
 #  - builds complete when construction STARTS but HOLD until affordable.
 #  - you CANNOT chrono a structure that's still building -> Stargate builds at full
@@ -24,13 +24,9 @@
 
 name: PvZ proxy Zealot + Void Ray
 
-economy:
-  continuous_workers: true
-  minerals_per_base: 16
-
 steps:
   # ===================== matched pvz_opening_8worker.yaml ======================
-  # (identical opener; its trailing rally_and_transfer is relocated below so it
+  # (identical opener; its trailing rally_and_transfer_probes is relocated below so it
   #  can't stall the tech divergence — the economic decisions are unchanged.)
   - {at: {time: 7},   do: chrono, target: Nexus, note: "1st chrono on probes (~6.5s)"}
   - {at: {supply: 12},  do: build,  what: Pylon,   prewalk: {minerals: 75},  note: "Pylon=100"}
@@ -47,7 +43,7 @@ steps:
   - {at: {supply: 19},  do: build,  what: CyberneticsCore}
   - {at: {supply: 19},  do: workers, state: start, note: "just one probe then small cut for pylon"}
   - {at: {supply: 20},  do: workers, state: stop,  note: ""}
-  - {at: {supply: 20},  do: rally,  where: natural}
+  - {at: {supply: 20},  do: set_rally_point,  where: natural}
   - {at: {supply: 20},  do: build,  what: Assimilator}
   - {at: {supply: 20},  do: build,  what: Pylon}
   - {at: {supply: 20},  do: workers, state: start, note: "resume"}
@@ -64,7 +60,7 @@ steps:
   - {at: {count: {CyberneticsCore: 1}}, do: build, what: Stargate, prewalk: {minerals: 130}, note: "for the Void Ray"}
   - {at: {count: {CyberneticsCore: 1}}, do: train, what: Adept, note: "2nd Adept (both done well before 4:15)"}
   - {at: {count: {CyberneticsCore: 1}}, do: send_probe, where: proxy, label: scout, note: "scout -> proxy (long walk overlaps)"}
-  - {at: {count: {CyberneticsCore: 1}}, do: rally, where: proxy, note: "gateway Zealots gather at the proxy"}
+  - {at: {count: {CyberneticsCore: 1}}, do: set_rally_point, where: proxy, note: "gateway Zealots gather at the proxy"}
 
   # Warpgate research EARLY (before the Void Ray) — it's only 50 gas, and it gates the
   # morph->warp finish, so it must be DONE by ~4:40. Starting it ~3:05 (not 3:36) +
@@ -75,7 +71,7 @@ steps:
 
   # 2) Saturate the natural EARLY (~3:15, once Nexus 2 is up) — mineral income for the
   #    Void Ray + Twilight. Must precede the mineral sinks below or they starve.
-  - {at: {count: {Nexus: 2}}, do: rally_and_transfer, base: 2, note: "saturate the natural"}
+  - {at: {count: {Nexus: 2}}, do: rally_and_transfer_probes, base: 2, note: "saturate the natural"}
 
   # 3) Void Ray FIRST (gas + mineral priority) — the 4:15 deadline is tightest. Trains
   #    the instant the Stargate is up (~3:35) + 2 chronos -> done ~4:10. Twilight/Charge

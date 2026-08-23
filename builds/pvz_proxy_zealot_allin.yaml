@@ -14,10 +14,6 @@
 
 name: PvZ proxy Zealot all-in
 
-economy:
-  continuous_workers: true
-  minerals_per_base: 16
-
 steps:
   # ===================== matched PvZ opener (through the first Adept) =========
   - {at: {time: 7},   do: chrono, target: Nexus, note: "1st chrono on probes (~6.5s)"}
@@ -35,7 +31,7 @@ steps:
   - {at: {supply: 19},  do: build,  what: CyberneticsCore}
   - {at: {supply: 19},  do: workers, state: start, note: "resume probes"}
   - {at: {supply: 20},  do: workers, state: stop,  note: ""}
-  - {at: {supply: 20},  do: rally,  where: natural}
+  - {at: {supply: 20},  do: set_rally_point,  where: natural}
   - {at: {supply: 20},  do: build,  what: Assimilator}
   - {at: {supply: 20},  do: build,  what: Pylon}
   - {at: {supply: 20},  do: workers, state: start, note: "resume"}
@@ -49,8 +45,8 @@ steps:
   - {at: {count: {CyberneticsCore: 1}}, do: gas_workers, count: 1, note: "3 probes to minerals; keep 1 on gas for the 3x25 morph gas"}
   - {at: {count: {CyberneticsCore: 1}}, do: chrono,   target: CyberneticsCore, note: "chrono warpgate research"}
   - {at: {count: {CyberneticsCore: 1}}, do: send_probe, where: proxy, label: scout, note: "scout to proxy"}
-  - {at: {count: {CyberneticsCore: 1}}, do: rally, where: proxy, note: "gateway zealots gather at the proxy"}
-  - {at: {count: {Nexus: 2}}, do: rally_and_transfer, base: 2, note: "saturate the natural"}
+  - {at: {count: {CyberneticsCore: 1}}, do: set_rally_point, where: proxy, note: "gateway zealots gather at the proxy"}
+  - {at: {count: {Nexus: 2}}, do: rally_and_transfer_probes, base: 2, note: "saturate the natural"}
 
   # only 4 home gateways (mineral-capped, so more gates just idle); proxy pylon
   # after them so the scout's walk overlaps the money-limited builds

@@ -32,6 +32,9 @@ from sc2.dicts.unit_trained_from import UNIT_TRAINED_FROM
 from sc2.dicts.unit_train_build_abilities import TRAIN_INFO
 from sc2.dicts.upgrade_researched_from import UPGRADE_RESEARCHED_FROM
 
+# Count of mineral workers to fully saturate one base.
+FULL_MINERAL_SATURATION = 16
+
 # Protoss buildings that produce units (their `trained_from` == one of these).
 PRODUCTION_BUILDINGS: frozenset[U] = frozenset(
     {U.NEXUS, U.GATEWAY, U.WARPGATE, U.ROBOTICSFACILITY, U.STARGATE}

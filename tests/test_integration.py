@@ -23,14 +23,46 @@ import catalog
 TEST_MAP = os.environ.get("SC2_TEST_MAP", "LockdownLE")
 
 
-def _run(build: str, time_limit: int) -> dict:
-    """Run a build to completion and return its parsed [summary] JSON."""
-    proc = subprocess.run(
-        [sys.executable, "run.py", "--build", build, "--fullscreen",
-         "--map", TEST_MAP, "--time-limit", str(time_limit)],
-        check=True, timeout=1800, capture_output=True, text=True,
+RUN_TIMEOUT = 1800  # seconds of wall-clock per game before we give up on the child
+
+
+def _tail(text: str | None, n: int = 20) -> str:
+    return "\n".join((text or "").splitlines()[-n:]) or "(empty)"
+
+
+def _fail(build: str, why: str, proc_stdout: str | None, proc_stderr: str | None) -> None:
+    """Fail with the child's own output. `pytrace=False` because the useful context is
+    the subprocess's traceback, not this helper's call stack."""
+    pytest.fail(
+        f"{why} — {build}\n"
+        f"--- child stderr (last 20 lines) ---\n{_tail(proc_stderr)}\n"
+        f"--- child stdout (last 20 lines) ---\n{_tail(proc_stdout)}",
+        pytrace=False,
     )
-    line = next(l for l in proc.stdout.splitlines() if l.startswith("[summary] "))
+
+
+def _run(build: str, time_limit: int) -> dict:
+    """Run a build to completion and return its parsed [summary] JSON.
+
+    Surfaces the child's output on every failure path. `capture_output` otherwise
+    swallows it and a crashed run reports as a bare exit code — which hides the
+    difference that matters here: a bug in the bot vs. the SC2 client dying on
+    launch (python-sc2 raises `assert all(isinstance(r, Result) ...)`, and stdout
+    has no [step]/[summary] lines at all).
+    """
+    cmd = [sys.executable, "run.py", "--build", build, "--fullscreen",
+           "--map", TEST_MAP, "--time-limit", str(time_limit)]
+    try:
+        proc = subprocess.run(cmd, timeout=RUN_TIMEOUT, capture_output=True, text=True)
+    except subprocess.TimeoutExpired as e:
+        _fail(build, f"run.py exceeded {RUN_TIMEOUT}s", e.stdout, e.stderr)
+
+    if proc.returncode != 0:
+        _fail(build, f"run.py exited {proc.returncode}", proc.stdout, proc.stderr)
+
+    line = next((l for l in proc.stdout.splitlines() if l.startswith("[summary] ")), None)
+    if line is None:
+        _fail(build, "run.py exited 0 but printed no [summary] line", proc.stdout, proc.stderr)
     return json.loads(line[len("[summary] "):])
 
 
@@ -104,16 +136,16 @@ def test_all_base_locations():
 
 @pytest.mark.integration
 def test_probe_naming():
-    """Named probes: re-sending a label moves the SAME probe, `label:` builds use a
-    named probe, and return_probe hands them all back."""
+    """Named probes end-to-end: a labelled tour runs to completion, `label:` builds use
+    the named probe, and return_probe hands them all back."""
     data = _run("builds/test_probe_naming.yaml", time_limit=400)
     assert data["completed"], (
         f"stalled on {data['next_step']!r} at {data['final_time']}s "
         f"({data['steps_done']}/{data['steps_total']})"
     )
-    binds = data.get("named_probe_binds", {})
-    for label in ["scout1", "scout2", "builder"]:
-        assert binds.get(label) == 1, f"{label} bound to {binds.get(label)} probes (re-send must reuse one): {binds}"
+    # NB: that each re-send reuses the SAME probe is pinned by the unit tests
+    # (tests/test_probe_rally.py::test_resending_a_label_moves_the_same_probe) — it has
+    # no in-game symptom, so there is nothing to assert on here.
     assert data.get("named_probes_held") == [], f"probes not returned to mining: {data.get('named_probes_held')}"
     # the builder probe actually built its home structures
     for s in ("PYLON", "GATEWAY", "CYBERNETICSCORE"):

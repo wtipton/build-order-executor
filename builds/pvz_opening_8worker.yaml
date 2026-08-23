@@ -12,10 +12,6 @@
 name: Protoss 8-worker safe opening (PvZ)
 race: Protoss
 
-economy:
-  continuous_workers: true   # always make probes unless a `workers: stop` step says not to
-  minerals_per_base: 16      # saturate minerals to this per base, then fill gas
-
 steps:
   - {at: {time: 7},   do: chrono, target: Nexus, note: "1st chrono on probes (~6.5s)"}
   # prewalk: {minerals: N} walks the builder once we'd have N minerals left AFTER
@@ -37,7 +33,7 @@ steps:
   - {at: {supply: 19},  do: build,  what: CyberneticsCore}
   - {at: {supply: 19},  do: workers, state: start, note: "just one probe then small cut for pylon"}
   - {at: {supply: 20},  do: workers, state: stop,  note: ""}
-  - {at: {supply: 20},  do: rally,  where: natural}
+  - {at: {supply: 20},  do: set_rally_point,  where: natural}
   - {at: {supply: 20},  do: build,  what: Assimilator}
   - {at: {supply: 20},  do: build,  what: Pylon}
   - {at: {supply: 20},  do: workers, state: start, note: "resume"}
@@ -47,4 +43,4 @@ steps:
   - {at: {count: {Probe: 22}}, do: gas_workers, count: 5, note: ""}
   - {at: {count: {Probe: 23}}, do: gas_workers, count: 6, note: ""}
   # once the natural finishes, transfer workers onto it and rally new probes there
-  - {at: {count: {Nexus: 2}}, do: rally_and_transfer, base: 2, note: "saturate the natural"}
+  - {at: {count: {Nexus: 2}}, do: rally_and_transfer_probes, base: 2, note: "saturate the natural"}

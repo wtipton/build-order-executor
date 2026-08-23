@@ -16,7 +16,7 @@ from sc2.ids.unit_typeid import UnitTypeId as U
 from sc2.ids.upgrade_id import UpgradeId
 
 from fakes import FakeUnits, fake_bot, fake_unit
-from state import MorphState
+from state import StepState
 
 
 # ------------------------------------------------------------------ do_train
@@ -132,7 +132,7 @@ def _morph_bot(sources, dest_units):
     (the dest, for the baseline/confirm count)."""
     def all_own_units(sel):
         return FakeUnits(sources) if isinstance(sel, (set, frozenset)) else FakeUnits(dest_units)
-    return fake_bot(all_own_units=all_own_units, _morph=MorphState())
+    return fake_bot(all_own_units=all_own_units, step_state=StepState())
 
 
 async def test_morph_converts_each_idle_source_1to1():
@@ -158,10 +158,9 @@ async def test_morph_archon_combines_two_templar_per_archon():
 async def test_morph_done_when_dest_count_reached():
     step = fake_bot(to="archon", count=1)
     fake = _morph_bot([], dest_units=[fake_unit()])  # 1 archon now exists
-    fake._morph.step = step  # already in progress
-    fake._morph.target, fake._morph.baseline = 1, 0
+    # already in progress: target set, baseline captured (so not a first frame)
+    fake.step_state.morph.target, fake.step_state.morph.baseline = 1, 0
     assert await BuildOrderBot.do_morph(fake, step) is True
-    assert fake._morph.step is None
 
 
 # ------------------------------------------------------------------ do_chrono
@@ -284,15 +283,17 @@ async def test_gas_workers_sets_target():
     assert fake.gas_target == 6
 
 
-async def test_minerals_cap_sets_value():
-    fake = fake_bot(minerals_per_base=16)
-    assert await BuildOrderBot.do_minerals_cap(fake, fake_bot(count=20)) is True
-    assert fake.minerals_per_base == 20
+async def test_wait_completes_immediately():
+    # `wait` is a pure trigger: run_steps gates it on `at`, so the handler itself
+    # just reports done. Nothing else may change.
+    fake = fake_bot()
+    assert await BuildOrderBot.do_wait(fake, fake_bot()) is True
+    assert vars(fake) == {}, "do_wait must not touch bot state"
 
 
 async def test_workers_toggle_start_stop():
-    fake = fake_bot(continuous_workers=True)
+    fake = fake_bot(continuously_build_workers=True)
     assert await BuildOrderBot.do_workers(fake, fake_bot(state="stop")) is True
-    assert fake.continuous_workers is False
+    assert fake.continuously_build_workers is False
     assert await BuildOrderBot.do_workers(fake, fake_bot(state="start")) is True
-    assert fake.continuous_workers is True
+    assert fake.continuously_build_workers is True

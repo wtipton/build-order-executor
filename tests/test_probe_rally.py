@@ -1,5 +1,5 @@
 """Tier 1 — probe dispatch and rally handlers: send_probe / return_probe / rally /
-rally_and_transfer. These are about which worker gets picked and where it's told
+rally_and_transfer_probes. These are about which worker gets picked and where it's told
 to go, plus the rally-target state; tested unbound with stubbed selection helpers.
 """
 
@@ -33,7 +33,7 @@ def test_free_probe_near_reuses_idle_probe_at_target():
 # ------------------------------------------------------------------ send_probe
 async def test_send_probe_reuses_named_probe():
     existing = fake_unit(tag=1)
-    fake = fake_bot(_resolve_place=lambda w: DEST, named_probes={"scout": 1}, _named_binds={},
+    fake = fake_bot(_resolve_place=lambda w: DEST, named_probes={"scout": 1},
                     _named_worker=lambda label: existing, _free_probe_near=lambda p: None)
     assert await BuildOrderBot.do_send_probe(fake, fake_bot(where="proxy", label="scout")) is True
     existing.move.assert_called_once_with(DEST)
@@ -42,7 +42,7 @@ async def test_send_probe_reuses_named_probe():
 
 async def test_send_probe_pulls_and_registers_fresh_probe():
     fresh = fake_unit(tag=7)
-    fake = fake_bot(_resolve_place=lambda w: DEST, named_probes={}, _named_binds={},
+    fake = fake_bot(_resolve_place=lambda w: DEST, named_probes={},
                     _named_worker=lambda label: None, _free_probe_near=lambda p: fresh)
     assert await BuildOrderBot.do_send_probe(fake, fake_bot(where="proxy", label="scout")) is True
     assert fake.named_probes == {"scout": 7}  # registered so it's held out of automation
@@ -50,9 +50,49 @@ async def test_send_probe_pulls_and_registers_fresh_probe():
 
 
 async def test_send_probe_holds_when_no_probe_available():
-    fake = fake_bot(_resolve_place=lambda w: DEST, named_probes={}, _named_binds={},
+    fake = fake_bot(_resolve_place=lambda w: DEST, named_probes={},
                     _named_worker=lambda label: None, _free_probe_near=lambda p: None)
     assert await BuildOrderBot.do_send_probe(fake, fake_bot(where="proxy", label="scout")) is False
+
+
+def _named_probe_bot(pool):
+    """Fake bot that drives the REAL _named_worker / _worker_by_tag lookups (rather
+    than stubbing them), so the label -> live-probe reuse path is genuinely exercised."""
+    fake = fake_bot(_resolve_place=lambda w: DEST, named_probes={}, workers=FakeUnits(pool))
+    fake._worker_by_tag = lambda tag: BuildOrderBot._worker_by_tag(fake, tag)
+    fake._named_worker = lambda label: BuildOrderBot._named_worker(fake, label)
+    return fake
+
+
+async def test_resending_a_label_moves_the_same_probe():
+    """The tour case (test_probe_naming.yaml re-sends `scout1` eight times): every
+    re-send must MOVE the probe already bound to the label. Silently pulling a fresh
+    one each time still looks correct from outside — the probe tours, the build
+    finishes — while stripping workers off minerals one leg at a time."""
+    scout, spare = fake_unit(tag=1), fake_unit(tag=2)
+    pulls = []
+    fake = _named_probe_bot([scout, spare])
+    fake._free_probe_near = lambda pos: (pulls.append(pos), scout)[1]
+
+    step = fake_bot(where="proxy", label="scout")
+    for _ in range(3):
+        assert await BuildOrderBot.do_send_probe(fake, step) is True
+
+    assert len(pulls) == 1, f"re-send pulled a fresh probe instead of reusing: {len(pulls)} pulls"
+    assert fake.named_probes == {"scout": 1}
+    assert scout.move.call_count == 3
+    spare.move.assert_not_called()
+
+
+async def test_resend_rebinds_when_the_named_probe_died():
+    # tag 1 is bound but no longer among our workers -> fall back to a fresh probe
+    replacement = fake_unit(tag=2)
+    fake = _named_probe_bot([replacement])
+    fake.named_probes = {"scout": 1}
+    fake._free_probe_near = lambda pos: replacement
+    assert await BuildOrderBot.do_send_probe(fake, fake_bot(where="proxy", label="scout")) is True
+    assert fake.named_probes == {"scout": 2}
+    replacement.move.assert_called_once_with(DEST)
 
 
 # ------------------------------------------------------------------ return_probe
@@ -74,19 +114,20 @@ async def test_return_probe_noop_for_unknown_label():
 
 # ------------------------------------------------------------------ rally
 async def test_rally_sets_target():
-    fake = fake_bot(_resolve_place=lambda w: DEST, rally_target=None)
-    assert await BuildOrderBot.do_rally(fake, fake_bot(where="natural")) is True
-    assert fake.rally_target is DEST
+    fake = fake_bot(_resolve_place=lambda w: DEST, rally_point=None, _rallied={1, 2, 3})
+    assert await BuildOrderBot.do_set_rally_point(fake, fake_bot(where="natural")) is True
+    assert fake.rally_point is DEST
+    assert fake._rallied == set(), "must forget who's set, so existing producers get re-issued"
 
 
-# ------------------------------------------------------------------ rally_and_transfer
-async def test_rally_and_transfer_holds_when_base_not_up():
+# ------------------------------------------------------------------ rally_and_transfer_probes
+async def test_rally_and_transfer_probes_holds_when_base_not_up():
     fake = fake_bot(_ordered_bases=lambda: [fake_unit()], populating_base_num=1)
-    assert await BuildOrderBot.do_rally_and_transfer(fake, fake_bot(base=2)) is False
+    assert await BuildOrderBot.do_rally_and_transfer_probes(fake, fake_bot(base=2)) is False
     assert fake.populating_base_num == 1  # unchanged — didn't switch to a base that isn't up
 
 
-async def test_rally_and_transfer_sets_base_and_rallies_nexuses():
+async def test_rally_and_transfer_probes_sets_base_and_rallies_nexuses():
     field = object()
     b1 = fake_unit(tag=1, assigned_harvesters=16)  # at cap -> no excess to transfer
     b2 = fake_unit(tag=2, assigned_harvesters=0)
@@ -94,12 +135,11 @@ async def test_rally_and_transfer_sets_base_and_rallies_nexuses():
     fake = fake_bot(
         _ordered_bases=lambda: [b1, b2],
         _base_field=lambda base: field,
-        minerals_per_base=16,
         populating_base_num=1,
         townhalls=lambda t: FakeUnits([nexus]),
         workers=FakeUnits([]),
         _excluded_tags=lambda: set(),
     )
-    assert await BuildOrderBot.do_rally_and_transfer(fake, fake_bot(base=2)) is True
+    assert await BuildOrderBot.do_rally_and_transfer_probes(fake, fake_bot(base=2)) is True
     assert fake.populating_base_num == 2
     nexus.assert_called_once_with(AbilityId.RALLY_WORKERS, field)

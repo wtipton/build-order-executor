@@ -7,10 +7,6 @@
 
 name: All Units and Structures
 
-economy:
-  continuous_workers: true
-  minerals_per_base: 18
-
 steps:
   # ===================== economy: 3 bases, full gas =====================
   - {at: {time: 5},   do: chrono, target: Nexus}
@@ -22,9 +18,9 @@ steps:
   - {at: {time: 55},  do: build, what: Pylon}
   - {at: {time: 62},  do: build, what: Assimilator, note: "main gas 2"}
   - {at: {count: {Assimilator: 2}}, do: gas_workers, count: 6}
-  - {at: {count: {Nexus: 2}}, do: rally_and_transfer, base: 2}
+  - {at: {count: {Nexus: 2}}, do: rally_and_transfer_probes, base: 2}
   - {at: {time: 90},  do: build, what: Nexus,  note: "third"}
-  - {at: {count: {Nexus: 3}}, do: rally_and_transfer, base: 3}
+  - {at: {count: {Nexus: 3}}, do: rally_and_transfer_probes, base: 3}
   - {at: {time: 180}, do: workers, state: stop, note: "cap probes (~45) — leave supply for the full army"}
 
   # ===================== tech off the Core =====================
@@ -80,9 +76,9 @@ steps:
   - {at: {count: {FleetBeacon: 1}}, do: train, what: Mothership}
 
   # ===================== wait for the slow units to finish (complete census) =====================
-  - {at: {count: {VoidRay: 1}}, do: minerals_cap, count: 18}
-  - {at: {count: {Tempest: 1}}, do: minerals_cap, count: 18}
-  - {at: {count: {Carrier: 1}}, do: minerals_cap, count: 18}
-  - {at: {count: {HighTemplar: 1}}, do: minerals_cap, count: 18}
-  - {at: {count: {DarkTemplar: 1}}, do: minerals_cap, count: 18}
-  - {at: {count: {Mothership: 1}}, do: minerals_cap, count: 18}
+  - {at: {count: {VoidRay: 1}}, do: wait}
+  - {at: {count: {Tempest: 1}}, do: wait}
+  - {at: {count: {Carrier: 1}}, do: wait}
+  - {at: {count: {HighTemplar: 1}}, do: wait}
+  - {at: {count: {DarkTemplar: 1}}, do: wait}
+  - {at: {count: {Mothership: 1}}, do: wait}

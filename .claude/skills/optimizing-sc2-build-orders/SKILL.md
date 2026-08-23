@@ -13,17 +13,20 @@ sequencing explicit steps against that constraint, verified against the real gam
 ## Rule 0: MEASURE, never infer or fabricate
 
 The single most important lesson. Do **not** deduce unit counts from supply arithmetic
-or guess what happened — run the real game with `--debug` and read the instrumentation.
-`bot.py` prints an army report each heartbeat and at `[end]`:
+or guess what happened — run the real game and read the instrumentation (`[status]` and
+`[complete]` are always on; `--debug` adds `[step*]`/`[prewalk]` build-issue detail).
+`bot.py` prints a `[status]` block every 10 game-seconds, and a final census at `[end]`:
 
 ```
-[end] zealots done=15 (at_proxy=15) in_prod=0 | gateways=1 warpgates=4 | gas=128 nexus_energy=170(~3 chronos)
+[status]  4:32  sup=45/54 workers=28 min=350 gas=120 bases[b1=16/16 b2=12/16] chrono=2
+[status]  4:32  step 12/34  build what=Gateway  (38s)  waiting on trigger count Pylon=1 (have 0)
 ```
 
-- `done` = completed units; `at_proxy` = completed units within 15 of the proxy point;
-  `in_prod` = warping-in + in production queues.
-- The heartbeat `[hb]` line shows `min/gas/sup_left`, per-base worker saturation
-  `mins[b1=16/16 b2=..]`, and `next=<step>`.
+- The `[status]` block prints every 10 game-seconds: an economy snapshot (supply,
+  workers, `min/gas`, per-base saturation `bases[b1=16/16 b2=..]`, chrono available),
+  then the current step with **how long it has been current** and what it is waiting on.
+- A growing step age is a stall — there is no separate `[stall]` tag and nothing is
+  hidden behind a threshold. Both lines are build-agnostic.
 
 If a metric matters (e.g. "at the proxy"), add/keep a direct measurement for it. Claims
 like "they died in combat" or "≈19 alive" without a log line to back them are how you
@@ -32,20 +35,21 @@ buffers until the process exits).
 
 ```bash
 cd ~/projects/build_orders
-.venv/bin/python run.py --build builds/<x>.yaml --fullscreen --debug --time-limit 330 2>&1 \
-  | grep -E "\[end\]|zealots done"
+.venv/bin/python run.py --build builds/<x>.yaml --fullscreen --time-limit 330 2>&1 \
+  | grep -E "\[end\]|\[complete\]|\[status\]"
 ```
 `--fullscreen` is required (windowed is unusably slow under Wine). `--time-limit N` ends
 at N game-seconds; add a trailing step that never fires (or enough production steps) so
 the build doesn't `concede` before the deadline. **Runs are ~deterministic** — one run
 per change is enough; don't burn time re-running for "stability".
 
-**Verify tight deadlines with exact logging, not heartbeats.** `[hb]` prints every 10s —
-too coarse to tell 4:12 from 4:18 against a 4:15 deadline. `bot._note_milestones()` logs
-`[done] M:SS <thing>` the frame a unit/upgrade first completes (Void Ray, Adept#2,
-Warpgate, Charge); grep `\[done\]` and compare to the deadline. The `[end]`/`_army_report`
-line also carries `voidray=`, `adepts=`, `warpgate_done=`, `charge_done=` — but "done by
-end" ≠ "done by the deadline", so use the `[done]` timestamps for hard cutoffs.
+**Verify tight deadlines with `[complete]`, not `[status]`.** `[status]` prints every 10s —
+too coarse to tell 4:12 from 4:18 against a 4:15 deadline. `[complete] M:SS <name>` is
+logged the frame each unit/structure type or upgrade FIRST finishes; grep `\[complete\]`
+and compare to the deadline. It's automatic and build-agnostic — every type you produce is
+timestamped, nothing needs configuring. It is first-of-type only, so for "when did I reach
+14 Zealots" you still need a direct measurement. The `[end]` line carries a final census,
+but "done by end" ≠ "done by the deadline", so use `[complete]` for hard cutoffs.
 
 ## The executor's step model (and its traps)
 
@@ -122,7 +126,8 @@ key things that table's *static* column can't show are the **runtime modifiers**
 
 ## Optimization workflow
 
-1. **State the metric precisely** and measure it directly (`at_proxy`, `done`, timing).
+1. **State the metric precisely** and measure it directly (a `[complete]` timestamp, a
+   census count from `[end]`/`[summary]`, not an inference).
 2. **Find the binding constraint each phase** from the heartbeat:
    - `min` near 0 → **mineral-limited** (fewer/cheaper structures; more income).
    - `min` banking to hundreds → **producer-limited** (add producers/chrono).
@@ -168,8 +173,9 @@ tech tax overloads — key moves:
 - `do_build`: baseline `already_pending()` per step so **many same-type structures build
   concurrently** (python-sc2 counts every under-construction building type-wide).
 - `placement.building`: anchor **away from the mineral line**, pack tight.
-- `bot.py`: `_army_report()` (with `voidray/adepts/warpgate_done/charge_done`) and
-  `_note_milestones()` (`[done] M:SS`) observability — keep them; they're how you measure.
+- `observe.py`: the `[status]` block (economy + current step with age/reason) and
+  `_note_completions()` (`[complete] M:SS`) observability — keep them; they're how you
+  measure. Both are build-agnostic: nothing about a particular build is hard-coded.
 
 If a build behaves impossibly, suspect a bot bug before contorting the YAML — but confirm
 it by reading the game data / instrumentation first.

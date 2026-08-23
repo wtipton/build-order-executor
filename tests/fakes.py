@@ -42,6 +42,9 @@ class FakeUnits(list):
     def tags_not_in(self, tags) -> "FakeUnits":
         return FakeUnits(u for u in self if getattr(u, "tag", None) not in tags)
 
+    def tags_in(self, tags) -> "FakeUnits":
+        return FakeUnits(u for u in self if getattr(u, "tag", None) in tags)
+
     @property
     def gathering(self) -> "FakeUnits":
         return FakeUnits(u for u in self if u.is_gathering)

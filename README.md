@@ -16,14 +16,13 @@ and the game doesn't end instantly), saves a replay, then concedes when the buil
 is done.
 
 All flags, set explicitly (`--fullscreen` is needed — windowed is unusably slow
-under Wine; `--debug` adds a 10s economy heartbeat):
+under Wine):
 
 ```bash
 cd ~/projects/build_orders && .venv/bin/python run.py \
   --build builds/pvz_opening_8worker.yaml \
   --map LockdownLE \
-  --fullscreen \
-  --debug
+  --fullscreen
 ```
 
 ## Reading the output
@@ -34,14 +33,21 @@ Every line is tagged. Always-on (the report a build reads back):
 |---|---|
 | `[run]` | lifecycle: build loaded, output legend, build complete, conceding, replay/summary paths |
 | `[step]` | a build step fired, with clock + supply, e.g. `[step] 1:54  sup19  build what=Nexus` |
-| `[done]` | a key unit/upgrade first completed, e.g. `[done] 5:19  Warpgate` |
-| `[stall]` | the head step has been blocked a while — names the step and **why** (waiting on a trigger, or a handler reason like `can't afford` / `no placement` / `all Warpgates on cooldown`) |
+| `[complete]` | every unit/structure completion with a running per-type count, e.g. `[complete] 4:19  Gateway #3`, plus each upgrade, e.g. `[complete] 5:19  Warpgate`. Exact to the frame — use these for deadlines, not `[status]`. Probes are skipped (worker count is on every `[status]` line) |
+| `[prewalk]` | a probe was reserved and walked to a future build's spot ahead of time |
+| `[builder]` | a build was issued: which probe got it, how that probe was picked (`prewalk`/`label:x`/`auto`), and how far it still has to walk |
+| `[status]` | every 10 game-seconds, two lines: economy snapshot; the current step with how long it's been current and what it's waiting on |
 | `[end]` | final state + army report |
 
-With `--debug`: `[hb]` (10s economy/timing heartbeat), `[step*]` (build-issue detail), `[prewalk]` (builder reservations).
+There is no `[stall]` tag: `[status]` always reports the current step's age and reason,
+so a stall shows up as an age that keeps growing — no threshold to tune.
 
-The final `[summary]` line is a machine-readable JSON blob (steps done, milestones,
-unit/upgrade census, where it stalled) — grep `^[summary] ` and `json.loads` the rest.
+All of the above are unconditional — there is no verbosity flag, so a run never has to be
+repeated just to diagnose it.
+
+The final `[summary]` line is a machine-readable JSON blob (steps done, `completions`
+mapping each type to its list of completion times, `upgrades_at`, unit/upgrade census,
+where it stalled) — grep `^[summary] ` and `json.loads` the rest.
 
 ## Tests
 

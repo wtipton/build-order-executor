@@ -2,14 +2,10 @@
 # with labels, and build with label:). Two scout probes tour bases (re-sent by
 # label — each re-send must MOVE THE SAME probe, not pull a new one), and one
 # `builder` probe runs a small home build order via labelled builds. All are then
-# returned to mining. Asserted via [summary] named_probe_binds / named_probes_held
+# returned to mining. Asserted via [summary] named_probes_held
 # / census in tests/test_integration.py.
 
 name: Probe Naming
-
-economy:
-  continuous_workers: true
-  minerals_per_base: 16
 
 steps:
   # create the three named probes

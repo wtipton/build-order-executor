@@ -8,10 +8,6 @@
 
 name: All Upgrades
 
-economy:
-  continuous_workers: true
-  minerals_per_base: 16
-
 steps:
   # ===================== economy: 2 bases, full gas (upgrades are gas-heavy) =====================
   - {at: {time: 5},   do: chrono, target: Nexus}
@@ -24,7 +20,7 @@ steps:
   - {at: {time: 55},  do: build, what: Pylon}
   - {at: {time: 62},  do: build, what: Assimilator, note: "main gas 2"}
   - {at: {count: {Assimilator: 2}}, do: gas_workers, count: 6}
-  - {at: {count: {Nexus: 2}}, do: rally_and_transfer, base: 2}
+  - {at: {count: {Nexus: 2}}, do: rally_and_transfer_probes, base: 2}
   - {at: {count: {Nexus: 2}}, do: build, what: Assimilator, note: "natural gas 1"}
   - {at: {count: {Nexus: 2}}, do: build, what: Assimilator, note: "natural gas 2"}
   - {at: {count: {Assimilator: 4}}, do: gas_workers, count: 12}
@@ -82,4 +78,4 @@ steps:
   # - {at: {count: {FleetBeacon: 1}}, do: research, what: TempestGroundAttack}
 
   # keep the game alive until the upgrades finish (no upgrade-done trigger exists)
-  - {at: {time: 1000}, do: minerals_cap, count: 16, note: "final wait for all upgrades to complete"}
+  - {at: {time: 1000}, do: wait, note: "final wait for all upgrades to complete"}

@@ -18,8 +18,14 @@ from __future__ import annotations
 
 import math
 
+from typing import TYPE_CHECKING
+
 from sc2.ids.unit_typeid import UnitTypeId as U
 from sc2.position import Point2
+from sc2.unit import Unit
+
+if TYPE_CHECKING:
+    from bot import BuildOrderBot
 
 # Structures that train units — leave a tile in front so units can exit.
 PRODUCTION = {U.GATEWAY, U.WARPGATE, U.ROBOTICSFACILITY, U.STARGATE}
@@ -33,11 +39,11 @@ _PACK_OFFSETS = ((0, 0), (2, 0), (0, 2), (-2, 0), (0, -2),
 
 
 class Placement:
-    def __init__(self, bot):
+    def __init__(self, bot: BuildOrderBot) -> None:
         self.bot = bot
 
     # ---------------------------------------------------------------- helpers
-    def _mineral_center(self, nexus) -> Point2 | None:
+    def _mineral_center(self, nexus: Unit) -> Point2 | None:
         mins = self.bot.mineral_field.closer_than(12, nexus)
         return mins.center if mins else None
 

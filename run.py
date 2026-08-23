@@ -90,10 +90,10 @@ from loguru import logger as _loguru  # noqa: E402  (python-sc2's logging backen
 from bot import BuildOrderBot, load_build  # noqa: E402
 
 # One-line legend for the always-on output tags (printed at startup).
-OUTPUT_LEGEND = ("[run] output: [step]=step fired  [done]=milestone  "
-                 "[stall]=step stalled (with reason)  [end]=final  "
+OUTPUT_LEGEND = ("[run] output: [step]=step fired  [complete]=type first finished  "
+                 "[status]=periodic economy + current-step snapshot  [end]=final  "
                  "[summary]=machine-readable JSON  "
-                 "(--debug adds [hb] heartbeat / [step*] / [prewalk])")
+                 "[prewalk]/[builder]=which probe was reserved/dispatched for each build")
 
 
 class PassiveBot(BotAI):
@@ -112,7 +112,7 @@ REPLAY_DIR = Path.home() / "replays" / "bot"
 GAME_SEED = 42
 
 
-def resolve_map(name: str):
+def resolve_map(name: str) -> Map:
     """Locate the map named `name` for the current target. The native (headless)
     client opens the exact path we hand it, so we resolve to an absolute path with
     maps.get (its maps sit in per-season subfolders); the Windows client under Wine
@@ -125,7 +125,7 @@ def resolve_map(name: str):
     return Map(Path(f"{name}.SC2Map"))
 
 
-def main():
+def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--target", default=_TARGET, choices=sorted(TARGETS),
                     help="launch target (also via SC2_TARGET env); resolved before sc2 import")
@@ -134,7 +134,6 @@ def main():
     ap.add_argument("--fullscreen", action="store_true", help="launch SC2 fullscreen (-displayMode 1)")
     ap.add_argument("--replay", default=None, help="replay output path (default: in-game Replays dir)")
     ap.add_argument("--time-limit", type=int, default=300, help="end game after N game-seconds (0 = no limit)")
-    ap.add_argument("--debug", action="store_true", help="verbose economy/timing heartbeat each ~10 game-seconds")
     ap.add_argument("--dump-data", action="store_true", help="dump game unit/upgrade data on start (see gamedata_dump.py)")
     args = ap.parse_args()
 
@@ -167,7 +166,7 @@ def main():
         game_map,
         [
             Bot(Race[build.race],
-                BuildOrderBot(build, debug=args.debug, dump_data=args.dump_data),
+                BuildOrderBot(build, dump_data=args.dump_data),
                 name="BuildOrderBot", fullscreen=args.fullscreen),
             Bot(Race.Terran, PassiveBot(), name="PassiveBot"),
         ],

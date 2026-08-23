@@ -1,7 +1,7 @@
 """Tier 1 — run_steps' strict hold-the-line ordering: a step that can't fire (its
 trigger isn't due, or its handler returns False) blocks everything after it, and
-the idx pointer only advances past leading completed steps. Tested unbound with a
-fake `self` and stubbed trigger_met/execute."""
+`steps_done` only advances over steps that actually completed. Tested unbound with
+a fake `self` and stubbed trigger_met/execute."""
 
 from __future__ import annotations
 
@@ -9,18 +9,25 @@ from types import SimpleNamespace
 
 from bot import BuildOrderBot
 from schema import Trigger
-
-from fakes import fake_bot
+from state import StepState
 
 
 def _step(at=None, **kw):
     return SimpleNamespace(at=at or Trigger(time=1), note="", **kw)
 
 
-def _seq_bot(steps, done, trigger_met, execute):
-    fake = fake_bot(steps=steps, _done=list(done), _started=[False] * len(steps),
-                    idx=0, supply_used=0, trigger_met=trigger_met,
-                    _clock=lambda: "0:00", _describe=lambda s: "step")
+class _SeqBot(SimpleNamespace):
+    """Fake `self` for run_steps. Borrows the real progress properties rather than
+    restating them, so the end-of-build boundary exercised here is the production one."""
+
+    current_step = BuildOrderBot.current_step
+    all_steps_done = BuildOrderBot.all_steps_done
+
+
+def _seq_bot(steps, trigger_met, execute, steps_done=0):
+    fake = _SeqBot(cfg=SimpleNamespace(steps=steps), steps_done=steps_done,
+                   step_state=StepState(), supply_used=0, time=0.0, trigger_met=trigger_met,
+                   _clock=lambda: "0:00", _describe=lambda s: "step")
     fake.execute = execute
     return fake
 
@@ -31,42 +38,77 @@ async def _always(_):  # execute stub: every step completes
 
 async def test_all_steps_fire_when_ready():
     steps = [_step(), _step(), _step()]
-    fake = _seq_bot(steps, [False] * 3, trigger_met=lambda at: True, execute=_always)
+    fake = _seq_bot(steps, trigger_met=lambda at: True, execute=_always)
     await BuildOrderBot.run_steps(fake)
-    assert fake._done == [True, True, True]
-    assert fake.idx == 3
+    assert fake.steps_done == 3
+    assert fake.all_steps_done and fake.current_step is None
 
 
 async def test_untriggered_step_blocks_the_rest():
     # step 1's trigger isn't due -> it and step 2 must not fire even though step 2
     # would be ready.
     steps = [_step(at=Trigger(time=1)), _step(at=Trigger(time=999)), _step(at=Trigger(time=1))]
-    fake = _seq_bot(steps, [False] * 3, trigger_met=lambda at: at.time <= 1, execute=_always)
+    fake = _seq_bot(steps, trigger_met=lambda at: at.time <= 1, execute=_always)
     await BuildOrderBot.run_steps(fake)
-    assert fake._done == [True, False, False]
-    assert fake.idx == 1
+    assert fake.steps_done == 1
+    assert fake.current_step is steps[1]
 
 
 async def test_handler_hold_blocks_the_rest():
     # step 0 is triggered but its handler returns False (can't complete yet) -> the
-    # line holds; nothing is marked done and idx stays put (strict order).
+    # line holds and steps_done stays put (strict order).
     steps = [_step(), _step()]
 
     async def execute(step):
         return False
 
-    fake = _seq_bot(steps, [False, False], trigger_met=lambda at: True, execute=execute)
+    fake = _seq_bot(steps, trigger_met=lambda at: True, execute=execute)
     await BuildOrderBot.run_steps(fake)
-    assert fake._done == [False, False]
-    assert fake.idx == 0
+    assert fake.steps_done == 0
+    assert fake.current_step is steps[0]
 
 
-async def test_idx_advances_past_leading_done_steps():
+async def test_resumes_from_the_current_step():
+    # a frame that starts mid-build works from steps_done, not from the top.
     steps = [_step(), _step(), _step()]
-    fake = _seq_bot(steps, [True, False, False], trigger_met=lambda at: True, execute=_always)
+    seen = []
+
+    async def execute(step):
+        seen.append(step)
+        return True
+
+    fake = _seq_bot(steps, trigger_met=lambda at: True, execute=execute, steps_done=1)
     await BuildOrderBot.run_steps(fake)
-    assert fake._done == [True, True, True]
-    assert fake.idx == 3
+    assert seen == steps[1:], "re-ran an already-completed step"
+    assert fake.steps_done == 3
+
+
+async def test_empty_build_is_complete_immediately():
+    fake = _seq_bot([], trigger_met=lambda at: True, execute=_always)
+    await BuildOrderBot.run_steps(fake)
+    assert fake.all_steps_done and fake.current_step is None
+
+
+async def test_step_state_is_reset_on_advance():
+    # The whole contract of StepState: a finished step's in-flight state must not
+    # leak into the next one. Handlers rely on `baseline is None` meaning "my first
+    # frame", so a stale baseline would silently skip a step's capture.
+    steps = [_step(), _step()]
+    seen = []
+
+    async def execute(step):
+        seen.append((step, fake.step_state.build.baseline, fake.step_state.morph.target))
+        fake.step_state.build.baseline = 7      # pretend this step went in flight
+        fake.step_state.build.builder_tag = 42
+        fake.step_state.morph.target = 3
+        return True
+
+    fake = _seq_bot(steps, trigger_met=lambda at: True, execute=execute)
+    await BuildOrderBot.run_steps(fake)
+
+    assert seen == [(steps[0], None, 0), (steps[1], None, 0)], "state leaked between steps"
+    assert fake.step_state == StepState(), "StepState not fully cleared after the last step"
+    assert fake.step_state.started_at == fake.time, "advance must stamp when the new step began"
 
 
 async def test_started_step_completes_even_if_trigger_goes_false():
@@ -84,11 +126,12 @@ async def test_started_step_completes_even_if_trigger_goes_false():
         exec_calls.append(1)
         return len(exec_calls) >= 2  # holds once (in progress), then confirms
 
-    fake = _seq_bot(steps, [False], trigger_met=trigger_met, execute=execute)
+    fake = _seq_bot(steps, trigger_met=trigger_met, execute=execute)
 
     await BuildOrderBot.run_steps(fake)          # frame 1: start + execute holds
-    assert fake._started == [True] and fake._done == [False]
+    assert fake.step_state.trigger_fired is True and fake.steps_done == 0
 
     await BuildOrderBot.run_steps(fake)          # frame 2: trigger now false, but committed
-    assert fake._done == [True] and fake.idx == 1
+    assert fake.steps_done == 1
+    assert fake.step_state.trigger_fired is False, "commit flag must reset for the next step"
     assert len(trig_calls) == 1, "trigger was re-checked after the step started"

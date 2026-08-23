@@ -22,11 +22,13 @@ _TRIGGER_KEYS = ("supply", "time", "minerals", "vespene", "count")
 #   main..sixth   -> our bases by distance from our start (main, natural, third,
 #                    fourth, fifth, sixth) — the Nth-nearest expansion, clamped to
 #                    what the map provides.
+#   main_ramp     -> the top of our main base's ramp (the choke we defend at, and
+#                    the default combat-unit rally point)
 #   enemy_main    -> the enemy start location (for scouting)
 #   enemy_natural -> the enemy natural expansion
 #   proxy         -> out near the enemy but off their doorstep (their ~4th base) —
 #                    for proxying a pylon/building and warping units in there.
-Place = Literal["main", "natural", "third", "fourth", "fifth", "sixth",
+Place = Literal["main", "natural", "third", "fourth", "fifth", "sixth", "main_ramp",
                 "enemy_main", "enemy_natural", "proxy"]
 
 
@@ -127,13 +129,13 @@ class ReturnProbeStep(_StepBase):
     label: str           # a probe previously sent via send_probe — hand it back to the mining/build pool
 
 
-class RallyStep(_StepBase):
-    do: Literal["rally"]
+class SetRallyPointStep(_StepBase):
+    do: Literal["set_rally_point"]
     where: Place = "natural"
 
 
-class RallyAndTransferStep(_StepBase):
-    do: Literal["rally_and_transfer"]
+class RallyAndTransferProbesStep(_StepBase):
+    do: Literal["rally_and_transfer_probes"]
     base: int = Field(ge=1)  # which of our bases (1 = main, 2 = natural, 3 = third, ...) to saturate
     # Transfers every other base's excess mineral workers to this base, rallies all
     # Nexuses onto its minerals, and makes it the base returned probes mine at.
@@ -144,9 +146,9 @@ class GasWorkersStep(_StepBase):
     count: int           # desired total workers in gas
 
 
-class MineralsCapStep(_StepBase):
-    do: Literal["minerals_cap"]
-    count: int           # per-base mineral worker cap
+class WaitStep(_StepBase):
+    do: Literal["wait"]
+    # Does nothing; completes as soon as its trigger fires.
 
 
 class WorkersStep(_StepBase):
@@ -157,26 +159,17 @@ class WorkersStep(_StepBase):
 Step = Annotated[
     Union[
         BuildStep, TrainStep, WarpStep, MorphStep, ResearchStep, HallucinateStep,
-        ChronoStep, SendProbeStep, ReturnProbeStep, RallyStep, RallyAndTransferStep,
-        GasWorkersStep, MineralsCapStep, WorkersStep,
+        ChronoStep, SendProbeStep, ReturnProbeStep, SetRallyPointStep, RallyAndTransferProbesStep,
+        GasWorkersStep, WorkersStep, WaitStep,
     ],
     Field(discriminator="do"),
 ]
-
-
-class Economy(BaseModel):
-    """Defaults for the automatic economy (a step can override at runtime)."""
-
-    model_config = ConfigDict(extra="forbid")
-    continuous_workers: bool = True
-    minerals_per_base: int = 16
 
 
 class BuildConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
     name: str = "build"
     race: Literal["Protoss"] = "Protoss"  # bot is Protoss-only for now; anything else fails validation
-    economy: Economy = Field(default_factory=Economy)
     steps: list[Step]
 
 

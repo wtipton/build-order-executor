@@ -7,25 +7,21 @@
 
 name: All Base Locations
 
-economy:
-  continuous_workers: true
-  minerals_per_base: 16
-
 steps:
   - {at: {time: 5},   do: chrono, target: Nexus}
   - {at: {supply: 13}, do: build, what: Pylon}
 
   # ===================== expand to 6 bases + populate each =====================
   - {at: {count: {Nexus: 1}}, do: build, what: Nexus, prewalk: {minerals: 350}, note: "natural"}
-  - {at: {count: {Nexus: 2}}, do: rally_and_transfer, base: 2}
+  - {at: {count: {Nexus: 2}}, do: rally_and_transfer_probes, base: 2}
   - {at: {count: {Nexus: 2}}, do: build, what: Nexus, prewalk: {minerals: 350}, note: "third"}
-  - {at: {count: {Nexus: 3}}, do: rally_and_transfer, base: 3}
+  - {at: {count: {Nexus: 3}}, do: rally_and_transfer_probes, base: 3}
   - {at: {count: {Nexus: 3}}, do: build, what: Nexus, prewalk: {minerals: 350}, note: "fourth"}
-  - {at: {count: {Nexus: 4}}, do: rally_and_transfer, base: 4}
+  - {at: {count: {Nexus: 4}}, do: rally_and_transfer_probes, base: 4}
   - {at: {count: {Nexus: 4}}, do: build, what: Nexus, prewalk: {minerals: 350}, note: "fifth"}
-  - {at: {count: {Nexus: 5}}, do: rally_and_transfer, base: 5}
+  - {at: {count: {Nexus: 5}}, do: rally_and_transfer_probes, base: 5}
   - {at: {count: {Nexus: 5}}, do: build, what: Nexus, prewalk: {minerals: 350}, note: "sixth"}
-  - {at: {count: {Nexus: 6}}, do: rally_and_transfer, base: 6}
+  - {at: {count: {Nexus: 6}}, do: rally_and_transfer_probes, base: 6}
 
   # ===================== drop a Pylon at every named location =====================
   - {at: {count: {Nexus: 6}}, do: build, what: Pylon, where: main}
@@ -39,4 +35,4 @@ steps:
   - {at: {count: {Nexus: 6}}, do: build, what: Pylon, where: proxy}
 
   # let continuous workers keep filling every base before we conclude
-  - {at: {time: 500}, do: minerals_cap, count: 10, note: "wait for all 6 bases to populate"}
+  - {at: {time: 500}, do: wait, note: "wait for all 6 bases to populate"}

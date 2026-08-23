@@ -7,7 +7,7 @@ Two layers:
 
   * STEPS  — the deliberate actions a human performs and must learn: build,
              train, warp, morph, research, hallucinate, chrono, send_probe/return_probe,
-             rally, rally_and_transfer, plus economy overrides. Each step has a
+             set_rally_point, rally_and_transfer_probes, plus economy overrides. Each step
              trigger and fires once, in order.
   * ECONOMY — automatic behaviour the bot runs on its own unless a step
              overrides it: make probes continuously, never leave a worker idle,
@@ -18,12 +18,12 @@ This file is the thin orchestrator: it holds the run state and the on_step loop,
 and mixes in the behaviour by concern —
 
   * steps.py    (StepsMixin)    — the step engine + every do_<action> handler
-  * economy.py  (EconomyMixin)  — probes / saturation / rally
-  * world.py    (WorldMixin)    — locations, probe selection, prewalk reservation
-  * observe.py  (ObserveMixin)  — run summary, [end]/[done]/[stall] reporting
+  * economy.py  (EconomyMixin)  — probes / saturation
+  * world.py    (WorldMixin)    — locations, rally point, probe selection, prewalk
+  * observe.py  (ObserveMixin)  — run summary, [status]/[complete]/[end] reporting
   * placement.py (Placement)    — building/pylon geometry (held as self.placement)
 
-The YAML spec (triggers, actions, economy) is defined and validated in schema.py.
+The YAML spec (triggers, actions) is defined and validated in schema.py.
 """
 
 from __future__ import annotations
@@ -31,12 +31,16 @@ from __future__ import annotations
 import json
 
 from sc2.bot_ai import BotAI
+from sc2.data import Result
+from sc2.ids.unit_typeid import UnitTypeId
+from sc2.ids.upgrade_id import UpgradeId
+from sc2.position import Point2
 
 from economy import EconomyMixin
-from observe import ObserveMixin
+from observe import STATUS_INTERVAL, ObserveMixin
 from placement import Placement
-from schema import BuildConfig, Step, load_build  # noqa: F401  (load_build re-exported for run.py)
-from state import BuildConfirm, MorphState, Reservation, WarpConfirm
+from schema import BuildConfig, load_build  # noqa: F401  (load_build re-exported for run.py)
+from state import PrewalkState, StepState
 from steps import StepsMixin
 from world import WorldMixin
 
@@ -46,57 +50,58 @@ CONCEDE_GRACE = 10.0
 
 
 class BuildOrderBot(StepsMixin, EconomyMixin, WorldMixin, ObserveMixin, BotAI):
-    def __init__(self, config: BuildConfig, debug: bool = False, dump_data: bool = False):
+    def __init__(self, cfg: BuildConfig, dump_data: bool = False) -> None:
         super().__init__()
-        self.cfg = config
-        self.debug = debug
+        self.cfg = cfg
         self.dump_data = dump_data
-        self.placement = Placement(self)
-        self.steps: list[Step] = config.steps
-        self._done: list[bool] = [False] * len(self.steps)
-        # A step's trigger gates only STARTING it; once fired we commit (`_started`)
-        # and drive it to completion without re-checking the trigger — otherwise a
-        # non-monotonic count trigger (e.g. morph archon gated on HighTemplar:2,
-        # which the morph consumes) would go false mid-flight and strand the step.
-        self._started: list[bool] = [False] * len(self.steps)
-        self.idx = 0
 
-        self.continuous_workers: bool = config.economy.continuous_workers
-        self.minerals_per_base: int = config.economy.minerals_per_base
+        # State related to build progress
+        self.steps_done: int = 0  # Steps run in strict order, so progress is just a count.
+        self.step_state = StepState()
+        self.prewalk_state = PrewalkState()  # Probe rep-walk reservation system state.
+        self.placement = Placement(self)
+
+        # Info tracking build completion
+        self._build_done_at: float | None = None  # game-time the last step finished
+        self._conceded = False
+
+        # Economy management
+        #
+        # Probes are made continuously by default, but this can be toggled in a build order.
+        self.continuously_build_workers: bool = True
+        # The base a returned/idle worker mines. Moved by `rally_and_transfer_probes`.
+        self.populating_base_num: int = 1
+        # TODO (wtipton): gas workers system needs some work:
+        #   (1) build spec should probably specify what base to populate gas on
+        #   (2) need to ensure workers are correctly allocated to assimilators
         self.gas_target: int = 0  # no workers in gas until a `gas_workers` step says so
 
-        self.rally_target = None
-        self._rallied: set[int] = set()  # production buildings given their default exit-clearing rally
+        # Rally system: all combat unit production buildings get rallied to a single
+        # rally point. Defaults to main ramp (set in on_start). `_rallied` is the set of
+        # buildings already pointed at the CURRENT value, cleared when it moves so existing
+        # ones get re-issued.
+        self.rally_point: Point2 | None = None
+        self._rallied: set[int] = set()
+
         # label -> probe tag for probes sent out via `send_probe`. These are held
         # OUT of all worker automation (mining, prewalk, build auto-select) until a
         # `return_probe` step hands them back.
         self.named_probes: dict[str, int] = {}
-        self._named_binds: dict[str, set[int]] = {}  # every probe tag ever bound per label (re-send should reuse one)
-        # The base a returned/idle worker mines at (1 = main, 2 = natural, ...).
-        # `rally_and_transfer` moves it; workers never fall back to random minerals.
-        self.populating_base_num: int = 1
-        self._last_hb = -999
-        self._conceded = False
-        self._build_done_at: float | None = None  # game-time the last step finished
-        self._milestones: dict[str, float] = {}    # exact completion times (deadline checks)
 
-        # stall diagnostics: when the head step (self.idx) got there, when we last
-        # warned about it, and why the current handler is stalled (set by handlers
-        # on a False return; surfaced by the [stall] line).
-        self._head_idx = -1
-        self._head_since = 0.0
-        self._stall_warned = -1e9
-        self._stall_reason = ""
+        # Observability system state. Supports:
+        # - Printing a [status] line every STATUS_INTERVAL
+        # - Tracking when individual buildings, units, and upgrades completed
+        self._last_status = -STATUS_INTERVAL
+        self._completions: dict[tuple[int, UnitTypeId], float] = {}  # Key is unique tag and unit type
+        self._upgrade_completions: dict[UpgradeId, float] = {}  # Values are timestamps
 
-        # Per-step in-flight state (see state.py). Issuing an order != it happening,
-        # so each of these tracks a build/warp/morph until it's confirmed, and the
-        # pre-walk reservation tracks a probe walked to the next build's spot ahead
-        # of time so construction starts the instant we can afford it.
-        self._reservation = Reservation()
-        self._build = BuildConfirm()
-        self._warp = WarpConfirm()
-        self._morph = MorphState()
-        self._active_step: Step | None = None
+        # Why the current step hasn't completed — set by handlers on a False return,
+        # reported every [status] block.
+        # TODO: this is frame-scoped, but it's up to a lot of independent handlers to
+        # maintain this invariant. Do an audit to ensure it can never be stale and then
+        # maybe do something to ensure it stays that way.
+        self._status = ""
+
         # Producer tags already given an order THIS frame — the observation cache
         # doesn't refresh mid-frame, so do_train uses this to spread production
         # across idle producers instead of stacking onto the first one.
@@ -108,21 +113,19 @@ class BuildOrderBot(StepsMixin, EconomyMixin, WorldMixin, ObserveMixin, BotAI):
         # Nexus can still train a probe and chrono in the same frame.
         self._chrono_cast_this_frame: set[int] = set()
 
-    async def on_start(self):
+    async def on_start(self) -> None:
         self.client.game_step = 4
+        # Combat units hold our main ramp until a `set_rally_point` step says otherwise.
+        self.rally_point = self._resolve_place("main_ramp")
         if self.dump_data:
             import gamedata_dump
             gamedata_dump.dump(self)
 
-    async def on_end(self, result):
+    async def on_end(self, result: Result) -> None:
         print(f"[end] t={self.time:.1f}s result={result} supply={self.supply_used} "
-              f"workers={self.workers.amount} idx={self.idx}/{len(self.steps)}", flush=True)
+              f"workers={self.workers.amount} steps={self.steps_done}/{len(self.cfg.steps)}", flush=True)
         print(f"[end] {self._army_report()}", flush=True)
-        # Machine-readable summary as one tagged line on stdout, so a caller can
-        # grep `^[summary] ` and json.loads the rest.
-        # Always emit a parseable [summary] line (eval graders key on it), and never
-        # let a summary bug escape on_end: python-sc2 folds an on_end exception into
-        # the game result, then asserts every result is a Result — crashing the run.
+        # Machine-readable summary
         try:
             summary = self._run_summary(result)
         except Exception as e:
@@ -131,29 +134,26 @@ class BuildOrderBot(StepsMixin, EconomyMixin, WorldMixin, ObserveMixin, BotAI):
             summary = {"name": self.cfg.name, "result": str(result), "error": repr(e)}
         print(f"[summary] {json.dumps(summary)}", flush=True)
 
-    async def on_step(self, iteration: int):
+    async def on_step(self, iteration: int) -> None:
         if not self.townhalls:
             return
         self._issued_this_frame.clear()
         self._chrono_cast_this_frame.clear()
-        if self.debug and self.time - self._last_hb >= 10:
-            self._last_hb = self.time
-            self._heartbeat()
-        self._note_milestones()
+        if self.time - self._last_status >= STATUS_INTERVAL:
+            self._last_status = self.time
+            self._status_report()
+        self._note_completions()
         await self.manage_prebuild()
         await self.make_workers()  # probes first: continuous, first claim on minerals each frame
         await self.run_steps()
-        self._check_stall()
         await self.manage_economy()
         self.apply_rally()
 
-        # The build is the whole job: once every step has fired, keep macroing for
-        # a short grace period, then concede (rather than idling to the game timer).
-        if self.idx >= len(self.steps):
-            if self._build_done_at is None:
-                self._build_done_at = self.time
-                print(f"[run] {self._clock():>4}  build complete", flush=True)
-            elif not self._conceded and self.time - self._build_done_at >= CONCEDE_GRACE:
-                self._conceded = True
-                print(f"[run] {self._clock():>4}  conceding ({int(CONCEDE_GRACE)}s after build)", flush=True)
-                await self.client.leave()
+        # Once every step has fired, keep macroing for a short grace period, then concede.
+        if self.all_steps_done and self._build_done_at is None:
+            self._build_done_at = self.time
+            print(f"[run] {self._clock():>4}  build complete", flush=True)
+        if not self._conceded and self._build_done_at is not None and self.time - self._build_done_at >= CONCEDE_GRACE:
+            self._conceded = True
+            print(f"[run] {self._clock():>4}  conceding ({int(CONCEDE_GRACE)}s after build)", flush=True)
+            await self.client.leave()

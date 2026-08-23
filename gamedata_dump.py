@@ -14,9 +14,15 @@ bot.on_start calls dump(self) when --dump-data is passed.
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
+from sc2.game_data import Cost
 from sc2.ids.ability_id import AbilityId
 from sc2.ids.unit_typeid import UnitTypeId as U
 from sc2.ids.upgrade_id import UpgradeId
+
+if TYPE_CHECKING:
+    from bot import BuildOrderBot
 
 STRUCTURES = ["NEXUS", "PYLON", "ASSIMILATOR", "GATEWAY", "WARPGATE", "CYBERNETICSCORE",
               "FORGE", "TWILIGHTCOUNCIL", "ROBOTICSFACILITY", "STARGATE", "TEMPLARARCHIVE",
@@ -33,11 +39,11 @@ UPGRADES = ["WARPGATERESEARCH", "BLINKTECH", "CHARGE", "PROTOSSGROUNDWEAPONSLEVE
 _FRAMES_PER_SEC = 22.4
 
 
-def _secs(cost) -> float:
+def _secs(cost: Cost) -> float:
     return (cost.time or 0) / _FRAMES_PER_SEC
 
 
-def dump(bot) -> None:
+def dump(bot: BuildOrderBot) -> None:
     """Print the data tables (tab-separated) using the bot's live game_data."""
     gd = bot.game_data
     print("DATA\tNAME\tmin\tgas\tbuild_s\tfood_req\tfood_prov\tmorph(min/gas/s)", flush=True)

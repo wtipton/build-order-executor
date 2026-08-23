@@ -10,16 +10,12 @@
 # Gateways in both, so every `train` step is valid.
 #
 # Step types: build, train, morph (archon), research (Storm), hallucinate, chrono,
-#   send_probe, return_probe, rally, rally_and_transfer, gas_workers, minerals_cap,
+#   send_probe, return_probe, set_rally_point, rally_and_transfer_probes, gas_workers, wait,
 #   workers (stop + start). (warp / morph-warpgate / Warpgate research are version-
 #   specific — omitted; see above.)
 # Trigger types: time, supply, count, minerals, vespene.
 
 name: All Schema Features
-
-economy:
-  continuous_workers: true
-  minerals_per_base: 16
 
 steps:
   - {at: {time: 5},   do: chrono, target: Nexus, note: "trigger:time + step:chrono"}
@@ -34,15 +30,15 @@ steps:
   - {at: {time: 68},  do: build, what: Assimilator, note: "main gas 2"}
   - {at: {count: {Assimilator: 2}}, do: gas_workers, count: 6}
   - {at: {supply: 20}, do: return_probe, label: scout, note: "step:return_probe"}
-  - {at: {count: {Nexus: 2}}, do: rally_and_transfer, base: 2, note: "step:rally_and_transfer"}
+  - {at: {count: {Nexus: 2}}, do: rally_and_transfer_probes, base: 2, note: "step:rally_and_transfer_probes"}
   - {at: {count: {Nexus: 2}}, do: build, what: Assimilator, note: "natural gas 1"}
   - {at: {count: {Nexus: 2}}, do: build, what: Assimilator, note: "natural gas 2"}
   - {at: {count: {Assimilator: 4}}, do: gas_workers, count: 12}
-  - {at: {count: {CyberneticsCore: 1}}, do: rally, where: natural, note: "step:rally"}
+  - {at: {count: {CyberneticsCore: 1}}, do: set_rally_point, where: natural, note: "step:set_rally_point"}
   - {at: {count: {CyberneticsCore: 1}}, do: train, what: Adept, note: "step:train"}
   - {at: {count: {CyberneticsCore: 1}}, do: train, what: Sentry, note: "for hallucinate"}
   - {at: {count: {CyberneticsCore: 1}}, do: build, what: Gateway, note: "2nd gateway"}
-  - {at: {minerals: 350}, do: minerals_cap, count: 18, note: "trigger:minerals + step:minerals_cap"}
+  - {at: {minerals: 350}, do: wait, note: "trigger:minerals + step:wait"}
   - {at: {time: 130}, do: build, what: Pylon}
   - {at: {time: 150}, do: build, what: TwilightCouncil}
   - {at: {count: {TwilightCouncil: 1}}, do: build, what: TemplarArchive}
