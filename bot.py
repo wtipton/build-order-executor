@@ -135,7 +135,7 @@ class BuildOrderBot(StepsMixin, EconomyMixin, WorldMixin, ObserveMixin, BotAI):
             self._status_report()
         self._note_completions()
         await self.manage_prebuild()
-        await self.make_workers()  # probes first: continuous, first claim on minerals each frame
+        await self.train_workers()  # probes first: continuous, first claim on minerals each frame
         await self.run_steps()
         await self.manage_economy()
         self.apply_rally()

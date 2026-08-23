@@ -28,11 +28,15 @@ class FakeUnits(list):
 
     @property
     def ready(self) -> "FakeUnits":
-        return self
+        # Defaults to keeping everything (a MagicMock attribute is truthy), so tests that
+        # don't care are unaffected; set is_ready=False to exclude one. Symmetric with
+        # `.not_ready` because manage_economy reads both off the same collection.
+        return FakeUnits(u for u in self if getattr(u, "is_ready", True))
 
     @property
     def idle(self) -> "FakeUnits":
-        return self
+        # Same defaulting as `.ready`: keeps everything unless a test says otherwise.
+        return FakeUnits(u for u in self if getattr(u, "is_idle", True))
 
     @property
     def amount(self) -> int:
@@ -54,6 +58,16 @@ class FakeUnits(list):
     @property
     def gathering(self) -> "FakeUnits":
         return FakeUnits(u for u in self if u.is_gathering)
+
+    @property
+    def not_ready(self) -> "FakeUnits":
+        """The one filter that can't return self: `.ready` and `.not_ready` are read off
+        the SAME collection in manage_economy, so a test has to be able to say a gas
+        building is still under construction."""
+        return FakeUnits(u for u in self if not getattr(u, "is_ready", True))
+
+    def sorted(self, key, reverse: bool = False) -> "FakeUnits":
+        return FakeUnits(sorted(list(self), key=key, reverse=reverse))
 
     def closest_to(self, pos):
         return min(self, key=lambda u: u.position.distance_to(pos))

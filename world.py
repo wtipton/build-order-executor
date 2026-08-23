@@ -13,6 +13,7 @@ from sc2.ids.ability_id import AbilityId
 from sc2.ids.unit_typeid import UnitTypeId as U
 from sc2.position import Point2
 from sc2.unit import Unit
+from sc2.units import Units
 
 from catalog import unit_id as _unit
 from placement import PRODUCTION
@@ -66,6 +67,17 @@ class WorldMixin:
             if not self.townhalls.closer_than(3.0, e):
                 return e
         return None
+
+    def _ordered_bases(self) -> Units:
+        """Our ready bases, nearest our start first — base 1 is the main, base 2 the
+        natural, and so on. This is the numbering `rally_and_transfer_probes base: N`
+        indexes into and that the [status] line reports.
+
+        Deliberately the SAME ordering as `_expansion_near` / `_next_expansion` above,
+        so the Nth Nexus we own is the one sitting on the base `where: <Nth>` resolves
+        to. Nothing enforces that beyond both sorting by distance from our start.
+        """
+        return self.townhalls.ready.sorted(key=lambda t: t.distance_to(self.start_location))
 
     # =========================================================== named probes
     def _worker_by_tag(self, tag: int | None) -> Unit | None:
