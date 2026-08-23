@@ -97,6 +97,16 @@ class BuildOrderBot(StepsMixin, EconomyMixin, WorldMixin, ObserveMixin, BotAI):
         self._warp = WarpConfirm()
         self._morph = MorphState()
         self._active_step: Step | None = None
+        # Producer tags already given an order THIS frame — the observation cache
+        # doesn't refresh mid-frame, so do_train uses this to spread production
+        # across idle producers instead of stacking onto the first one.
+        self._issued_this_frame: set[int] = set()
+        # Nexus tags that already cast a chrono THIS frame. Same stale-cache problem:
+        # their energy still reads pre-spend, so two chrono steps firing in one frame
+        # would both cast from the same Nexus on 50 energy — one silently no-ops and
+        # both steps get marked done. Tracked separately from _issued_this_frame so a
+        # Nexus can still train a probe and chrono in the same frame.
+        self._chrono_cast_this_frame: set[int] = set()
 
     async def on_start(self):
         self.client.game_step = 4
@@ -124,6 +134,8 @@ class BuildOrderBot(StepsMixin, EconomyMixin, WorldMixin, ObserveMixin, BotAI):
     async def on_step(self, iteration: int):
         if not self.townhalls:
             return
+        self._issued_this_frame.clear()
+        self._chrono_cast_this_frame.clear()
         if self.debug and self.time - self._last_hb >= 10:
             self._last_hb = self.time
             self._heartbeat()

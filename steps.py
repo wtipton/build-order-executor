@@ -145,6 +145,10 @@ class StepsMixin:
             d = f" builder dist={builder.distance_to(pos):.1f}" if (builder and pos is not None) else ""
             print(f"[step*] {self._clock():>4}  issuing {step.what}{d}", flush=True)
 
+        # BotAI.build() defaults to random_alternative=True, which makes find_placement
+        # return random.choice(valid_spots) from an unseeded RNG whenever our own spot
+        # isn't placeable this frame (a probe standing on it, say). That silently
+        # undoes placement.py's deterministic geometry, so pin it off here too.
         if unit == U.ASSIMILATOR:
             chosen = await self._build_gas(builder, target if isinstance(target, Unit) else None)
         elif unit == U.NEXUS:
@@ -154,7 +158,8 @@ class StepsMixin:
                 return False
             chosen = builder or self._free_probe_near(loc)
             if chosen is not None:
-                await self.build(U.NEXUS, near=loc, build_worker=chosen, placement_step=1)
+                await self.build(U.NEXUS, near=loc, build_worker=chosen, placement_step=1,
+                                 random_alternative=False)
         else:
             loc = target if isinstance(target, Point2) else await self._placement_for(step)
             if loc is None:
@@ -162,7 +167,7 @@ class StepsMixin:
                 return False
             chosen = builder or self._free_probe_near(loc)
             if chosen is not None:
-                await self.build(unit, near=loc, build_worker=chosen)
+                await self.build(unit, near=loc, build_worker=chosen, random_alternative=False)
 
         # Remember the committed probe so we wait for it instead of re-issuing.
         if chosen is not None:
@@ -198,7 +203,20 @@ class StepsMixin:
         if not havers:
             self._stall_reason = f"no idle {producer.name if producer else 'producer'}"
             return False  # producer busy — wait for it (correct if the order is right)
-        havers.first.train(unit)
+        # The unit cache doesn't refresh mid-frame, so a producer we just ordered still
+        # reads as idle. Without preferring one we haven't used this frame, a burst of
+        # train steps all stack onto havers.first while its siblings sit empty
+        # (measured: 5 Gateways at queue depths [1,1,2,2,4] instead of [1,1,1,1,1]).
+        # This is a PREFERENCE, not a gate: once every producer has been used this
+        # frame we still issue (queuing on one) rather than stalling. Stalling here
+        # starves the step queue — each train step would then have to wait for a
+        # genuinely idle producer, so everything ordered behind the trains crawls.
+        # Pick by tag, never by list position: the observation's structure order is not
+        # stable between runs, so `.first` made which Gateway got the unit a coin flip.
+        fresh = havers.tags_not_in(self._issued_this_frame)
+        chosen = min(fresh or havers, key=lambda p: p.tag)
+        self._issued_this_frame.add(chosen.tag)
+        chosen.train(unit)
         return True  # issued (producer now busy); the next step proceeds concurrently
 
     async def do_warp(self, step) -> bool:
@@ -297,30 +315,37 @@ class StepsMixin:
         if not casters:
             self._stall_reason = f"no Sentry with {HALLUCINATION_ENERGY} energy"
             return False  # no Sentry with enough energy yet — stall the line
-        casters.first(HALLUCINATION_ABILITY)
+        # By tag, not list position — observation order isn't stable between runs.
+        max(casters, key=lambda c: (c.energy, c.tag))(HALLUCINATION_ABILITY)
         return True
 
     async def do_chrono(self, step) -> bool:
-        # Like every step, a chrono STALLS until it fires: if there's no
-        # Nexus with enough energy, or nothing of the target type is producing yet,
-        # it waits. Builds are precise — place a chrono where it will actually have
-        # energy and something to boost, not as a best-effort sprinkle.
+        # Like every step, a chrono STALLS until it fires: if there's no Nexus with
+        # enough energy, or nothing of the target type exists yet, it waits. Builds are
+        # precise — place a chrono where it will actually have energy and something to
+        # boost, not as a best-effort sprinkle. A chrono step ALWAYS spends a chrono.
         target_type = _unit(step.target)
-        nexuses = self.townhalls(CHRONO_CASTER).ready.filter(lambda n: n.energy >= CHRONO_ENERGY)
+        nexuses = self.townhalls(CHRONO_CASTER).ready.filter(
+            lambda n: n.energy >= CHRONO_ENERGY and n.tag not in self._chrono_cast_this_frame)
         if not nexuses:
             self._stall_reason = f"no Nexus with {CHRONO_ENERGY} energy"
             return False  # no Nexus with enough energy yet — wait
-        if target_type == U.NEXUS:
-            target = next((n for n in self.townhalls(U.NEXUS).ready if n.orders), None)
-            target = target or self.townhalls(U.NEXUS).ready.first
-        else:
-            target = next((s for s in self.structures(target_type).ready if s.orders), None)
-        if target is None:
-            self._stall_reason = f"no {step.target} is producing/researching"
-            return False  # nothing of that type is producing yet — wait
-        if target.has_buff(CHRONO_BUFF):
-            return True  # already boosted — count the action as done
-        nexuses.first(CHRONO_ABILITY, target)
+        pool = (self.townhalls(U.NEXUS) if target_type == U.NEXUS
+                else self.structures(target_type)).ready
+        if not pool:
+            self._stall_reason = f"no {step.target} ready to boost"
+            return False  # nothing of that type exists yet — wait
+        # Rank targets: not-already-boosted first (a second boost on the same building
+        # is wasted), then producing before idle. Tag breaks ties LAST — the
+        # observation's structure order is not stable between runs, so without a fixed
+        # tie-break the same build boosts a different Gateway each run.
+        target = min(pool, key=lambda s: (s.has_buff(CHRONO_BUFF), not s.orders, s.tag))
+        # Spend from the FULLEST Nexus, not whichever happens to be first in the
+        # observation list. Draining the fullest also keeps any one Nexus off the
+        # 200-energy cap, where further regen is thrown away.
+        caster = max(nexuses, key=lambda n: (n.energy, n.tag))
+        self._chrono_cast_this_frame.add(caster.tag)
+        caster(CHRONO_ABILITY, target)
         return True
 
     async def do_send_probe(self, step) -> bool:
