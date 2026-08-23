@@ -39,7 +39,7 @@ docker run --rm -e SC2_TEST_MAP=CatalystLE -v "$PWD":/app build-orders-headless 
 Publish to GitHub Container Registry (replace `<OWNER>` with your GitHub user/org):
 
 ```
-# 1. Log in once (PAT needs the write:packages scope; or `gh auth token`):
+# 1. Log in once (gh auth token --scopes write:packages`) and then:
 echo "$GHCR_TOKEN" | docker login ghcr.io -u <OWNER> --password-stdin
 
 # 2. Tag the local image:
