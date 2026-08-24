@@ -89,7 +89,10 @@ class BuildStep(_StepBase):
     what: str            # structure / expansion (UnitTypeId name, e.g. Pylon, Nexus)
     where: Place | None = None      # where to place it; None = auto (at home). "proxy" builds it near the enemy.
     label: str | None = None        # build with a specific sent probe (see send_probe) instead of auto-selecting
-    prewalk: Trigger | None = None  # when to pre-walk the builder into place (defaults to `at`)
+    # When to pull a probe off the line and walk it to the spot. Default: as soon as we
+    # can afford the building. Set this to send it EARLIER, e.g. {minerals: 300} on a
+    # 400 Nexus so the walk overlaps the saving. Independent of `at`.
+    prewalk: Trigger | None = None
 
     _check = field_validator("what")(staticmethod(catalog.require_structure))
 

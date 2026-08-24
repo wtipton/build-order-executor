@@ -74,25 +74,42 @@ class StepsMixin:
         return True
 
     def _prewalk_due(self, step: Step) -> bool:
-        """Whether to start walking the builder. For a mineral prewalk
-        (`prewalk: {minerals: N}`) we reserve the cost of the probes still needed to
-        reach the build's supply, then check the threshold against what's left —
-        i.e. the minerals we'd have AFTER committing those probes, not minerals
-        that are about to be spent on them. (Probes cost 50 minerals.) Every other
-        trigger form — gas included, since probes cost no gas — needs no such
-        adjustment and goes straight through trigger_met."""
-        trig = getattr(step, "prewalk", None) or step.at
+        """Whether to pull a probe off the mineral line for `step` yet.
+
+        The default is simply "when we can afford the building" — i.e. exactly as if
+        the author had written `prewalk:` with this building's cost. An explicit
+        `prewalk:` overrides it, and is how you ask for the probe EARLIER (`prewalk:
+        {minerals: 300}` on a 400-mineral Nexus sends it 100 short, so the walk
+        overlaps the saving).
+
+        Deliberately NOT keyed off `step.at`: when the builder leaves the mineral line
+        is then a property of the build itself, so reordering steps or retuning a
+        trigger doesn't silently move it.
+
+        For a mineral threshold (the default included) we reserve the cost of the
+        probes still needed to reach the build's supply trigger and check what's left
+        — the minerals we'd have AFTER committing those probes, not money that's about
+        to become probes. Other trigger forms need no adjustment."""
+        trig = getattr(step, "prewalk", None)
+        if trig is None:
+            cost = self.calculate_cost(unit_id(step.what))
+            # gas needs no reservation of its own: probes cost no gas
+            return (self.minerals - self._probe_reserve(step) >= cost.minerals
+                    and self.vespene >= cost.vespene)
         if trig.minerals is None:
             return self.trigger_met(trig)
-        reserved = 0
-        if step.at.supply is not None:
-            # supply_used already counts in-production probes (supply is
-            # reserved the moment training starts), so DON'T also subtract
-            # already_pending — that double-counts the building probe and
-            # fires the pull one supply early.
-            need = step.at.supply - self.supply_used
-            reserved = 50 * max(0, need)
-        return self.minerals - reserved >= trig.minerals
+        return self.minerals - self._probe_reserve(step) >= trig.minerals
+
+    def _probe_reserve(self, step: Step) -> int:
+        """Minerals earmarked for the probes still needed to reach `step.at`'s supply,
+        so a mineral threshold isn't satisfied by money that's already spoken for.
+
+        supply_used already counts in-production probes (supply is reserved the moment
+        training starts), so DON'T also subtract already_pending — that double-counts
+        the building probe and fires the pull one supply early."""
+        if step.at.supply is None:
+            return 0
+        return 50 * max(0, step.at.supply - self.supply_used)
 
     async def run_handler(self, step: Step) -> bool:
         """Run the step's `do_<action>` handler once; True if the step completed."""

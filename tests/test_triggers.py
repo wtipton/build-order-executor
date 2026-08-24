@@ -3,6 +3,8 @@ against a fake `self` (no BotAI, no game)."""
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 from bot import BuildOrderBot
 from schema import Trigger
 
@@ -54,6 +56,7 @@ def test_prewalk_reserves_probe_cost_against_supply_target():
     # `prewalk: {minerals: 100}` needs minerals - 100 >= 100, i.e. >= 200 banked.
     step = fake_bot(prewalk=Trigger(minerals=100), at=Trigger(supply=20))
     fake = fake_bot(minerals=199, vespene=0, supply_used=18)
+    fake._probe_reserve = lambda s: BuildOrderBot._probe_reserve(fake, s)
     assert BuildOrderBot._prewalk_due(fake, step) is False
     fake.minerals = 200
     assert BuildOrderBot._prewalk_due(fake, step) is True
@@ -69,11 +72,38 @@ def test_prewalk_vespene_threshold():
     assert BuildOrderBot._prewalk_due(fake, step) is True
 
 
-def test_prewalk_defaults_to_at_when_non_resource():
-    # no explicit prewalk; `at` is a supply trigger -> falls through to trigger_met
-    step = fake_bot(prewalk=None, at=Trigger(supply=15))
-    fake = fake_bot(supply_used=15)
-    fake.trigger_met = lambda trig: BuildOrderBot.trigger_met(fake, trig)
-    assert BuildOrderBot._prewalk_due(fake, step) is True
-    fake.supply_used = 14
-    assert BuildOrderBot._prewalk_due(fake, step) is False
+def _cost_bot(minerals, vespene, supply_used=0, cost=(150, 100)):
+    fake = fake_bot(minerals=minerals, vespene=vespene, supply_used=supply_used)
+    fake.calculate_cost = lambda unit: SimpleNamespace(minerals=cost[0], vespene=cost[1])
+    fake._probe_reserve = lambda s: BuildOrderBot._probe_reserve(fake, s)
+    return fake
+
+
+def test_prewalk_defaults_to_affording_the_building():
+    # No explicit prewalk: pull the probe exactly when we could pay for the building.
+    # Independent of `at`, so reordering steps doesn't move when the builder leaves.
+    step = fake_bot(prewalk=None, at=Trigger(time=1), what="TwilightCouncil")
+    assert BuildOrderBot._prewalk_due(_cost_bot(149, 100), step) is False
+    assert BuildOrderBot._prewalk_due(_cost_bot(150, 100), step) is True
+
+
+def test_prewalk_default_waits_for_the_gas_too():
+    # a gas-costing building must not pull a probe on minerals alone
+    step = fake_bot(prewalk=None, at=Trigger(time=1), what="TwilightCouncil")
+    assert BuildOrderBot._prewalk_due(_cost_bot(500, 99), step) is False
+    assert BuildOrderBot._prewalk_due(_cost_bot(500, 100), step) is True
+
+
+def test_prewalk_default_still_reserves_probe_cost():
+    # the default is "as if prewalk: {cost}", so it goes through the same reservation:
+    # at supply 20 from 18 = 2 probes = 100 reserved, so a 400 Nexus needs 500 banked
+    step = fake_bot(prewalk=None, at=Trigger(supply=20), what="Nexus")
+    assert BuildOrderBot._prewalk_due(_cost_bot(499, 0, supply_used=18, cost=(400, 0)), step) is False
+    assert BuildOrderBot._prewalk_due(_cost_bot(500, 0, supply_used=18, cost=(400, 0)), step) is True
+
+
+def test_explicit_prewalk_overrides_the_cost_default():
+    # the whole point of `prewalk:` — pull EARLIER than affording it (300 < 400)
+    step = fake_bot(prewalk=Trigger(minerals=300), at=Trigger(time=1), what="Nexus")
+    fake = _cost_bot(300, 0, cost=(400, 0))
+    assert BuildOrderBot._prewalk_due(fake, step) is True, "should not wait for the full cost"
