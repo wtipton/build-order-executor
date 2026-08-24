@@ -34,8 +34,7 @@ Every line is tagged. Always-on (the report a build reads back):
 | `[run]` | lifecycle: build loaded, output legend, build complete, conceding, replay/summary paths |
 | `[step]` | a build step fired, with clock + supply, e.g. `[step] 1:54  sup19  build what=Nexus` |
 | `[complete]` | every unit/structure completion with a running per-type count, e.g. `[complete] 4:19  Gateway #3`, plus each upgrade, e.g. `[complete] 5:19  Warpgate`. Exact to the frame — use these for deadlines, not `[status]`. Probes are skipped (worker count is on every `[status]` line) |
-| `[prewalk]` | a probe was reserved and walked to a future build's spot ahead of time |
-| `[builder]` | a build was issued: which probe got it, how that probe was picked (`prewalk`/`label:x`/`auto`), and how far it still has to walk |
+| `[builder]` | the lifecycle of the one probe pulled off the mineral line for a build: `assigned` when it's pulled and starts walking (early, if the step has a `prewalk:` trigger), then `building` when the order goes in. `dist=` is how far it still is from the spot — near-zero on the `building` line means the walk was overlapped with saving up, a big number means it was on the critical path. At most one probe is assigned this way at a time |
 | `[status]` | every 10 game-seconds, two lines: economy snapshot; the current step with how long it's been current and what it's waiting on |
 | `[end]` | final state + army report |
 

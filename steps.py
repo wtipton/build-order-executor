@@ -1,5 +1,5 @@
 """The step executor for BuildOrderBot: the strict-order engine (trigger gating,
-confirm/stall, prewalk hand-off) and every `do_<action>` handler.
+confirm/stall, builder hand-off) and every `do_<action>` handler.
 
 `StepsMixin` is mixed into `BuildOrderBot` (see bot.py); its methods run on the
 live bot via `self` and lean on the other mixins' helpers (`_free_probe_near`,
@@ -10,7 +10,6 @@ from __future__ import annotations
 
 from sc2.ids.ability_id import AbilityId
 from sc2.ids.unit_typeid import UnitTypeId as U
-from sc2.position import Point2
 from sc2.unit import Unit
 from sc2.units import Units
 
@@ -103,92 +102,60 @@ class StepsMixin:
 
     # ----------------------------------------------------------- step handlers
     async def do_build(self, step: Step) -> bool:
+        """Drive `builder_state` for this step: get a probe assigned, issue the build once,
+        then hold until the structure actually appears. Picks neither the probe nor the
+        spot itself — `_assign_builder` owns both, for every build."""
         unit = unit_id(step.what)
+        bs = self.builder_state
 
         # A build isn't "done" when the command is issued — the probe may walk a
         # long way, and a probe over the tile can block placement so the order is
         # dropped. Confirm the structure actually appears: the type's count grows
         # past the baseline captured on our first frame on this step.
-        if self.step_state.build.baseline is None:
-            self.step_state.build.baseline = self.structures(unit).amount
+        if bs.baseline is None:
+            bs.baseline = self.structures(unit).amount
 
-        if self.structures(unit).amount > self.step_state.build.baseline:
-            self.prewalk_state.clear()  # outlives the step, so release it explicitly
+        if self.structures(unit).amount > bs.baseline:
+            bs.clear()  # spans steps, so release the probe explicitly
             return True
 
         if not self.can_afford(unit):
             self._status = f"can't afford {step.what}"
             return False  # save for it, stalling the line
 
-        # Don't re-issue while the probe we already sent is still carrying out the
-        # build (walking to the spot — possibly across the map — or placing it);
-        # re-issue only once it's died or dropped the order without a structure
-        # appearing. Re-issuing every frame during a long walk spawned duplicate
-        # builds in the wrong place and spurious structures that falsely satisfied
-        # the (type-wide) count confirm.
-        previous_builder = self._worker_by_tag(self.step_state.build.builder_tag)
-        if previous_builder is not None and not (previous_builder.is_idle or previous_builder.is_gathering):
-            self._status = f"{step.what} under construction"
+        # Usually already assigned and walking (manage_builder ran first, possibly many
+        # frames ago); assigning here covers a step that became current after it ran.
+        if not await self._assign_builder(step):
+            return False  # _assign_builder said why in _status
+
+        builder = self._worker_by_tag(bs.builder_tag)
+        if bs.issued:
+            # Don't re-issue while the probe is still carrying out the build (walking to
+            # the spot — possibly across the map — or placing it); re-issue only once it
+            # has died or dropped the order without a structure appearing. Re-issuing
+            # every frame during a long walk spawned duplicate builds in the wrong place,
+            # and spurious structures that falsely satisfied the (type-wide) confirm.
+            if builder is not None and not (builder.is_idle or builder.is_gathering):
+                self._status = f"{step.what} under construction"
+                return False
+            bs.issued = False  # it fell through — re-issue below, to whoever we have now
+        if builder is None:
+            bs.clear()  # the assigned probe died; manage_builder assigns a new one
+            self._status = f"builder for {step.what} died"
             return False
 
-        # The probe to build with: one reserved for this step — an explicitly sent probe
-        # (step.label) or a pre-walked one, along with the spot it was walked to — else
-        # auto-selected from the free pool below, never a sent probe. `origin` records
-        # which of the three it ended up being, for the [builder] line.
-        reserved_builder, reserved_spot, origin = None, None, "auto"
-        label = getattr(step, "label", None)
-        if label is not None:
-            reserved_builder = self._worker_by_label(label)
-            origin = f"label:{label}"
-        elif self.prewalk_state.for_step is step:
-            # the prewalk already walked this probe to the build's spot
-            reserved_builder = self._worker_by_tag(self.prewalk_state.builder_tag)
-            reserved_spot = self.prewalk_state.target
-            origin = "prewalk"
-        if reserved_builder is None:
-            origin = "auto"  # nothing reserved, or the reserved probe died -> free pool
-
-        # Where it goes: the spot the prewalk already walked a probe to, else decided now.
-        # Both come from _find_build_target, so the type already matches what this build
-        # needs — the geyser Unit for an Assimilator, a Point2 for everything else.
-        spot = reserved_spot if reserved_spot is not None else await self._find_build_target(step)
-        if spot is None:
-            # keep the finder's own account of why it came up empty, if it left one
-            self._status = self._status or f"no placement for {step.what}"
-            return False
-
-        builder = reserved_builder or self._free_probe_near(spot.position)
-        if builder is not None:
-            if unit == U.ASSIMILATOR:
-                builder.build_gas(spot)
-            elif unit == U.NEXUS:
-                # placement_step=1: search every tile, so an expansion lands on the base's
-                # exact location rather than the default 2-tile grid's approximation of it.
-                await self.build(unit, near=spot, build_worker=builder, placement_step=1,
-                                 random_alternative=False)
-            else:
-                await self.build(unit, near=spot, build_worker=builder, random_alternative=False)
-
-        # Remember the probe we just committed so we wait for it instead of re-issuing.
-        if builder is not None:
-            self.step_state.build.builder_tag = builder.tag
-        self._log_builder(step, origin, builder, spot)
+        if unit == U.ASSIMILATOR:
+            builder.build_gas(bs.spot)
+        elif unit == U.NEXUS:
+            # placement_step=1: search every tile, so an expansion lands on the base's
+            # exact location rather than the default 2-tile grid's approximation of it.
+            await self.build(unit, near=bs.spot, build_worker=builder, placement_step=1,
+                             random_alternative=False)
+        else:
+            await self.build(unit, near=bs.spot, build_worker=builder, random_alternative=False)
+        bs.issued = True
+        self._log_builder("building", step, builder)
         return False  # issued; stall the line until the structure appears (confirm)
-
-    def _log_builder(self, step: Step, origin: str, builder: Unit | None,
-                     spot: Unit | Point2 | None) -> None:
-        """One `[builder]` line per build issued: what, where, which probe got it and how
-        that probe was picked, plus how far it still has to walk.
-
-        The prewalk hand-off is the subtlest machinery in the bot — reserve a probe for a
-        future step, walk it across the map, hand it to do_build without re-issuing — and
-        this is the only window into which probe actually got the job. Unconditional: a
-        build issues ~30 times a game, and needing a flag means re-running to diagnose."""
-        where = getattr(step, "where", None)
-        pos = spot.position if spot is not None else None
-        dist = f" dist={builder.distance_to(pos):.1f}" if (builder is not None and pos is not None) else ""
-        print(f"[builder] {self._clock():>4}  {step.what}{'/' + where if where else ''}"
-              f" <- probe {builder.tag if builder else None} ({origin}){dist}", flush=True)
 
     async def do_train(self, step: Step) -> bool:
         unit = unit_id(step.what)

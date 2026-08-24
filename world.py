@@ -1,6 +1,7 @@
 """Map/world helpers for BuildOrderBot: named-location resolution, expansion
-ordering, probe selection, the combat-unit rally point, and the pre-walk builder
-reservation + placement dispatch.
+ordering, probe selection, the combat-unit rally point, and builder assignment
+(including the pre-walk) + placement dispatch. The `[builder]` lines its
+transitions print live in observe.py with the rest of the reporting.
 
 `WorldMixin` is mixed into `BuildOrderBot` (see bot.py); its methods run on the
 live bot via `self`. The building/pylon geometry itself lives in placement.py
@@ -106,8 +107,8 @@ class WorldMixin:
         those sent out by `send_probe` (held until a `return_probe`), plus the one walking
         to the next build site. Everything else is fair game for the economy."""
         tags = set(self.labelled_probes.values())
-        if self.prewalk_state.builder_tag is not None:
-            tags.add(self.prewalk_state.builder_tag)
+        if self.builder_state.builder_tag is not None:
+            tags.add(self.builder_state.builder_tag)
         return tags
 
     def _free_probe_near(self, pos: Point2) -> Unit | None:
@@ -160,55 +161,74 @@ class WorldMixin:
                 self._rallied.add(b.tag)
                 b(AbilityId.RALLY_BUILDING, self.rally_point)
 
-    # ========================================================= pre-walk builder
-    async def manage_prebuild(self) -> None:
-        """Reserve a probe for the next build step and walk it to the placement
-        ahead of time, so `do_build` can start construction the instant we can
-        afford it. WHEN to start walking is config-driven (the step's `prewalk`
-        trigger, defaulting to its `at` trigger) — the bot does no estimating."""
+    # ========================================================= builder assignment
+    async def manage_builder(self) -> None:
+        """Own `builder_state`'s lifecycle, once per frame: retire a reservation we've
+        moved past, keep the assigned probe on task, and — this is the pre-walk —
+        assign the NEXT build's probe early so it's already standing on the spot when
+        the build becomes affordable.
+
+        WHEN to pull the probe is config-driven (the step's `prewalk` trigger,
+        defaulting to its `at`) — the bot does no estimating. Assignment itself is
+        `_assign_builder`, which do_build also calls, so a build whose step became
+        current after this ran doesn't lose a frame waiting for us."""
         step = self._find_next_build_step()
-        if self.prewalk_state.for_step is not None and self.prewalk_state.for_step is not step:
-            self.prewalk_state.clear()  # reserved for a build we've moved past
-        if step is None or not self._prewalk_due(step):
-            return
-        # a labelled build brings its own (explicitly sent) probe — no prewalk
-        if getattr(step, "label", None) is not None:
+        if self.builder_state.for_step is not None and self.builder_state.for_step is not step:
+            self.builder_state.clear()  # assigned for a build we've moved past
+        if step is None:
             return
 
-        if self.prewalk_state.for_step is step:
-            # already reserved for this build — nudge the probe back if it drifted or
-            # stopped short, and drop the reservation if it died
-            w = self._worker_by_tag(self.prewalk_state.builder_tag)
-            if w is None:
-                self.prewalk_state.clear()
+        if self.builder_state.for_step is step:
+            if self.builder_state.issued:
+                return  # do_build owns it from here — it handles a dead builder itself
+            # keep it heading for the spot: drop a dead probe (a fresh one gets
+            # assigned next frame) and re-issue if it drifted or stopped short
+            worker = self._worker_by_tag(self.builder_state.builder_tag)
+            if worker is None:
+                self.builder_state.clear()
                 return
             # TODO: a little suspicious that we don't need this nudge behavior
-            target = self.prewalk_state.target
-            if w.is_idle and w.distance_to(target) > 1:
-                w.move(target)
+            spot = self.builder_state.spot
+            if worker.is_idle and worker.distance_to(spot) > 1:
+                worker.move(spot)
             return
 
-        # do_build may have already issued this build itself (its trigger fired
-        # before prewalk got to reserve). A probe is then en route with the build
-        # order, which for Protoss is what already_pending() counts — don't reserve
-        # a SECOND probe on top of it.
-        if self.already_pending(unit_id(step.what)):
-            return
+        if self._prewalk_due(step):
+            await self._assign_builder(step)
 
-        target = await self._find_build_target(step)
-        if target is None:
-            return  # can't determine placement yet (e.g. no pylon) — retry later
-        pos = target.position  # Point2.position is itself, so this covers both
-        worker = self._free_probe_near(pos)
+    async def _assign_builder(self, step: Step) -> bool:
+        """Make `builder_state` ready to build `step`: pick the spot, pull a probe off the
+        line, start it walking. True once assigned.
+
+        The single place a builder is chosen, for every build — called early by
+        manage_builder (the pre-walk) and inline by do_build when the step came due
+        before manage_builder saw it. Idempotent: already assigned for `step` is True
+        with nothing done. False means not yet possible (no placement, no free probe)
+        and `_status` says which, so the caller can just stall."""
+        if self.builder_state.for_step is step and self.builder_state.builder_tag is not None:
+            return True
+        spot = await self._find_build_target(step)
+        if spot is None:
+            return False  # _find_build_target set _status where it can explain itself
+        pos = spot.position  # Point2.position is itself, so this covers both
+        # A labelled build names its own probe (already off the line via send_probe).
+        # If that probe is dead we fall back to the pool rather than stalling: losing the
+        # author's choice of probe is bad, hanging the whole build order over it is worse.
+        label = getattr(step, "label", None)
+        worker = self._worker_by_label(label) if label is not None else None
+        origin = f"label:{label}" if worker is not None else "pool"
         if worker is None:
-            return
-        self.prewalk_state.for_step = step
-        self.prewalk_state.builder_tag = worker.tag
-        self.prewalk_state.target = target
+            worker = self._free_probe_near(pos)
+        if worker is None:
+            self._status = "no free probe to build with"
+            return False
+        self.builder_state.for_step = step
+        self.builder_state.builder_tag = worker.tag
+        self.builder_state.spot = spot
         worker.move(pos)
-        print(f"[prewalk] {self._clock():>4}  sup{self.supply_used} min={self.minerals} "
-              f"reserved probe {worker.tag} for {step.what} @ ({pos.x:.0f},{pos.y:.0f}) "
-              f"(build at {step.at})", flush=True)
+        self._log_builder("assigned", step, worker,
+                          f"@ ({pos.x:.0f},{pos.y:.0f})  {origin}; build at {step.at}")
+        return True
 
     def _find_next_build_step(self) -> Step | None:
         """The next `build` step worth pre-walking a probe for, or None if something that

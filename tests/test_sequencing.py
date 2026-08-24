@@ -97,9 +97,8 @@ async def test_step_state_is_reset_on_advance():
     seen = []
 
     async def run_handler(step):
-        seen.append((step, fake.step_state.build.baseline, fake.step_state.morph.target))
-        fake.step_state.build.baseline = 7      # pretend this step went in flight
-        fake.step_state.build.builder_tag = 42
+        seen.append((step, fake.step_state.warp.baseline, fake.step_state.morph.target))
+        fake.step_state.warp.baseline = 7       # pretend this step went in flight
         fake.step_state.morph.target = 3
         return True
 

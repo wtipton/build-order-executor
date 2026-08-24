@@ -93,7 +93,7 @@ from bot import BuildOrderBot, load_build  # noqa: E402
 OUTPUT_LEGEND = ("[run] output: [step]=step fired  [complete]=type first finished  "
                  "[status]=periodic economy + current-step snapshot  [end]=final  "
                  "[summary]=machine-readable JSON  "
-                 "[prewalk]/[builder]=which probe was reserved/dispatched for each build")
+                 "[builder]=a probe pulled off the line for a build: assigned (walking there) then building (order in, dist= how far it still had to walk)")
 
 
 class PassiveBot(BotAI):

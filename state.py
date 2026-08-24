@@ -9,10 +9,9 @@ Two lifetimes:
     In all of these, a `baseline` of None means "not captured yet this step". That
     how a handler knows it's on its first frame and should initialize the state.
 
-  * PrewalkState — deliberately NOT per-step: the pre-walk reserves a probe for a
-    FUTURE build step and walks it there while other steps fire, so it must survive
-    step transitions. It has its own lifecycle (WorldMixin.manage_prebuild clears it
-    when the build it was reserved for changes).
+  * BuilderState — deliberately NOT per-step: it assigns a probe to a build step that
+    may not be current yet and walks it there while other steps fire, so it must
+    survive step transitions. WorldMixin.manage_builder owns its lifecycle.
 """
 
 from __future__ import annotations
@@ -21,14 +20,6 @@ from dataclasses import dataclass, field
 from sc2.position import Point2
 from sc2.unit import Unit
 from schema import Step
-
-
-@dataclass
-class BuildConfirm:
-    """The count baseline to confirm a newly-built structure and the probe committed
-       to it (so a long walk isn't re-issued as a duplicate build."""
-    baseline: int | None = None      # structure count when the step started; None = not yet captured
-    builder_tag: int | None = None   # the probe committed to this build
 
 
 @dataclass
@@ -58,7 +49,6 @@ class StepState:
     # Game-time this became the current step.
     started_at: float = 0.0
     
-    build: BuildConfirm = field(default_factory=BuildConfirm)
     warp: WarpConfirm = field(default_factory=WarpConfirm)
     morph: MorphState = field(default_factory=MorphState)
 
@@ -67,21 +57,35 @@ class StepState:
         `now` stamps when the incoming step became current."""
         self.trigger_fired = False
         self.started_at = now
-        self.build = BuildConfirm()
         self.warp = WarpConfirm()
         self.morph = MorphState()
 
 
 @dataclass
-class PrewalkState:
-    """A probe pre-walked to a future build's spot, so construction can start the
-    instant we can afford it. Spans steps by design."""
+class BuilderState:
+    """The one probe this system has pulled off the mineral line, and the build step it
+    was pulled for.
 
-    for_step: Step | None = None     # the (future) build step this probe is reserved for
-    builder_tag: int | None = None
-    target: Point2 | Unit | None = None  # placement point, or the geyser for gas
+    Spans frames AND steps by design: a probe is assigned to a build step that may not
+    be current yet, walks to the spot while intervening steps fire, is handed to
+    do_build, and is held until the structure appears. `manage_builder` owns the
+    lifecycle; the reservation dies when the step it was made for is no longer the next
+    build (i.e. at the first train/warp/research step), or when the build completes.
+
+    The invariant, which is also the contract with the build author: AT MOST ONE probe
+    is off the mineral line for building at any time. A probe that has to be held
+    longer, or for something other than building, is the author's job — send_probe.
+    """
+
+    for_step: Step | None = None        # the build step this probe belongs to
+    builder_tag: int | None = None      # the probe, once one has been assigned
+    spot: Point2 | Unit | None = None   # placement point, or the geyser for gas
+    issued: bool = False                # do_build has given it the build order
+    baseline: int | None = None         # structure count when the step started
 
     def clear(self) -> None:
         self.for_step = None
         self.builder_tag = None
-        self.target = None
+        self.spot = None
+        self.issued = False
+        self.baseline = None

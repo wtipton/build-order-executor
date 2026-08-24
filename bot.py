@@ -19,7 +19,7 @@ and mixes in the behaviour by concern —
 
   * steps.py    (StepsMixin)    — the step engine + every do_<action> handler
   * economy.py  (EconomyMixin)  — probes / saturation
-  * world.py    (WorldMixin)    — locations, rally point, probe selection, prewalk
+  * world.py    (WorldMixin)    — locations, rally point, builder assignment
   * observe.py  (ObserveMixin)  — run summary, [status]/[complete]/[end] reporting
   * placement.py (Placement)    — building/pylon geometry (held as self.placement)
 
@@ -41,7 +41,7 @@ from observe import STATUS_INTERVAL, ObserveMixin
 from placement import Placement
 from scheduler import Scheduler
 from schema import BuildConfig, load_build  # noqa: F401  (load_build re-exported for run.py)
-from state import PrewalkState, StepState
+from state import BuilderState, StepState
 from steps import StepsMixin
 from world import WorldMixin
 
@@ -59,7 +59,7 @@ class BuildOrderBot(StepsMixin, EconomyMixin, WorldMixin, ObserveMixin, BotAI):
         # State related to build progress
         self.steps_done: int = 0  # Steps run in strict order, so progress is just a count.
         self.step_state = StepState()
-        self.prewalk_state = PrewalkState()  # Probe rep-walk reservation system state.
+        self.builder_state = BuilderState()  # The one probe pulled off the line to build; see state.py.
         self.placement = Placement(self)
         self.scheduler = Scheduler(self)
 
@@ -86,7 +86,7 @@ class BuildOrderBot(StepsMixin, EconomyMixin, WorldMixin, ObserveMixin, BotAI):
         self._rallied: set[int] = set()
 
         # label -> probe tag for probes sent out via `send_probe`. These are held
-        # OUT of all worker automation (mining, prewalk, build auto-select) until a
+        # OUT of all worker automation (mining, and being pulled to build) until a
         # `return_probe` step hands them back.
         self.labelled_probes: dict[str, int] = {}
 
@@ -139,7 +139,7 @@ class BuildOrderBot(StepsMixin, EconomyMixin, WorldMixin, ObserveMixin, BotAI):
             self._last_status = self.time
             self._status_report()
         self._note_completions()
-        await self.manage_prebuild()
+        await self.manage_builder()
         await self.train_workers()  # probes first: continuous, first claim on minerals each frame
         await self.run_steps()
         await self.manage_economy()

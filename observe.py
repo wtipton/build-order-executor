@@ -1,5 +1,5 @@
 """Observability for BuildOrderBot: the machine-readable run summary, the human
-`[status]`/`[complete]`/`[end]` reporting, and step/trigger formatting.
+`[status]`/`[complete]`/`[builder]`/`[end]` reporting, and step/trigger formatting.
 
 `ObserveMixin` is mixed into `BuildOrderBot` (see bot.py) — its methods run on the
 live bot via `self`, so they read game state (`self.time`, `self.structures`, …)
@@ -14,6 +14,7 @@ from typing import get_args
 from sc2.data import Result
 from sc2.ids.unit_typeid import UnitTypeId as U
 from sc2.ids.upgrade_id import UpgradeId
+from sc2.unit import Unit
 
 from catalog import (
     BUILDABLE_STRUCTURES,
@@ -164,6 +165,27 @@ class ObserveMixin:
             why = self._status or "issued; waiting to confirm"
         return (f"step {self.steps_done}/{len(self.cfg.steps)}  {step}"
                 f"  ({age}s)  {why}")
+
+    def _log_builder(self, state: str, step: Step, probe: Unit, detail: str = "") -> None:
+        """One `[builder]` line per transition of `builder_state` (world.py owns the state
+        itself), so a pulled probe's whole lifecycle is greppable under one tag:
+
+            [builder]  0:42  probe 4342 assigned  Pylon  dist=21.7  sup13 min=88  @ (34,118)  pool; build at supply>=14
+            [builder]  0:51  probe 4342 building  Pylon  dist=0.3  sup14 min=104
+
+        `dist` means the same thing on both lines — how far this probe still is from the
+        spot — which is exactly what makes the pair readable: big on `assigned` (we just
+        pulled it), near zero on `building` means the walk was overlapped with saving up.
+        A big number on `building` means we paid for the walk on the critical path.
+
+        Unconditional: a build issues ~30 times a game, and needing a flag to see which
+        probe did what means re-running to diagnose."""
+        where = getattr(step, "where", None)
+        print(f"[builder] {self._clock():>4}  probe {probe.tag} {state}  "
+              f"{step.what}{'/' + where if where else ''}  "
+              f"dist={probe.distance_to(self.builder_state.spot.position):.1f}  "
+              f"sup{self.supply_used} min={self.minerals}"
+              f"{'  ' + detail if detail else ''}", flush=True)
 
     def _base_saturation(self) -> str:
         return " ".join(f"b{i+1}={t.assigned_harvesters}/{FULL_MINERAL_SATURATION}"
