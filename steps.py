@@ -53,7 +53,7 @@ class StepsMixin:
                 if not self.trigger_met(step.at):
                     return  # not due yet — this step (and everything after) waits
                 self.step_state.trigger_fired = True  # commit; a non-monotonic trigger must not un-fire it
-            if not await self.execute(step):
+            if not await self.run_handler(step):
                 return  # stall the line until this step can be done (strict order)
             note = f"  # {step.note}" if step.note else ""
             print(f"[step] {self._clock():>4}  sup{self.supply_used:<3} {step}{note}", flush=True)
@@ -75,30 +75,28 @@ class StepsMixin:
         return True
 
     def _prewalk_due(self, step: Step) -> bool:
-        """Whether to start walking the builder. For a resource-based prewalk
-        ({minerals}/{vespene}) we reserve the cost of the probes still needed to
+        """Whether to start walking the builder. For a mineral prewalk
+        (`prewalk: {minerals: N}`) we reserve the cost of the probes still needed to
         reach the build's supply, then check the threshold against what's left —
         i.e. the minerals we'd have AFTER committing those probes, not minerals
-        that are about to be spent on them. (Probes cost 50 minerals / 0 gas.)
-        Other trigger forms use trigger_met directly."""
+        that are about to be spent on them. (Probes cost 50 minerals.) Every other
+        trigger form — gas included, since probes cost no gas — needs no such
+        adjustment and goes straight through trigger_met."""
         trig = getattr(step, "prewalk", None) or step.at
-        if trig.minerals is not None or trig.vespene is not None:
-            reserved = 0
-            if step.at.supply is not None:
-                # supply_used already counts in-production probes (supply is
-                # reserved the moment training starts), so DON'T also subtract
-                # already_pending — that double-counts the building probe and
-                # fires the pull one supply early.
-                need = step.at.supply - self.supply_used
-                reserved = 50 * max(0, need)
-            if trig.minerals is not None and self.minerals - reserved < trig.minerals:
-                return False
-            if trig.vespene is not None and self.vespene < trig.vespene:
-                return False
-            return True
-        return self.trigger_met(trig)
+        if trig.minerals is None:
+            return self.trigger_met(trig)
+        reserved = 0
+        if step.at.supply is not None:
+            # supply_used already counts in-production probes (supply is
+            # reserved the moment training starts), so DON'T also subtract
+            # already_pending — that double-counts the building probe and
+            # fires the pull one supply early.
+            need = step.at.supply - self.supply_used
+            reserved = 50 * max(0, need)
+        return self.minerals - reserved >= trig.minerals
 
-    async def execute(self, step: Step) -> bool:
+    async def run_handler(self, step: Step) -> bool:
+        """Run the step's `do_<action>` handler once; True if the step completed."""
         self._status = ""  # handlers set this when they return False; shown by [status]
         handler = getattr(self, f"do_{step.do}")
         return await handler(step)
@@ -128,59 +126,57 @@ class StepsMixin:
         # appearing. Re-issuing every frame during a long walk spawned duplicate
         # builds in the wrong place and spurious structures that falsely satisfied
         # the (type-wide) count confirm.
-        builder = self._worker_by_tag(self.step_state.build.builder_tag)
-        if builder is not None and not (builder.is_idle or builder.is_gathering):
+        previous_builder = self._worker_by_tag(self.step_state.build.builder_tag)
+        if previous_builder is not None and not (previous_builder.is_idle or previous_builder.is_gathering):
             self._status = f"{step.what} under construction"
             return False
 
-        # Builder: an explicitly sent probe (step.label), else the pre-walked probe,
-        # else auto-selected from the free pool — never a sent probe.
+        # The probe to build with: one reserved for this step — an explicitly sent probe
+        # (step.label) or a pre-walked one, along with the spot it was walked to — else
+        # auto-selected from the free pool below, never a sent probe. `origin` records
+        # which of the three it ended up being, for the [builder] line.
+        reserved_builder, reserved_spot, origin = None, None, "auto"
         label = getattr(step, "label", None)
         if label is not None:
-            builder = self._worker_by_label(label)  # may be None if it died -> auto-select
-            target = None
-        else:
-            prewalked = self.prewalk_state.for_step is step
-            # the probe prewalk already walked to this build's spot, if any
-            builder = self._worker_by_tag(self.prewalk_state.builder_tag) if prewalked else None
-            target = self.prewalk_state.target if prewalked else None
-        # how the builder was picked, for the [builder] line (None here => auto-selected below)
-        origin = "auto" if builder is None else (f"label:{label}" if label is not None else "prewalk")
+            reserved_builder = self._worker_by_label(label)
+            origin = f"label:{label}"
+        elif self.prewalk_state.for_step is step:
+            # the prewalk already walked this probe to the build's spot
+            reserved_builder = self._worker_by_tag(self.prewalk_state.builder_tag)
+            reserved_spot = self.prewalk_state.target
+            origin = "prewalk"
+        if reserved_builder is None:
+            origin = "auto"  # nothing reserved, or the reserved probe died -> free pool
 
-        # BotAI.build() defaults to random_alternative=True, which makes find_placement
-        # return random.choice(valid_spots) from an unseeded RNG whenever our own spot
-        # isn't placeable this frame (a probe standing on it, say). That silently
-        # undoes placement.py's deterministic geometry, so pin it off here too.
-        if unit == U.ASSIMILATOR:
-            dest = target if isinstance(target, Unit) else None  # the geyser, if one was reserved
-            chosen = await self._build_gas(builder, dest)
-        elif unit == U.NEXUS:
-            loc = target if isinstance(target, Point2) else self._find_next_expansion()
-            if loc is None:
-                self._status = "no expansion location"
-                return False
-            dest = loc
-            chosen = builder or self._free_probe_near(loc)
-            if chosen is not None:
-                await self.build(U.NEXUS, near=loc, build_worker=chosen, placement_step=1,
+        # Where it goes: the spot the prewalk already walked a probe to, else decided now.
+        # Both come from _find_build_target, so the type already matches what this build
+        # needs — the geyser Unit for an Assimilator, a Point2 for everything else.
+        spot = reserved_spot if reserved_spot is not None else await self._find_build_target(step)
+        if spot is None:
+            # keep the finder's own account of why it came up empty, if it left one
+            self._status = self._status or f"no placement for {step.what}"
+            return False
+
+        builder = reserved_builder or self._free_probe_near(spot.position)
+        if builder is not None:
+            if unit == U.ASSIMILATOR:
+                builder.build_gas(spot)
+            elif unit == U.NEXUS:
+                # placement_step=1: search every tile, so an expansion lands on the base's
+                # exact location rather than the default 2-tile grid's approximation of it.
+                await self.build(unit, near=spot, build_worker=builder, placement_step=1,
                                  random_alternative=False)
-        else:
-            loc = target if isinstance(target, Point2) else await self._find_build_target(step)
-            if loc is None:
-                self._status = f"no placement for {step.what}"
-                return False
-            dest = loc
-            chosen = builder or self._free_probe_near(loc)
-            if chosen is not None:
-                await self.build(unit, near=loc, build_worker=chosen, random_alternative=False)
+            else:
+                await self.build(unit, near=spot, build_worker=builder, random_alternative=False)
 
-        # Remember the committed probe so we wait for it instead of re-issuing.
-        if chosen is not None:
-            self.step_state.build.builder_tag = chosen.tag
-        self._log_builder(step, origin, chosen, dest)
+        # Remember the probe we just committed so we wait for it instead of re-issuing.
+        if builder is not None:
+            self.step_state.build.builder_tag = builder.tag
+        self._log_builder(step, origin, builder, spot)
         return False  # issued; stall the line until the structure appears (confirm)
 
-    def _log_builder(self, step: Step, origin: str, chosen: Unit | None, dest) -> None:
+    def _log_builder(self, step: Step, origin: str, builder: Unit | None,
+                     spot: Unit | Point2 | None) -> None:
         """One `[builder]` line per build issued: what, where, which probe got it and how
         that probe was picked, plus how far it still has to walk.
 
@@ -189,22 +185,10 @@ class StepsMixin:
         this is the only window into which probe actually got the job. Unconditional: a
         build issues ~30 times a game, and needing a flag means re-running to diagnose."""
         where = getattr(step, "where", None)
-        pos = dest.position if dest is not None else None
-        dist = f" dist={chosen.distance_to(pos):.1f}" if (chosen is not None and pos is not None) else ""
+        pos = spot.position if spot is not None else None
+        dist = f" dist={builder.distance_to(pos):.1f}" if (builder is not None and pos is not None) else ""
         print(f"[builder] {self._clock():>4}  {step.what}{'/' + where if where else ''}"
-              f" <- probe {chosen.tag if chosen else None} ({origin}){dist}", flush=True)
-
-    async def _build_gas(self, builder: Unit | None = None, geyser: Unit | None = None) -> Unit | None:
-        """Issue an Assimilator on a free geyser; returns the worker used (or None)."""
-        if geyser is None:
-            geyser = self._find_free_geyser()
-        if geyser is None:
-            return None
-        worker = builder or self._free_probe_near(geyser.position)
-        if worker is None:
-            return None
-        worker.build_gas(geyser)
-        return worker
+              f" <- probe {builder.tag if builder else None} ({origin}){dist}", flush=True)
 
     async def do_train(self, step: Step) -> bool:
         unit = unit_id(step.what)
@@ -320,16 +304,13 @@ class StepsMixin:
         # precise — place a chrono where it will actually have energy and something to
         # boost, not as a best-effort sprinkle. A chrono step ALWAYS spends a chrono.
         target_type = unit_id(step.target)
-        pool = (self.townhalls(U.NEXUS) if target_type == U.NEXUS
-                else self.structures(target_type)).ready
-        if not pool:
+        target_pool = self.structures(target_type).ready
+        if not target_pool:
             self._status = f"no {step.target} ready to boost"
             return False  # nothing of that type exists yet — wait
         # Rank targets: not-already-boosted first (a second boost on the same building
-        # is wasted), then producing before idle. Tag breaks ties LAST — the
-        # observation's structure order is not stable between runs, so without a fixed
-        # tie-break the same build boosts a different Gateway each run.
-        target = min(pool, key=lambda s: (s.has_buff(CHRONO_BUFF), not s.orders, s.tag))
+        # is wasted), then producing before idle. Tag breaks ties for determinism.
+        target = min(target_pool, key=lambda s: (s.has_buff(CHRONO_BUFF), not s.orders, s.tag))
         # Ask AFTER we know there's something to boost: the scheduler commits the energy
         # when it hands back a caster, so bailing out later would waste it for this frame.
         caster = self.scheduler.chrono_caster()
@@ -352,8 +333,9 @@ class StepsMixin:
                 self._status = "no free probe to send"
                 return False  # no probe available yet — stall the line
             self.labelled_probes[step.label] = worker.tag
-            # Not a builder: a sent probe is gone for a long time, so it rejoins at the
-            # populating base (via return_probe), not wherever it happened to be mining.
+            # No "home base" for a sent prober: a sent probe is gone for a long time, so
+            # it rejoins at the populating base (via return_probe), not wherever it
+            # happened to be mining.
             self.home_base_by_builder.pop(worker.tag, None)
         worker.move(dest)
         return True

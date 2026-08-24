@@ -40,8 +40,10 @@ def test_prewalk_reserves_probe_cost_against_supply_target():
 
 
 def test_prewalk_vespene_threshold():
+    # gas gets no probe reservation (probes cost no gas), so it defers to trigger_met
     step = fake_bot(prewalk=Trigger(vespene=100), at=Trigger(time=1))
     fake = fake_bot(minerals=0, vespene=99, supply_used=0)
+    fake.trigger_met = lambda trig: BuildOrderBot.trigger_met(fake, trig)
     assert BuildOrderBot._prewalk_due(fake, step) is False
     fake.vespene = 100
     assert BuildOrderBot._prewalk_due(fake, step) is True

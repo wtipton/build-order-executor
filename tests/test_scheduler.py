@@ -30,8 +30,11 @@ def _order(unit: U, progress: float = 0.0):
 def _bot(structures=(), townhalls=(), upgrades=frozenset()):
     game_data = SimpleNamespace(units={u.value: SimpleNamespace(cost=SimpleNamespace(time=t))
                                         for u, t in FRAMES.items()})
+    # The library files EVERY own structure into `structures`, and additionally puts
+    # townhalls into `townhalls` (bot_ai_internal) — the two are not disjoint. Mirror
+    # that, or a Nexus read out of `structures` (how producers are found) vanishes.
     return SimpleNamespace(
-        structures=lambda t: FakeUnits(structures),
+        structures=lambda t: FakeUnits([*structures, *townhalls]),
         townhalls=FakeUnits(townhalls),
         game_data=game_data,
         state=SimpleNamespace(upgrades=set(upgrades)),

@@ -1,8 +1,9 @@
-"""Tier 1 — the two confirm/baseline state machines: do_build and do_warp.
+"""Tier 1 — the two confirm/baseline state machines: do_build and do_warp, plus the
+placement dispatch do_build leans on (_find_build_target).
 
-Both share the pattern: issuing an order != it happening, so the handler captures
-a baseline count when the step starts, HOLDS (returns False, re-issuing as needed)
-until the real count grows past that baseline, and only then returns True.
+The state machines share a pattern: issuing an order != it happening, so the handler
+captures a baseline count when the step starts, HOLDS (returns False, re-issuing as
+needed) until the real count grows past that baseline, and only then returns True.
 """
 
 from __future__ import annotations
@@ -30,6 +31,7 @@ def _build_bot(*, struct_amount, afford, builder=None, **over):
         _free_probe_near=lambda pos: fake_unit(tag=99),
         build=AsyncMock(),
         _find_build_target=AsyncMock(return_value=Point2((50.0, 50.0))),
+        _status="",  # run_handler blanks it before every handler; do_build reads it back
     )
     base.update(over)
     return fake_bot(**base)
@@ -70,6 +72,64 @@ async def test_build_reissues_when_no_builder_committed():
     assert await BuildOrderBot.do_build(fake, step) is False  # issued, holds for confirm
     fake.build.assert_awaited_once()
     assert fake.step_state.build.builder_tag == 99  # remembered the committed probe
+
+
+async def test_build_holds_with_generic_status_when_no_placement():
+    # the finder came up empty and had nothing to say -> do_build supplies the fallback
+    step = fake_bot(what="Pylon", label=None)
+    fake = _build_bot(struct_amount=0, afford=True, _find_build_target=AsyncMock(return_value=None))
+    assert await BuildOrderBot.do_build(fake, step) is False
+    fake.build.assert_not_awaited()
+    assert fake._status == "no placement for Pylon"
+
+
+async def test_build_keeps_the_finders_own_stall_reason():
+    # _find_build_target explains itself (e.g. "the natural is already ours") — that
+    # specific reason must survive, not be flattened into the generic message.
+    step = fake_bot(what="Nexus", label=None)
+
+    async def finder(_):
+        fake._status = "the natural is already ours"
+        return None
+
+    fake = _build_bot(struct_amount=0, afford=True, _find_build_target=finder)
+    assert await BuildOrderBot.do_build(fake, step) is False
+    assert fake._status == "the natural is already ours"
+
+
+# ================================================== _find_build_target (Nexus)
+def _nexus_target_bot(*, base_taken: bool, **over):
+    base = dict(
+        _resolve_place=lambda where: Point2((40.0, 40.0)),
+        townhalls=MagicMock(closer_than=lambda d, p: FakeUnits([object()] if base_taken else [])),
+        _status="",
+    )
+    base.update(over)
+    return fake_bot(**base)
+
+
+async def test_nexus_where_aims_at_the_exact_base_location():
+    # NOT find_placement near it — an expansion even a tile off-centre from its
+    # mineral patches mines slower for the rest of the game.
+    fake = _nexus_target_bot(base_taken=False)
+    step = fake_bot(what="Nexus", where="natural")
+    assert await BuildOrderBot._find_build_target(fake, step) == Point2((40.0, 40.0))
+
+
+async def test_nexus_where_stalls_when_that_base_is_already_ours():
+    # the alternative is handing build() an occupied tile, which wedges the Nexus
+    # into whatever spot find_placement can scrape together nearby
+    fake = _nexus_target_bot(base_taken=True)
+    step = fake_bot(what="Nexus", where="natural")
+    assert await BuildOrderBot._find_build_target(fake, step) is None
+    assert fake._status == "the natural is already ours"
+
+
+async def test_nexus_without_where_reports_when_the_map_is_full():
+    fake = _nexus_target_bot(base_taken=False, _find_next_expansion=lambda: None)
+    step = fake_bot(what="Nexus", where=None)
+    assert await BuildOrderBot._find_build_target(fake, step) is None
+    assert fake._status == "every expansion is already taken"
 
 
 # ============================================================ do_warp

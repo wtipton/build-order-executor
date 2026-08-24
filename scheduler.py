@@ -55,8 +55,7 @@ class Scheduler:
         producer_type = PRODUCER.get(unit)
         if producer_type is None:
             return None
-        pool = (self.bot.townhalls if producer_type == U.NEXUS
-                else self.bot.structures(producer_type)).ready
+        pool = self.bot.structures(producer_type).ready
         free = [s for s in pool if self._queue_depth(s) < MAX_PRODUCTION_QUEUE]
         if not free:
             return None

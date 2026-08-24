@@ -223,19 +223,35 @@ class WorldMixin:
     async def _find_build_target(self, step: Step) -> Point2 | Unit | None:
         """Where `step` should aim its build: a position, or the geyser itself for an
         Assimilator. Dispatches over the ways a target can be decided — a named place,
-        the next expansion, a free geyser, or placement.py's geometry."""
+        the next expansion, a free geyser, or placement.py's geometry.
+
+        Returning None stalls the step, so the cases that can explain themselves set
+        `_status` on the way out — do_build only has "no placement for X" to offer,
+        which doesn't distinguish "not yet" from "never"."""
         unit = unit_id(step.what)
-        # A `where` proxies the building out on the map (e.g. a Pylon near the
-        # enemy). Anchor placement at that place instead of the home heuristics;
-        # the prewalk machinery then walks a probe there ahead of time for free.
         where = getattr(step, "where", None)
+        if unit == U.NEXUS:
+            # An expansion belongs ON a base location, not merely somewhere placeable
+            # near one. So for nexuses, we don't ever fall back to the generic find_placement.
+            if where is None:
+                nxt = self._find_next_expansion()
+                if nxt is None:
+                    self._status = "every expansion is already taken"
+                return nxt
+            base = self._resolve_place(where)
+            if self.townhalls.closer_than(3.0, base):
+                self._status = f"the {where} is already ours"  # stall, don't misplace it
+                return None
+            return base
+
         if where is not None:
             return await self.find_placement(unit, near=self._resolve_place(where), max_distance=20,
                                              random_alternative=False)
-        if unit == U.NEXUS:
-            return self._find_next_expansion()
         if unit == U.ASSIMILATOR:
-            return self._find_free_geyser()
+            geyser = self._find_free_geyser()
+            if geyser is None:
+                self._status = "no geyser without an Assimilator at any of our bases"
+            return geyser
         if unit == U.PYLON:
             return await self.placement.pylon_position()
         return await self.placement.building_position(unit)
