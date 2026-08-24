@@ -189,7 +189,7 @@ class WorldMixin:
         worker.move(pos)
         print(f"[prewalk] {self._clock():>4}  sup{self.supply_used} min={self.minerals} "
               f"reserved probe {worker.tag} for {step.what} @ ({pos.x:.0f},{pos.y:.0f}) "
-              f"(build at {self._trig_str(step.at)})", flush=True)
+              f"(build at {step.at})", flush=True)
 
     def _next_build_step(self) -> Step | None:
         for s in self.cfg.steps[self.steps_done:]:

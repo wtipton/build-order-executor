@@ -3,7 +3,7 @@ confirm/stall, prewalk hand-off) and every `do_<action>` handler.
 
 `StepsMixin` is mixed into `BuildOrderBot` (see bot.py); its methods run on the
 live bot via `self` and lean on the other mixins' helpers (`_free_probe_near`,
-`_ordered_bases`, `_resolve_place`, `_describe`, …).
+`_ordered_bases`, `_resolve_place`, `_free_probe_near`, …).
 """
 
 from __future__ import annotations
@@ -56,7 +56,7 @@ class StepsMixin:
             if not await self.execute(step):
                 return  # stall the line until this step can be done (strict order)
             note = f"  # {step.note}" if step.note else ""
-            print(f"[step] {self._clock():>4}  sup{self.supply_used:<3} {self._describe(step)}{note}", flush=True)
+            print(f"[step] {self._clock():>4}  sup{self.supply_used:<3} {step}{note}", flush=True)
             self.steps_done += 1
             self.step_state.reset(self.time)  # the finished step's in-flight state dies with it
 

@@ -27,7 +27,7 @@ class _SeqBot(SimpleNamespace):
 def _seq_bot(steps, trigger_met, execute, steps_done=0):
     fake = _SeqBot(cfg=SimpleNamespace(steps=steps), steps_done=steps_done,
                    step_state=StepState(), supply_used=0, time=0.0, trigger_met=trigger_met,
-                   _clock=lambda: "0:00", _describe=lambda s: "step")
+                   _clock=lambda: "0:00")
     fake.execute = execute
     return fake
 

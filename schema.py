@@ -49,6 +49,17 @@ class Trigger(BaseModel):
     vespene: int | None = None
     count: dict[str, int] | None = None
 
+    def __str__(self) -> str:
+        """The condition, e.g. `count Pylon=2` or `supply>=19`."""
+        if self.count is not None:
+            name, n = next(iter(self.count.items()))
+            return f"count {name}={n}"
+        for key in _TRIGGER_KEYS:
+            want = getattr(self, key)
+            if want is not None:
+                return f"{key}>={want:.0f}"
+        return "?"
+
     @model_validator(mode="after")
     def _exactly_one(self) -> "Trigger":
         present = [k for k in _TRIGGER_KEYS if getattr(self, k) is not None]
@@ -65,6 +76,12 @@ class _StepBase(BaseModel):
     model_config = ConfigDict(extra="forbid")
     at: Trigger          # when the action fires
     note: str = ""       # human comment, echoed in the [build] log
+
+    def __str__(self) -> str:
+        """The action and its arguments, e.g. `build what=Nexus where=natural`. Trigger
+        and note are left out — callers that want them have them."""
+        args = self.model_dump(exclude={"at", "prewalk", "note", "do"}, exclude_none=True)
+        return f"{self.do} {' '.join(f'{k}={v}' for k, v in args.items())}".rstrip()
 
 
 class BuildStep(_StepBase):

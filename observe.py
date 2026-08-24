@@ -35,6 +35,12 @@ UPGRADE_NAMES = {v: k for k, v in RESEARCH.items()}
 
 
 class ObserveMixin:
+    def _unit_name(self, type_id: U) -> str:
+        """The game's own display name (CyberneticsCore, not CYBERNETICSCORE and not
+        `.title()`'s Cyberneticscore). Everything that reports a unit type uses this, so
+        the summary's `census` and `completions` are keyed the same way."""
+        return self.game_data.units[type_id.value].name
+
     def _run_summary(self, result: Result) -> dict:
         """Machine-readable end-of-run summary (the `[summary]` stdout line) so a
         caller asserts on what ACTUALLY happened (structures/units/upgrades produced,
@@ -44,7 +50,7 @@ class ObserveMixin:
         for t in (BUILDABLE_STRUCTURES | TRAINABLE_UNITS | {U.WARPGATE, U.ARCHON}):
             n = self.all_own_units(t).ready.amount
             if n:
-                census[t.name] = n
+                census[self._unit_name(t)] = n
         upgrades = sorted(UPGRADE_NAMES.get(u, u.name) for u in self.state.upgrades)
         # Upgrades that STARTED but haven't finished — so "researched but unfinished"
         # is distinguishable from "never started" (already_pending_upgrade is the
@@ -61,7 +67,7 @@ class ObserveMixin:
             "completed": completed,
             "steps_done": self.steps_done,
             "steps_total": len(self.cfg.steps),
-            "next_step": None if completed else self._describe(self.current_step),
+            "next_step": None if completed else str(self.current_step),
             "final_time": round(self.time, 1),
             "completions": self._completions_by_type(),
             "upgrade_completions": {UPGRADE_NAMES.get(u, u.name): round(t, 1)
@@ -115,7 +121,7 @@ class ObserveMixin:
             self._completions[key] = self.time
             type_id = key[1]
             nth = sum(1 for _, t in self._completions if t == type_id)
-            print(f"[complete] {self._clock():>4}  {type_id.name.title()} #{nth}", flush=True)
+            print(f"[complete] {self._clock():>4}  {self._unit_name(type_id)} #{nth}", flush=True)
 
         new_upgrades = set(self.state.upgrades) - self._upgrade_completions.keys()
         for upgrade in sorted(new_upgrades, key=lambda u: u.name):
@@ -127,7 +133,7 @@ class ObserveMixin:
         `_completions`, which is stored keyed by unit so it can double as the latch."""
         out: dict[str, list[float]] = {}
         for (_, type_id), when in sorted(self._completions.items(), key=lambda kv: kv[1]):
-            out.setdefault(type_id.name.title(), []).append(round(when, 1))
+            out.setdefault(self._unit_name(type_id), []).append(round(when, 1))
         return out
 
     def _status_report(self) -> None:
@@ -153,10 +159,10 @@ class ObserveMixin:
             return f"step {self.steps_done}/{len(self.cfg.steps)}  BUILD COMPLETE"
         age = int(self.time - self.step_state.started_at)
         if not self.step_state.trigger_fired:
-            why = f"waiting on trigger {self._trigger_status(step.at)}"
+            why = f"waiting on trigger {self._trigger_progress(step.at)}"
         else:
             why = self._status or "issued; waiting to confirm"
-        return (f"step {self.steps_done}/{len(self.cfg.steps)}  {self._describe(step)}"
+        return (f"step {self.steps_done}/{len(self.cfg.steps)}  {step}"
                 f"  ({age}s)  {why}")
 
     def _base_saturation(self) -> str:
@@ -170,48 +176,30 @@ class ObserveMixin:
         """Observed army and production, by type — generic, so it reads the same for any
         build. Idle producers are called out because an idle production building is the
         clearest "you are wasting production" signal when optimizing a build."""
-        army = Counter(u.type_id.name.title() for u in self.units if u.type_id != U.PROBE)
+        army = Counter(self._unit_name(u.type_id) for u in self.units if u.type_id != U.PROBE)
         army_str = " ".join(f"{name}={n}" for name, n in sorted(army.items())) or "none"
         prod = []
         for t in sorted(PRODUCTION_BUILDINGS, key=lambda t: t.name):
             ready = self.structures(t).ready
             if ready:
                 idle = ready.idle.amount
-                prod.append(f"{t.name.title()}={ready.amount}" + (f"({idle} idle)" if idle else ""))
+                prod.append(f"{self._unit_name(t)}={ready.amount}" + (f"({idle} idle)" if idle else ""))
         return f"army {army_str}  |  prod {' '.join(prod) or 'none'}"
 
     def _clock(self) -> str:
         s = int(self.time)
         return f"{s // 60}:{s % 60:02d}"
 
-    @staticmethod
-    def _trig_str(t: Trigger) -> str:
-        if t.count is not None:
-            name, n = next(iter(t.count.items()))
-            return f"count:{name}={n}"
-        for k in ("supply", "time", "minerals", "vespene"):
-            v = getattr(t, k)
-            if v is not None:
-                return f"{k}:{v}"
-        return "?"
-
-    def _describe(self, step: Step) -> str:
-        args = step.model_dump(exclude={"at", "prewalk", "note", "do"}, exclude_none=True)
-        argstr = " ".join(f"{k}={v}" for k, v in args.items())
-        return f"{step.do} {argstr}".rstrip()
-
-    def _trigger_status(self, at: Trigger) -> str:
-        """A trigger described with its CURRENT value, so a stuck count/resource
-        gate is obvious (e.g. `count HighTemplar=2 (have 0)`)."""
+    def _trigger_progress(self, at: Trigger) -> str:
+        """`count HighTemplar=2 (have 0)` — the condition plus what we have right now, so
+        it's obvious what a waiting step is short of."""
         if at.count is not None:
-            name, n = next(iter(at.count.items()))
-            return f"count {name}={n} (have {self.all_own_units(_unit(name)).ready.amount})"
-        if at.supply is not None:
-            return f"supply>={at.supply} (have {self.supply_used})"
-        if at.minerals is not None:
-            return f"minerals>={at.minerals} (have {self.minerals})"
-        if at.vespene is not None:
-            return f"vespene>={at.vespene} (have {self.vespene})"
-        if at.time is not None:
-            return f"time>={at.time:.0f} (now {self.time:.0f})"
-        return "?"
+            name, _ = next(iter(at.count.items()))
+            have = self.all_own_units(_unit(name)).ready.amount
+        else:
+            have = next(now for key, now in (("supply", self.supply_used),
+                                             ("minerals", self.minerals),
+                                             ("vespene", self.vespene),
+                                             ("time", self.time))
+                        if getattr(at, key) is not None)
+        return f"{at} (have {have:.0f})"
