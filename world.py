@@ -89,6 +89,20 @@ class WorldMixin:
         """
         return self.townhalls.ready.sorted(key=lambda t: t.distance_to(self.start_location))
 
+    # ============================================================ counting
+    def count_of(self, name: str) -> int:
+        """How many completed `name` we have. Backs `count:` triggers AND the [status]
+        line that reports their progress, so the two can never disagree about what we
+        'have'.
+
+        Probes come from `supply_workers`, NOT the unit list: a probe harvesting gas is
+        INSIDE the Assimilator for ~1.4s of every trip, and for that time it is absent
+        from the observation entirely, so `workers.amount` (and `all_own_units`) read low
+        at random once gas is running. Empirically, supply_workers excludes probes still
+        in production, so we can use it here instead."""
+        unit = unit_id(name)
+        return int(self.supply_workers) if unit == U.PROBE else self.all_own_units(unit).ready.amount
+
     # ======================================================== labelled probes
     def _worker_by_tag(self, tag: int | None) -> Unit | None:
         if tag is None:

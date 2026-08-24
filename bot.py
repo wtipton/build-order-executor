@@ -120,7 +120,7 @@ class BuildOrderBot(StepsMixin, EconomyMixin, WorldMixin, ObserveMixin, BotAI):
 
     async def on_end(self, result: Result) -> None:
         print(f"[end] t={self.time:.1f}s result={result} supply={self.supply_used} "
-              f"workers={self.workers.amount} steps={self.steps_done}/{len(self.cfg.steps)}", flush=True)
+              f"workers={int(self.supply_workers)} steps={self.steps_done}/{len(self.cfg.steps)}", flush=True)
         print(f"[end] {self._army_report()}", flush=True)
         # Machine-readable summary
         try:

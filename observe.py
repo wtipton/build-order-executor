@@ -81,7 +81,7 @@ class ObserveMixin:
             "nexus_by_place": {p: 1 for p in self.BASE_RANK
                                if self.townhalls.closer_than(6, self._resolve_place(p)).exists},
             "labelled_probes_held": sorted(self.labelled_probes),
-            "workers": self.workers.amount,
+            "workers": int(self.supply_workers),
             "supply_used": self.supply_used,
         }
 
@@ -149,7 +149,7 @@ class ObserveMixin:
         Army/production counts deliberately aren't here: [complete] already timestamps
         every type as it appears, and [end] carries the final census."""
         print(f"[status] {self._clock():>5}  sup={self.supply_used}/{self.supply_cap} "
-              f"workers={self.workers.amount} min={self.minerals} gas={self.vespene} "
+              f"workers={int(self.supply_workers)} min={self.minerals} gas={self.vespene} "
               f"bases[{self._base_saturation()}] chrono={self._chrono_available()}", flush=True)
         print(f"[status] {self._clock():>5}  {self._step_status()}", flush=True)
 
@@ -217,7 +217,7 @@ class ObserveMixin:
         it's obvious what a waiting step is short of."""
         if at.count is not None:
             name, _ = next(iter(at.count.items()))
-            have = self.all_own_units(unit_id(name)).ready.amount
+            have = self.count_of(name)
         else:
             have = next(now for key, now in (("supply", self.supply_used),
                                              ("minerals", self.minerals),

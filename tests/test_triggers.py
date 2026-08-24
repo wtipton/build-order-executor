@@ -24,8 +24,28 @@ def test_scalar_triggers_fire_at_or_above_threshold():
 
 def test_count_trigger_counts_ready_units():
     fake = fake_bot(all_own_units=lambda t: FakeUnits([object(), object()]))
+    fake.count_of = lambda name: BuildOrderBot.count_of(fake, name)
     assert BuildOrderBot.trigger_met(fake, Trigger(count={"Gateway": 2})) is True
     assert BuildOrderBot.trigger_met(fake, Trigger(count={"Gateway": 3})) is False
+
+
+# ------------------------------------------------------------------ count_of
+def test_count_of_probes_uses_supply_workers_not_the_unit_list():
+    # A probe inside an Assimilator vanishes from the observation for ~1.4s a trip, so
+    # the unit list reads low at random; food_workers doesn't have that hole. Measured
+    # on a real run: `count: {Probe: 17}` fired 1.4s late because of this.
+    fake = fake_bot(supply_workers=19, workers=FakeUnits([object()] * 18),
+                    all_own_units=lambda t: FakeUnits([object()] * 18))
+    fake.count_of = lambda name: BuildOrderBot.count_of(fake, name)
+    assert BuildOrderBot.count_of(fake, "Probe") == 19
+    assert fake.workers.amount == 18, "the unit list is the count we're deliberately NOT using"
+    assert BuildOrderBot.trigger_met(fake, Trigger(count={"Probe": 19})) is True
+
+
+def test_count_of_uses_the_unit_list_for_everything_else():
+    # only workers can be hidden inside a building, so nothing else needs the detour
+    fake = fake_bot(supply_workers=19, all_own_units=lambda t: FakeUnits([object(), object()]))
+    assert BuildOrderBot.count_of(fake, "Gateway") == 2
 
 
 # ------------------------------------------------------------------ _prewalk_due

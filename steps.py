@@ -70,7 +70,7 @@ class StepsMixin:
             return self.vespene >= at.vespene
         if at.count is not None:
             name, n = next(iter(at.count.items()))
-            return self.all_own_units(unit_id(name)).ready.amount >= n
+            return self.count_of(name) >= n
         return True
 
     def _prewalk_due(self, step: Step) -> bool:
