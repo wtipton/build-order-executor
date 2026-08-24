@@ -101,13 +101,26 @@ class WorldMixin:
         return tags
 
     def _free_probe_near(self, pos: Point2) -> Unit | None:
-        """Nearest probe available to automation (not a sent/reserved one). Consider
-        idle probes too, not just gathering ones, and pick the CLOSEST — so a probe
-        that just finished or gave up right at `pos` (e.g. a far enemy/proxy build)
-        is reused, instead of pulling a fresh one across the map."""
-        pool = self.workers.tags_not_in(self._excluded_tags())
-        cands = pool.filter(lambda w: (w.is_gathering or w.is_idle) and not w.is_carrying_minerals)
-        cands = cands or pool.filter(lambda w: w.is_gathering or w.is_idle) or pool
+        """Nearest probe we're willing to pull off the economy, or None.
+
+        Eligible = mining minerals or idle, empty-handed, and not on gas. Idle counts so a
+        probe that just finished right at `pos` is reused instead of dragging a fresh one
+        across the map. Carrying anything is out, because pulling it throws the load away.
+        Gas is out because gas assignment is deliberate (`gas_target`): steal a gas probe
+        and manage_economy just refills the geyser from minerals next frame, so we'd have
+        pulled a mineral probe anyway, with a wasted round trip on top.
+
+        No fallback tier — if nobody qualifies we return None and the caller retries next
+        frame. The old "else anyone at all" fallback is what let a probe mid-return get
+        picked, which then sat on its vespene for the whole build.
+        """
+        gas_tags = {g.tag for g in self.gas_buildings.ready}
+        cands = self.workers.tags_not_in(self._excluded_tags()).filter(
+            lambda w: (w.is_gathering or w.is_idle)
+            and not w.is_carrying_minerals
+            and not w.is_carrying_vespene
+            and w.order_target not in gas_tags
+        )
         if not cands:
             return None
         chosen = cands.closest_to(pos)

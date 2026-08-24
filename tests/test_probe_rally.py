@@ -22,13 +22,54 @@ def test_free_probe_near_reuses_idle_probe_at_target():
     # across the map to re-build an enemy/proxy pylon).
     target = Point2((100.0, 100.0))
     idle_at_target = fake_unit(tag=1, position=Point2((101.0, 100.0)),
-                               is_idle=True, is_gathering=False, is_carrying_minerals=False)
+                               is_idle=True, is_gathering=False, is_carrying_minerals=False,
+                               is_carrying_vespene=False, order_target=None)
     gathering_home = fake_unit(tag=2, position=Point2((10.0, 10.0)),
-                               is_idle=False, is_gathering=True, is_carrying_minerals=False)
+                               is_idle=False, is_gathering=True, is_carrying_minerals=False,
+                               is_carrying_vespene=False, order_target=None)
     fake = fake_bot(workers=FakeUnits([idle_at_target, gathering_home]),
                     _excluded_tags=lambda: set(), townhalls=FakeUnits(),
-                    home_base_by_builder={})
+                    gas_buildings=FakeUnits(), home_base_by_builder={})
     assert BuildOrderBot._free_probe_near(fake, target).tag == 1
+
+
+def _probe(tag, x, *, idle=False, gathering=True, minerals=False, vespene=False, target=None):
+    return fake_unit(tag=tag, position=Point2((float(x), 0.0)), is_idle=idle,
+                     is_gathering=gathering, is_carrying_minerals=minerals,
+                     is_carrying_vespene=vespene, order_target=target)
+
+
+def _pool_bot(workers, gasses=()):
+    return fake_bot(workers=FakeUnits(workers), _excluded_tags=lambda: set(),
+                    townhalls=FakeUnits(), gas_buildings=FakeUnits(gasses),
+                    home_base_by_builder={})
+
+
+def test_wont_pull_a_probe_carrying_vespene():
+    """Pulling a loaded probe throws the load away — same reason we skip mineral carriers.
+    It also used to leave the probe holding vespene for the whole build, which then read
+    as a live gas worker long after it had stopped being one."""
+    loaded = _probe(1, 1, gathering=False, idle=True, vespene=True)
+    empty = _probe(2, 50)
+    assert BuildOrderBot._free_probe_near(_pool_bot([loaded, empty]), Point2((0.0, 0.0))).tag == 2
+
+
+def test_wont_pull_a_probe_that_is_mining_gas():
+    """Gas assignment is deliberate. Stealing a gas probe just makes manage_economy refill
+    the geyser from minerals next frame — a mineral probe would have been pulled anyway,
+    plus a wasted round trip."""
+    geyser = fake_unit(tag=5, is_ready=True)
+    on_gas = _probe(1, 1, target=5)
+    on_minerals = _probe(2, 50)
+    bot = _pool_bot([on_gas, on_minerals], gasses=[geyser])
+    assert BuildOrderBot._free_probe_near(bot, Point2((0.0, 0.0))).tag == 2
+
+
+def test_no_probe_rather_than_a_bad_one():
+    """Single tier: if nobody qualifies we return None and the caller retries. The old
+    'else anyone at all' fallback is what let a mid-return probe get picked."""
+    bot = _pool_bot([_probe(1, 1, gathering=False, idle=False, vespene=True)])
+    assert BuildOrderBot._free_probe_near(bot, Point2((0.0, 0.0))) is None
 
 
 # ------------------------------------------------------------------ send_probe

@@ -57,7 +57,7 @@ class EconomyFrameState:
         """
         if worker is None or dest is None:
             return False
-        assert not worker.is_carrying_vespene, (
+        assert worker.is_idle or not worker.is_carrying_vespene, (
             f"probe {worker.tag} is returning vespene, so we can't tell which geyser to "
             f"decrement in _num_workers_by_gas"
         )
