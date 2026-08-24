@@ -5,10 +5,10 @@
 # returned to mining. Asserted via [summary] named_probes_held
 # / census in tests/test_integration.py.
 
-name: Probe Naming
+name: Probe Labelling
 
 steps:
-  # create the three named probes
+  # create the three labelled probes
   - {at: {time: 3},  do: send_probe, where: main,       label: scout1}
   - {at: {time: 3},  do: send_probe, where: enemy_main, label: scout2}
   - {at: {time: 3},  do: send_probe, where: main,       label: builder}
@@ -29,7 +29,7 @@ steps:
   - {at: {count: {Pylon: 1}}, do: build, what: Gateway, label: builder}
   - {at: {count: {Gateway: 1}}, do: build, what: CyberneticsCore, label: builder}
 
-  # hand every named probe back to mining
+  # hand every labelled probe back to mining
   - {at: {count: {CyberneticsCore: 1}}, do: return_probe, label: scout1}
   - {at: {count: {CyberneticsCore: 1}}, do: return_probe, label: scout2}
   - {at: {count: {CyberneticsCore: 1}}, do: return_probe, label: builder}

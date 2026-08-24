@@ -27,10 +27,9 @@ def _build_bot(*, struct_amount, afford, builder=None, **over):
         structures=lambda t: FakeUnits([object()] * struct_amount),
         can_afford=lambda u: afford,
         _worker_by_tag=lambda tag: builder,
-        _clear_prewalk=MagicMock(),
         _free_probe_near=lambda pos: fake_unit(tag=99),
         build=AsyncMock(),
-        _placement_for=AsyncMock(return_value=Point2((50.0, 50.0))),
+        _find_build_target=AsyncMock(return_value=Point2((50.0, 50.0))),
     )
     base.update(over)
     return fake_bot(**base)
@@ -49,7 +48,7 @@ async def test_build_confirms_when_structure_appears():
     fake = _build_bot(struct_amount=1, afford=True)
     fake.step_state.build.baseline = 0    # in progress, and one has now appeared (amount 1 > 0)
     assert await BuildOrderBot.do_build(fake, step) is True
-    fake._clear_prewalk.assert_called_once()
+    assert fake.prewalk_state.for_step is None  # reservation released
 
 
 async def test_build_holds_without_reissue_while_builder_walks():

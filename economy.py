@@ -10,6 +10,7 @@ from __future__ import annotations
 from collections import Counter
 
 from sc2.ids.unit_typeid import UnitTypeId as U
+from sc2.position import Point2
 from sc2.unit import Unit
 from sc2.units import Units
 
@@ -132,7 +133,7 @@ class EconomyMixin:
     async def manage_economy(self) -> None:
         """Saturate minerals up to the per-base cap, then fill gas to gas_target,
         and keep no worker idle."""
-        econ_workers = self.workers.tags_not_in(self._excluded_tags() or [])
+        econ_workers = self.workers.tags_not_in(self._probes_unavailable_to_automation() or [])
         state = EconomyFrameState(econ_workers, self.gas_buildings)
         
         # Avoid idle workers. A builder that just finished goes back to the base it
@@ -165,12 +166,12 @@ class EconomyMixin:
         base_tag = self.home_base_by_builder.pop(worker.tag, None)
         return self._base_field(self.townhalls.tags_in({base_tag}).first) if base_tag else None
 
-    def _base_field(self, base: Unit) -> Unit | None:
-        """A mineral patch at `base`, or None if it has none left. Also what
-        `rally_and_transfer_probes` points the Nexus rallies at."""
+    def _base_field(self, base: Point2 | Unit) -> Unit | None:
+        """A mineral patch at `base`, or None if there are none. Takes a position as well
+        as a Nexus, so callers can ask about a base we don't own yet."""
         fields = self.mineral_field.closer_than(10, base)
         return fields.closest_to(base) if fields else None
 
     def _populating_field(self) -> Unit | None:
         """Grab a specific field from the currently-populating base."""
-        return self._base_field(self.ordered_bases()[self.populating_base_num - 1])
+        return self._base_field(self.base_position(self.populating_base_num))

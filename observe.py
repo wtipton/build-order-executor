@@ -22,7 +22,7 @@ from catalog import (
     PRODUCTION_BUILDINGS,
     RESEARCH,
     TRAINABLE_UNITS,
-    unit_id as _unit,
+    unit_id,
 )
 from schema import Place, Step, Trigger
 
@@ -79,7 +79,7 @@ class ObserveMixin:
             "pylons_by_place": self._pylons_by_place(),
             "nexus_by_place": {p: 1 for p in self.BASE_RANK
                                if self.townhalls.closer_than(6, self._resolve_place(p)).exists},
-            "named_probes_held": sorted(self.named_probes),
+            "labelled_probes_held": sorted(self.labelled_probes),
             "workers": self.workers.amount,
             "supply_used": self.supply_used,
         }
@@ -195,7 +195,7 @@ class ObserveMixin:
         it's obvious what a waiting step is short of."""
         if at.count is not None:
             name, _ = next(iter(at.count.items()))
-            have = self.all_own_units(_unit(name)).ready.amount
+            have = self.all_own_units(unit_id(name)).ready.amount
         else:
             have = next(now for key, now in (("supply", self.supply_used),
                                              ("minerals", self.minerals),

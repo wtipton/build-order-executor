@@ -138,7 +138,7 @@ class ChronoStep(_StepBase):
 class SendProbeStep(_StepBase):
     do: Literal["send_probe"]
     where: Place         # where to send it
-    label: str           # name this probe so later steps can move it again, build with it, or return it
+    label: str           # label this probe so later steps can move it again, build with it, or return it
 
 
 class ReturnProbeStep(_StepBase):

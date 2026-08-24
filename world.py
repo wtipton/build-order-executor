@@ -15,7 +15,7 @@ from sc2.position import Point2
 from sc2.unit import Unit
 from sc2.units import Units
 
-from catalog import COMBAT_PRODUCTION, unit_id as _unit
+from catalog import COMBAT_PRODUCTION, unit_id
 from schema import Step
 
 
@@ -32,24 +32,24 @@ class WorldMixin:
     def _resolve_place(self, where: str) -> Point2:
         rank = self.BASE_RANK.get(where)
         if rank is not None:
-            return self.start_location if rank == 0 else self._expansion_near(self.start_location, rank)
+            return self.base_position(rank + 1)
         if where == "main_ramp":
             return self.main_base_ramp.top_center
         if where == "enemy_main":
-            return self._enemy_start()
+            return self._enemy_start_position()
         if where == "enemy_natural":
-            return self._expansion_near(self._enemy_start(), 1)
+            return self._find_expansion_near(self._enemy_start_position(), 1)
         if where == "proxy":
             # out near the enemy but off their doorstep (their ~4th base)
-            return self._expansion_near(self._enemy_start(), self.PROXY_BASE_RANK)
+            return self._find_expansion_near(self._enemy_start_position(), self.PROXY_BASE_RANK)
         # Every Place is validated at load, so this means a new one was added to the
         # schema without a case here — fail loudly rather than resolve somewhere wrong.
         raise ValueError(f"unhandled place {where!r}")
 
-    def _enemy_start(self) -> Point2:
+    def _enemy_start_position(self) -> Point2:
         return self.enemy_start_locations[0] if self.enemy_start_locations else self.game_info.map_center
 
-    def _expansion_near(self, base: Point2, rank: int) -> Point2:
+    def _find_expansion_near(self, base: Point2, rank: int) -> Point2:
         """The `rank`-th expansion by distance from `base` (0 = the base itself,
         1 = its natural, 2 = third, ...), clamped to what the map provides."""
         exps = sorted(self.expansion_locations_list, key=lambda e: e.distance_to(base))
@@ -57,9 +57,9 @@ class WorldMixin:
             return base
         return exps[min(rank, len(exps) - 1)]
 
-    def _next_expansion(self) -> Point2 | None:
+    def _find_next_expansion(self) -> Point2 | None:
         """The nearest expansion we haven't taken yet, using the SAME ordering as
-        `_expansion_near` (distance from our start). We roll this rather than the
+        `_find_expansion_near` (distance from our start). We roll this rather than the
         library's `get_next_expansion` (which orders by pathing distance) so that
         the Nth Nexus lands on exactly the base `where: <Nth base>` resolves to."""
         for e in sorted(self.expansion_locations_list, key=lambda e: e.distance_to(self.start_location)):
@@ -67,34 +67,45 @@ class WorldMixin:
                 return e
         return None
 
+    def base_position(self, n: int) -> Point2:
+        """Where our Nth base is on the map (1 = main, 2 = natural, ...), whether or not
+        we own one there yet. Clamped to what the map provides by `_find_expansion_near`.
+
+        Prefer this to `ordered_bases()[n - 1]` whenever you only need a location: it
+        doesn't require the Nexus to exist, and it's the same numbering `where: <Nth>`
+        resolves through, so the two can't disagree.
+        """
+        return self.start_location if n <= 1 else self._find_expansion_near(self.start_location, n - 1)
+
     def ordered_bases(self) -> Units:
         """Our ready bases, nearest our start first — base 1 is the main, base 2 the
         natural, and so on. This is the numbering `rally_and_transfer_probes base: N`
         indexes into and that the [status] line reports.
 
-        Deliberately the SAME ordering as `_expansion_near` / `_next_expansion` above,
+        Deliberately the SAME ordering as `_find_expansion_near` / `_find_next_expansion` above,
         so the Nth Nexus we own is the one sitting on the base `where: <Nth>` resolves
         to. Nothing enforces that beyond both sorting by distance from our start.
         """
         return self.townhalls.ready.sorted(key=lambda t: t.distance_to(self.start_location))
 
-    # =========================================================== named probes
+    # ======================================================== labelled probes
     def _worker_by_tag(self, tag: int | None) -> Unit | None:
         if tag is None:
             return None
         found = self.workers.tags_in({tag})
         return found.first if found else None
 
-    def _named_worker(self, label: str | None) -> Unit | None:
+    def _worker_by_label(self, label: str | None) -> Unit | None:
         """The live probe currently held under `label`, or None."""
         if label is None:
             return None
-        return self._worker_by_tag(self.named_probes.get(label))
+        return self._worker_by_tag(self.labelled_probes.get(label))
 
-    def _excluded_tags(self) -> set[int]:
-        """Probes not available to automation: those sent out via send_probe, plus
-        the current prewalk."""
-        tags = set(self.named_probes.values())
+    def _probes_unavailable_to_automation(self) -> set[int]:
+        """Tags of probes that are on a specific assignment and must not be reassigned:
+        those sent out by `send_probe` (held until a `return_probe`), plus the one walking
+        to the next build site. Everything else is fair game for the economy."""
+        tags = set(self.labelled_probes.values())
         if self.prewalk_state.builder_tag is not None:
             tags.add(self.prewalk_state.builder_tag)
         return tags
@@ -114,7 +125,7 @@ class WorldMixin:
         picked, which then sat on its vespene for the whole build.
         """
         gas_tags = {g.tag for g in self.gas_buildings.ready}
-        cands = self.workers.tags_not_in(self._excluded_tags()).filter(
+        cands = self.workers.tags_not_in(self._probes_unavailable_to_automation()).filter(
             lambda w: (w.is_gathering or w.is_idle)
             and not w.is_carrying_minerals
             and not w.is_carrying_vespene
@@ -155,9 +166,9 @@ class WorldMixin:
         ahead of time, so `do_build` can start construction the instant we can
         afford it. WHEN to start walking is config-driven (the step's `prewalk`
         trigger, defaulting to its `at` trigger) — the bot does no estimating."""
-        step = self._next_build_step()
+        step = self._find_next_build_step()
         if self.prewalk_state.for_step is not None and self.prewalk_state.for_step is not step:
-            self._clear_prewalk()
+            self.prewalk_state.clear()  # reserved for a build we've moved past
         if step is None or not self._prewalk_due(step):
             return
         # a labelled build brings its own (explicitly sent) probe — no prewalk
@@ -165,20 +176,29 @@ class WorldMixin:
             return
 
         if self.prewalk_state.for_step is step:
-            self._reposition_builder()
+            # already reserved for this build — nudge the probe back if it drifted or
+            # stopped short, and drop the reservation if it died
+            w = self._worker_by_tag(self.prewalk_state.builder_tag)
+            if w is None:
+                self.prewalk_state.clear()
+                return
+            # TODO: a little suspicious that we don't need this nudge behavior
+            target = self.prewalk_state.target
+            if w.is_idle and w.distance_to(target) > 1:
+                w.move(target)
             return
 
         # do_build may have already issued this build itself (its trigger fired
         # before prewalk got to reserve). A probe is then en route with the build
         # order, which for Protoss is what already_pending() counts — don't reserve
         # a SECOND probe on top of it.
-        if self.already_pending(_unit(step.what)):
+        if self.already_pending(unit_id(step.what)):
             return
 
-        target = await self._placement_for(step)
+        target = await self._find_build_target(step)
         if target is None:
             return  # can't determine placement yet (e.g. no pylon) — retry later
-        pos = target.position if isinstance(target, Unit) else target
+        pos = target.position  # Point2.position is itself, so this covers both
         worker = self._free_probe_near(pos)
         if worker is None:
             return
@@ -190,7 +210,9 @@ class WorldMixin:
               f"reserved probe {worker.tag} for {step.what} @ ({pos.x:.0f},{pos.y:.0f}) "
               f"(build at {step.at})", flush=True)
 
-    def _next_build_step(self) -> Step | None:
+    def _find_next_build_step(self) -> Step | None:
+        """The next `build` step worth pre-walking a probe for, or None if something that
+        commits resources comes first — no point tying up a builder behind it."""
         for s in self.cfg.steps[self.steps_done:]:
             if s.do == "build":
                 return s
@@ -198,8 +220,11 @@ class WorldMixin:
                 return None  # a resource-committing step precedes the next build
         return None
 
-    async def _placement_for(self, step: Step) -> Point2 | Unit | None:
-        unit = _unit(step.what)
+    async def _find_build_target(self, step: Step) -> Point2 | Unit | None:
+        """Where `step` should aim its build: a position, or the geyser itself for an
+        Assimilator. Dispatches over the ways a target can be decided — a named place,
+        the next expansion, a free geyser, or placement.py's geometry."""
+        unit = unit_id(step.what)
         # A `where` proxies the building out on the map (e.g. a Pylon near the
         # enemy). Anchor placement at that place instead of the home heuristics;
         # the prewalk machinery then walks a probe there ahead of time for free.
@@ -208,34 +233,18 @@ class WorldMixin:
             return await self.find_placement(unit, near=self._resolve_place(where), max_distance=20,
                                              random_alternative=False)
         if unit == U.NEXUS:
-            return self._next_expansion()
+            return self._find_next_expansion()
         if unit == U.ASSIMILATOR:
-            return self._free_geyser()
+            return self._find_free_geyser()
         if unit == U.PYLON:
             return await self.placement.pylon_position()
         return await self.placement.building_position(unit)
 
-    def _free_geyser(self) -> Unit | None:
+    def _find_free_geyser(self) -> Unit | None:
+        """A geyser at one of our bases with no Assimilator on it yet, or None."""
         for th in self.townhalls.ready:
             for g in self.vespene_geyser.closer_than(10, th):
                 if not self.gas_buildings.closer_than(1, g):
                     return g
         return None
 
-    def _prewalk_worker(self) -> Unit | None:
-        if self.prewalk_state.builder_tag is None:
-            return None
-        res = self.workers.tags_in({self.prewalk_state.builder_tag})
-        return res.first if res else None
-
-    def _reposition_builder(self) -> None:
-        w = self._prewalk_worker()
-        if w is None:
-            self._clear_prewalk()
-            return
-        pos = self.prewalk_state.target.position if isinstance(self.prewalk_state.target, Unit) else self.prewalk_state.target
-        if pos is not None and w.is_idle and w.distance_to(pos) > 1:
-            w.move(pos)
-
-    def _clear_prewalk(self) -> None:
-        self.prewalk_state.clear()

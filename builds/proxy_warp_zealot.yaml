@@ -23,7 +23,7 @@ name: Proxy Warpgate Zealot pressure
 steps:
   - {at: {time: 7},     do: chrono, target: Nexus, note: "1st chrono on probes"}
   - {at: {supply: 12},  do: build,  what: Pylon,   prewalk: {minerals: 75},  note: "home Pylon=100"}
-  - {at: {supply: 12},  do: send_probe, where: enemy_main, label: scout, note: "scout the enemy with a named probe"}
+  - {at: {supply: 12},  do: send_probe, where: enemy_main, label: scout, note: "scout the enemy with a labelled probe"}
   - {at: {supply: 13},  do: build,  what: Gateway, prewalk: {minerals: 100}, note: "Gateway=150"}
   - {at: {supply: 14},  do: build,  what: Assimilator, note: "gas for Warpgate research"}
   - {at: {count: {Assimilator: 1}}, do: gas_workers, count: 3, note: "saturate the gas"}

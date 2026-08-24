@@ -244,7 +244,7 @@ def _econ_bot(workers, *, gas=(), gas_target=0, populating=None, excluded=(), ho
     return fake_bot(
         _builder_home_field=lambda w: home,
         workers=FakeUnits(workers),
-        _excluded_tags=lambda: set(excluded),
+        _probes_unavailable_to_automation=lambda: set(excluded),
         gas_buildings=FakeUnits(gas),
         gas_target=gas_target,
         _populating_field=lambda: populating,
@@ -376,10 +376,8 @@ def test_base_field_is_none_when_the_base_is_mined_out():
 def test_populating_field_uses_the_designated_base():
     """`rally_and_transfer_probes base: N` is the only control over where homeless probes
     mine — there is no automatic spill to another base."""
-    main, natural = fake_unit(tag=1), fake_unit(tag=2)
     patch = _field(7)
-    fake = _field_bot({2: [patch]},
-                      ordered_bases=lambda: FakeUnits([main, natural]),
-                      populating_base_num=2)
-    fake._base_field = lambda b: BuildOrderBot._base_field(fake, b)
+    fake = fake_bot(base_position=lambda n: n,          # base N -> sentinel position N
+                    populating_base_num=2,
+                    _base_field=lambda pos: patch if pos == 2 else None)
     assert BuildOrderBot._populating_field(fake) is patch

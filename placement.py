@@ -41,7 +41,7 @@ class Placement:
         self.bot = bot
 
     # ---------------------------------------------------------------- helpers
-    def _mineral_line_center(self, near: Unit) -> Point2 | None:
+    def _mineral_line_center(self, near: Point2 | Unit) -> Point2 | None:
         """Middle of the mineral patches by `near` (a Nexus or a pylon), or None if there
         are none. Used as a DIRECTION, not a destination: callers build away from it so we
         don't drop structures into the mineral line and block mining."""
@@ -67,16 +67,17 @@ class Placement:
 
         # 2) otherwise spread: pick the buildable ring candidate around the main
         #    base that is FARTHEST from existing pylons. Base 1 IS the main — take it
-        #    from world.py rather than re-deriving 'nearest our start' here.
-        main = bot.ordered_bases()[0]
+        #    from world.py rather than re-deriving 'nearest our start' here. A position,
+        #    not the Nexus: we're picking ground around the base, not asking about it.
+        main = bot._resolve_place("main")
         mc = self._mineral_line_center(main)
         best, best_score = None, -1.0
         for radius in (7, 10, 13):
             for k in range(8):
                 ang = 2 * math.pi * k / 8
-                cand = Point2((main.position.x + radius * math.cos(ang),
-                               main.position.y + radius * math.sin(ang)))
-                if mc is not None and cand.distance_to(mc) < main.position.distance_to(mc):
+                cand = Point2((main.x + radius * math.cos(ang),
+                               main.y + radius * math.sin(ang)))
+                if mc is not None and cand.distance_to(mc) < main.distance_to(mc):
                     continue  # on the mineral side of the Nexus — skip
                 pos = await bot.find_placement(U.PYLON, near=cand, max_distance=3, random_alternative=False)
                 if pos is None:
@@ -89,7 +90,7 @@ class Placement:
 
         # 3) fallback: anything near the main toward the map center
         return await bot.find_placement(
-            U.PYLON, near=main.position.towards(bot.game_info.map_center, 6), max_distance=12,
+            U.PYLON, near=main.towards(bot.game_info.map_center, 6), max_distance=12,
             random_alternative=False,
         )
 

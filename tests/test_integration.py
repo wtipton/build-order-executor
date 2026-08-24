@@ -146,10 +146,10 @@ def test_all_base_locations():
 
 
 @pytest.mark.integration
-def test_probe_naming():
-    """Named probes end-to-end: a labelled tour runs to completion, `label:` builds use
-    the named probe, and return_probe hands them all back."""
-    data = _run("builds/test_probe_naming.yaml", time_limit=400)
+def test_probe_labelling():
+    """Labelled probes end-to-end: a labelled tour runs to completion, `label:` builds
+    use the labelled probe, and return_probe hands them all back."""
+    data = _run("builds/test_probe_labelling.yaml", time_limit=400)
     assert data["completed"], (
         f"stalled on {data['next_step']!r} at {data['final_time']}s "
         f"({data['steps_done']}/{data['steps_total']})"
@@ -157,7 +157,7 @@ def test_probe_naming():
     # NB: that each re-send reuses the SAME probe is pinned by the unit tests
     # (tests/test_probe_rally.py::test_resending_a_label_moves_the_same_probe) — it has
     # no in-game symptom, so there is nothing to assert on here.
-    assert data.get("named_probes_held") == [], f"probes not returned to mining: {data.get('named_probes_held')}"
+    assert data.get("labelled_probes_held") == [], f"probes not returned to mining: {data.get('labelled_probes_held')}"
     # the builder probe actually built its home structures
     for s in ("PYLON", "GATEWAY", "CYBERNETICSCORE"):
         assert _census(data).get(s, 0) >= 1, f"builder didn't build {s}: {data['census']}"

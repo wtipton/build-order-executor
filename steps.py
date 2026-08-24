@@ -27,7 +27,7 @@ from catalog import (
     RESEARCH,
     WARP_ABILITY,
     MorphSpec,
-    unit_id as _unit,
+    unit_id,
 )
 from schema import Step, Trigger
 
@@ -71,7 +71,7 @@ class StepsMixin:
             return self.vespene >= at.vespene
         if at.count is not None:
             name, n = next(iter(at.count.items()))
-            return self.all_own_units(_unit(name)).ready.amount >= n
+            return self.all_own_units(unit_id(name)).ready.amount >= n
         return True
 
     def _prewalk_due(self, step: Step) -> bool:
@@ -105,7 +105,7 @@ class StepsMixin:
 
     # ----------------------------------------------------------- step handlers
     async def do_build(self, step: Step) -> bool:
-        unit = _unit(step.what)
+        unit = unit_id(step.what)
 
         # A build isn't "done" when the command is issued — the probe may walk a
         # long way, and a probe over the tile can block placement so the order is
@@ -115,7 +115,7 @@ class StepsMixin:
             self.step_state.build.baseline = self.structures(unit).amount
 
         if self.structures(unit).amount > self.step_state.build.baseline:
-            self._clear_prewalk()  # the prewalk outlives steps, so clear it explicitly
+            self.prewalk_state.clear()  # outlives the step, so release it explicitly
             return True
 
         if not self.can_afford(unit):
@@ -137,11 +137,12 @@ class StepsMixin:
         # else auto-selected from the free pool — never a sent probe.
         label = getattr(step, "label", None)
         if label is not None:
-            builder = self._named_worker(label)  # may be None if it died -> auto-select
+            builder = self._worker_by_label(label)  # may be None if it died -> auto-select
             target = None
         else:
             prewalked = self.prewalk_state.for_step is step
-            builder = self._prewalk_worker() if prewalked else None
+            # the probe prewalk already walked to this build's spot, if any
+            builder = self._worker_by_tag(self.prewalk_state.builder_tag) if prewalked else None
             target = self.prewalk_state.target if prewalked else None
         # how the builder was picked, for the [builder] line (None here => auto-selected below)
         origin = "auto" if builder is None else (f"label:{label}" if label is not None else "prewalk")
@@ -154,7 +155,7 @@ class StepsMixin:
             dest = target if isinstance(target, Unit) else None  # the geyser, if one was reserved
             chosen = await self._build_gas(builder, dest)
         elif unit == U.NEXUS:
-            loc = target if isinstance(target, Point2) else self._next_expansion()
+            loc = target if isinstance(target, Point2) else self._find_next_expansion()
             if loc is None:
                 self._status = "no expansion location"
                 return False
@@ -164,7 +165,7 @@ class StepsMixin:
                 await self.build(U.NEXUS, near=loc, build_worker=chosen, placement_step=1,
                                  random_alternative=False)
         else:
-            loc = target if isinstance(target, Point2) else await self._placement_for(step)
+            loc = target if isinstance(target, Point2) else await self._find_build_target(step)
             if loc is None:
                 self._status = f"no placement for {step.what}"
                 return False
@@ -188,7 +189,7 @@ class StepsMixin:
         this is the only window into which probe actually got the job. Unconditional: a
         build issues ~30 times a game, and needing a flag means re-running to diagnose."""
         where = getattr(step, "where", None)
-        pos = dest.position if isinstance(dest, Unit) else dest
+        pos = dest.position if dest is not None else None
         dist = f" dist={chosen.distance_to(pos):.1f}" if (chosen is not None and pos is not None) else ""
         print(f"[builder] {self._clock():>4}  {step.what}{'/' + where if where else ''}"
               f" <- probe {chosen.tag if chosen else None} ({origin}){dist}", flush=True)
@@ -196,7 +197,7 @@ class StepsMixin:
     async def _build_gas(self, builder: Unit | None = None, geyser: Unit | None = None) -> Unit | None:
         """Issue an Assimilator on a free geyser; returns the worker used (or None)."""
         if geyser is None:
-            geyser = self._free_geyser()
+            geyser = self._find_free_geyser()
         if geyser is None:
             return None
         worker = builder or self._free_probe_near(geyser.position)
@@ -206,7 +207,7 @@ class StepsMixin:
         return worker
 
     async def do_train(self, step: Step) -> bool:
-        unit = _unit(step.what)
+        unit = unit_id(step.what)
         if not self.can_afford(unit):
             self._status = f"can't afford {step.what}"
             return False  # save for it (costs money + supply), stalling the line
@@ -218,7 +219,7 @@ class StepsMixin:
         return True
 
     async def do_warp(self, step: Step) -> bool:
-        unit = _unit(step.what)
+        unit = unit_id(step.what)
 
         # A warp isn't "done" when we issue it: a Warpgate still reads as
         # off-cooldown to get_available_abilities on the frame(s) right after we
@@ -318,7 +319,7 @@ class StepsMixin:
         # enough energy, or nothing of the target type exists yet, it waits. Builds are
         # precise — place a chrono where it will actually have energy and something to
         # boost, not as a best-effort sprinkle. A chrono step ALWAYS spends a chrono.
-        target_type = _unit(step.target)
+        target_type = unit_id(step.target)
         pool = (self.townhalls(U.NEXUS) if target_type == U.NEXUS
                 else self.structures(target_type)).ready
         if not pool:
@@ -342,15 +343,15 @@ class StepsMixin:
         # Reuse the probe already under this label if it's still alive (e.g. move
         # the "scout" from the enemy main out to the proxy), else pull a fresh one.
         # A sent probe is held out of automation until a return_probe (see
-        # _excluded_tags), so it stays put/on-task rather than drifting back to mine.
+        # _probes_unavailable_to_automation), so it stays put/on-task rather than drifting back to mine.
         dest = self._resolve_place(step.where)
-        worker = self._named_worker(step.label)
+        worker = self._worker_by_label(step.label)
         if worker is None:
             worker = self._free_probe_near(dest)
             if worker is None:
                 self._status = "no free probe to send"
                 return False  # no probe available yet — stall the line
-            self.named_probes[step.label] = worker.tag
+            self.labelled_probes[step.label] = worker.tag
             # Not a builder: a sent probe is gone for a long time, so it rejoins at the
             # populating base (via return_probe), not wherever it happened to be mining.
             self.home_base_by_builder.pop(worker.tag, None)
@@ -358,7 +359,7 @@ class StepsMixin:
         return True
 
     async def do_return_probe(self, step: Step) -> bool:
-        tag = self.named_probes.pop(step.label, None)
+        tag = self.labelled_probes.pop(step.label, None)
         worker = self._worker_by_tag(tag) if tag is not None else None
         if worker is not None:
             field = self._populating_field()  # our currently-populating base, never enemy minerals
@@ -374,26 +375,25 @@ class StepsMixin:
         return True
 
     async def do_rally_and_transfer_probes(self, step: Step) -> bool:
-        bases = self.ordered_bases()
-        if step.base > len(bases):
-            self._status = f"base {step.base} not up yet (have {len(bases)})"
-            return False  # that base isn't up yet — stall the line until it exists
+        # The build says to populate base N, so we do — no check that a Nexus is there
+        # yet. The location is what matters; probes sent to its minerals will be mining
+        # by the time it finishes.
         self.populating_base_num = step.base
-        base = bases[step.base - 1]
-        field = self._base_field(base)
+        target = self.base_position(step.base)
+        field = self._base_field(target)
         if field is None:
-            return True
-        # rally every Nexus's new probes onto this base's minerals
+            return True  # no patches there (mined out, or off the map's expansion list)
+        # rally every Nexus's new probes onto that base's minerals
         for nexus in self.townhalls(U.NEXUS).ready:
             nexus(AbilityId.RALLY_WORKERS, field)
         # transfer every OTHER base's excess mineral workers here, leaving each at
         # the cap. assigned_harvesters is the accurate count, so moving exactly
         # (assigned - cap) of that base's workers lands it on the cap. Prefer ones
         # not carrying (no wasted trip), but include carriers if needed to reach it.
-        pool = self.workers.tags_not_in(self._excluded_tags()).filter(lambda w: w.is_gathering)
-        for th in bases:
-            if th.tag == base.tag:
-                continue
+        pool = self.workers.tags_not_in(self._probes_unavailable_to_automation()).filter(lambda w: w.is_gathering)
+        for th in self.ordered_bases():
+            if th.position.distance_to(target) < 6:
+                continue  # this IS the target base
             excess = th.assigned_harvesters - FULL_MINERAL_SATURATION
             if excess <= 0:
                 continue
