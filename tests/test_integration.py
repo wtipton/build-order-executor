@@ -41,6 +41,16 @@ def _fail(build: str, why: str, proc_stdout: str | None, proc_stderr: str | None
     )
 
 
+def _census(data: dict) -> dict:
+    """The summary's census keyed by UnitTypeId name.
+
+    `[summary]` reports the game's own display names (CyberneticsCore, WarpGate) so it
+    matches the `[complete]` lines; those upper-case back to the enum names the catalog
+    tables use, which is what these assertions are written against.
+    """
+    return {name.upper(): n for name, n in data["census"].items()}
+
+
 def _run(build: str, time_limit: int) -> dict:
     """Run a build to completion and return its parsed [summary] JSON.
 
@@ -76,7 +86,7 @@ def test_all_schema_features_runs_to_completion():
         f"stalled on {data['next_step']!r} at {data['final_time']}s "
         f"({data['steps_done']}/{data['steps_total']})"
     )
-    assert data["census"].get("ARCHON", 0) >= 1, f"no Archon (census={data['census']})"
+    assert _census(data).get("ARCHON", 0) >= 1, f"no Archon (census={data['census']})"
     # No Warpgate assertion: the build doesn't research Warpgate at all (it auto-morphs
     # Gateways in 4.10 but not modern, so it's version-specific — see the build header).
 
@@ -91,7 +101,7 @@ def test_warp_in():
         f"stalled on {data['next_step']!r} at {data['final_time']}s "
         f"({data['steps_done']}/{data['steps_total']})"
     )
-    assert data["census"].get("ZEALOT", 0) >= 1, f"no warped-in Zealot (census={data['census']})"
+    assert _census(data).get("ZEALOT", 0) >= 1, f"no warped-in Zealot (census={data['census']})"
 
 
 @pytest.mark.integration
@@ -105,7 +115,8 @@ def test_all_units_and_structures_produced():
     expected = ({s.name for s in catalog.BUILDABLE_STRUCTURES}
                 | {u.name for u in catalog.TRAINABLE_UNITS}
                 | {"ARCHON"})
-    missing = sorted(name for name in expected if data["census"].get(name, 0) < 1)
+    census = _census(data)
+    missing = sorted(name for name in expected if census.get(name, 0) < 1)
     assert not missing, f"missing from census: {missing} (census={data['census']})"
 
 
@@ -118,7 +129,7 @@ def test_all_base_locations():
         f"stalled on {data['next_step']!r} at {data['final_time']}s "
         f"({data['steps_done']}/{data['steps_total']}) — a named location may not resolve/place"
     )
-    assert data["census"].get("NEXUS", 0) >= 6, f"expected 6 bases (census={data['census']})"
+    assert _census(data).get("NEXUS", 0) >= 6, f"expected 6 bases (census={data['census']})"
     bases = data.get("bases", [])
     assert len(bases) >= 6 and all(w > 0 for w in bases[:6]), f"a base is unpopulated: {bases}"
     # a Pylon landed at each distinct named location (guards the re-issue/placement
@@ -149,7 +160,7 @@ def test_probe_naming():
     assert data.get("named_probes_held") == [], f"probes not returned to mining: {data.get('named_probes_held')}"
     # the builder probe actually built its home structures
     for s in ("PYLON", "GATEWAY", "CYBERNETICSCORE"):
-        assert data["census"].get(s, 0) >= 1, f"builder didn't build {s}: {data['census']}"
+        assert _census(data).get(s, 0) >= 1, f"builder didn't build {s}: {data['census']}"
 
 
 @pytest.mark.integration

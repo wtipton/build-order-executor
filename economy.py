@@ -173,4 +173,4 @@ class EconomyMixin:
 
     def _populating_field(self) -> Unit | None:
         """Grab a specific field from the currently-populating base."""
-        return self._base_field(self._ordered_bases()[self.populating_base_num - 1])
+        return self._base_field(self.ordered_bases()[self.populating_base_num - 1])

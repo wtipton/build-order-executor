@@ -3,7 +3,7 @@ confirm/stall, prewalk hand-off) and every `do_<action>` handler.
 
 `StepsMixin` is mixed into `BuildOrderBot` (see bot.py); its methods run on the
 live bot via `self` and lean on the other mixins' helpers (`_free_probe_near`,
-`_ordered_bases`, `_resolve_place`, `_free_probe_near`, …).
+`ordered_bases`, `_resolve_place`, `_free_probe_near`, …).
 """
 
 from __future__ import annotations
@@ -374,7 +374,7 @@ class StepsMixin:
         return True
 
     async def do_rally_and_transfer_probes(self, step: Step) -> bool:
-        bases = self._ordered_bases()
+        bases = self.ordered_bases()
         if step.base > len(bases):
             self._status = f"base {step.base} not up yet (have {len(bases)})"
             return False  # that base isn't up yet — stall the line until it exists

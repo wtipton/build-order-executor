@@ -52,6 +52,18 @@ MAX_PRODUCTION_QUEUE = 5
 PRODUCTION_BUILDINGS: frozenset[U] = frozenset(
     {U.NEXUS, U.GATEWAY, U.WARPGATE, U.ROBOTICSFACILITY, U.STARGATE}
 )
+# Producers whose units need somewhere to gather: everything except the Nexus, whose
+# probes go to minerals rather than to the army's rally point.
+COMBAT_PRODUCTION: frozenset[U] = PRODUCTION_BUILDINGS - {U.NEXUS}
+
+# Producers that can be WALLED IN: their units walk out on the ground, so a building
+# packed against the last exit traps them. A Warpgate warps its units in wherever the
+# pylon is and a Stargate's fly out, so neither can be blocked; a Nexus can, because
+# probes come out on foot.
+BLOCKABLE_PRODUCTION: frozenset[U] = frozenset(
+    {U.GATEWAY, U.ROBOTICSFACILITY, U.NEXUS}
+)
+
 # All Protoss structures that can research upgrades / be chrono'd (for filtering
 # "our" upgrades out of the all-race UPGRADE_RESEARCHED_FROM).
 PROTOSS_BUILDINGS: frozenset[U] = frozenset(

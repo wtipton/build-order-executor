@@ -164,7 +164,7 @@ async def test_rally_sets_target():
 
 # ------------------------------------------------------------------ rally_and_transfer_probes
 async def test_rally_and_transfer_probes_holds_when_base_not_up():
-    fake = fake_bot(_ordered_bases=lambda: [fake_unit()], populating_base_num=1)
+    fake = fake_bot(ordered_bases=lambda: [fake_unit()], populating_base_num=1)
     assert await BuildOrderBot.do_rally_and_transfer_probes(fake, fake_bot(base=2)) is False
     assert fake.populating_base_num == 1  # unchanged — didn't switch to a base that isn't up
 
@@ -175,7 +175,7 @@ async def test_rally_and_transfer_probes_sets_base_and_rallies_nexuses():
     b2 = fake_unit(tag=2, assigned_harvesters=0)
     nexus = fake_unit()
     fake = fake_bot(
-        _ordered_bases=lambda: [b1, b2],
+        ordered_bases=lambda: [b1, b2],
         _base_field=lambda base: field,
         populating_base_num=1,
         townhalls=lambda t: FakeUnits([nexus]),

@@ -75,7 +75,7 @@ class ObserveMixin:
             "census": census,
             "upgrades": upgrades,
             "researching": researching,
-            "bases": [int(t.assigned_harvesters) for t in self._ordered_bases()],
+            "bases": [int(t.assigned_harvesters) for t in self.ordered_bases()],
             "pylons_by_place": self._pylons_by_place(),
             "nexus_by_place": {p: 1 for p in self.BASE_RANK
                                if self.townhalls.closer_than(6, self._resolve_place(p)).exists},
@@ -167,7 +167,7 @@ class ObserveMixin:
 
     def _base_saturation(self) -> str:
         return " ".join(f"b{i+1}={t.assigned_harvesters}/{FULL_MINERAL_SATURATION}"
-                        for i, t in enumerate(self._ordered_bases()))
+                        for i, t in enumerate(self.ordered_bases()))
 
     def _chrono_available(self) -> int:
         return int(sum(n.energy for n in self.townhalls.ready) // CHRONO_ENERGY)

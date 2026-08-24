@@ -379,7 +379,7 @@ def test_populating_field_uses_the_designated_base():
     main, natural = fake_unit(tag=1), fake_unit(tag=2)
     patch = _field(7)
     fake = _field_bot({2: [patch]},
-                      _ordered_bases=lambda: FakeUnits([main, natural]),
+                      ordered_bases=lambda: FakeUnits([main, natural]),
                       populating_base_num=2)
     fake._base_field = lambda b: BuildOrderBot._base_field(fake, b)
     assert BuildOrderBot._populating_field(fake) is patch

@@ -15,8 +15,7 @@ from sc2.position import Point2
 from sc2.unit import Unit
 from sc2.units import Units
 
-from catalog import unit_id as _unit
-from placement import PRODUCTION
+from catalog import COMBAT_PRODUCTION, unit_id as _unit
 from schema import Step
 
 
@@ -68,7 +67,7 @@ class WorldMixin:
                 return e
         return None
 
-    def _ordered_bases(self) -> Units:
+    def ordered_bases(self) -> Units:
         """Our ready bases, nearest our start first — base 1 is the main, base 2 the
         natural, and so on. This is the numbering `rally_and_transfer_probes base: N`
         indexes into and that the [status] line reports.
@@ -145,7 +144,7 @@ class WorldMixin:
         can't pop out through a blocked exit). placement.py avoids sealing that exit
         in the first place; this walks them out of it.
         """
-        for b in self.structures(PRODUCTION).ready:
+        for b in self.structures(COMBAT_PRODUCTION).ready:
             if b.tag not in self._rallied:
                 self._rallied.add(b.tag)
                 b(AbilityId.RALLY_BUILDING, self.rally_point)
@@ -213,8 +212,8 @@ class WorldMixin:
         if unit == U.ASSIMILATOR:
             return self._free_geyser()
         if unit == U.PYLON:
-            return await self.placement.pylon()
-        return await self.placement.building(unit)
+            return await self.placement.pylon_position()
+        return await self.placement.building_position(unit)
 
     def _free_geyser(self) -> Unit | None:
         for th in self.townhalls.ready:
