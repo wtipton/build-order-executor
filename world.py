@@ -108,7 +108,16 @@ class WorldMixin:
         pool = self.workers.tags_not_in(self._excluded_tags())
         cands = pool.filter(lambda w: (w.is_gathering or w.is_idle) and not w.is_carrying_minerals)
         cands = cands or pool.filter(lambda w: w.is_gathering or w.is_idle) or pool
-        return cands.closest_to(pos) if cands else None
+        if not cands:
+            return None
+        chosen = cands.closest_to(pos)
+        # Remember where it was mining so it can go back there when it's done (see
+        # home_base_by_builder). Every builder comes through here, so this is the one
+        # place that needs to know.
+        home = self.townhalls.ready.closest_to(chosen) if self.townhalls.ready else None
+        if home is not None:
+            self.home_base_by_builder[chosen.tag] = home.tag
+        return chosen
 
     # ============================================================ rally
     def apply_rally(self) -> None:

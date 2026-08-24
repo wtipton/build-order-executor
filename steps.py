@@ -351,6 +351,9 @@ class StepsMixin:
                 self._status = "no free probe to send"
                 return False  # no probe available yet — stall the line
             self.named_probes[step.label] = worker.tag
+            # Not a builder: a sent probe is gone for a long time, so it rejoins at the
+            # populating base (via return_probe), not wherever it happened to be mining.
+            self.home_base_by_builder.pop(worker.tag, None)
         worker.move(dest)
         return True
 

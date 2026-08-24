@@ -90,6 +90,11 @@ class BuildOrderBot(StepsMixin, EconomyMixin, WorldMixin, ObserveMixin, BotAI):
         # `return_probe` step hands them back.
         self.named_probes: dict[str, int] = {}
 
+        # Probe tag -> the base it was mining at when we pulled it off to build. A builder
+        # is only away briefly, so it goes back where it came from; dumping it on the
+        # populating base instead slowly drains whichever base we keep pulling from.
+        self.home_base_by_builder: dict[int, int] = {}
+
         # Observability system state. Supports:
         # - Printing a [status] line every STATUS_INTERVAL
         # - Tracking when individual buildings, units, and upgrades completed

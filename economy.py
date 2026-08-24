@@ -135,9 +135,10 @@ class EconomyMixin:
         econ_workers = self.workers.tags_not_in(self._excluded_tags() or [])
         state = EconomyFrameState(econ_workers, self.gas_buildings)
         
-        # Avoid idle workers
+        # Avoid idle workers. A builder that just finished goes back to the base it
+        # came from; anyone else joins the base we're currently populating.
         for w in econ_workers.idle:
-            state.send_worker(w, self._populating_field())
+            state.send_worker(w, self._builder_home_field(w) or self._populating_field())
 
         # Make sure probes aren't stuck on assimilators under construction.
         gasses_under_construction = {g.tag for g in self.gas_buildings.not_ready}
@@ -157,6 +158,12 @@ class EconomyMixin:
             w = state.worker_mining_from(gas)
             if not state.send_worker(w, self._populating_field()):
                 break  # nowhere to put them
+
+    def _builder_home_field(self, worker: Unit) -> Unit | None:
+        """A field at the base `worker` was mining before we pulled it off to build, or
+        None if it wasn't a builder."""
+        base_tag = self.home_base_by_builder.pop(worker.tag, None)
+        return self._base_field(self.townhalls.tags_in({base_tag}).first) if base_tag else None
 
     def _base_field(self, base: Unit) -> Unit | None:
         """A mineral patch at `base`, or None if it has none left. Also what

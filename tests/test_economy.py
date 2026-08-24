@@ -240,8 +240,9 @@ def test_pulling_a_worker_off_decrements_that_geyser():
 
 
 # ------------------------------------------------------------------ manage_economy
-def _econ_bot(workers, *, gas=(), gas_target=0, populating=None, excluded=()):
+def _econ_bot(workers, *, gas=(), gas_target=0, populating=None, excluded=(), home=None):
     return fake_bot(
+        _builder_home_field=lambda w: home,
         workers=FakeUnits(workers),
         _excluded_tags=lambda: set(excluded),
         gas_buildings=FakeUnits(gas),
@@ -315,6 +316,42 @@ async def test_sent_and_prewalking_probes_are_left_alone():
         _econ_bot([miner, scout], populating=field, excluded={2}))
     miner.gather.assert_called_once_with(field)
     scout.gather.assert_not_called()
+
+
+async def test_a_finished_builder_goes_back_to_the_base_it_came_from():
+    """Otherwise every build drains one probe from whichever base we pull builders from
+    (usually the main) onto the populating base."""
+    builder = _worker(1, idle=True)
+    home, populating = _field(7), _field(8)
+    await BuildOrderBot.manage_economy(
+        _econ_bot([builder], home=home, populating=populating))
+    builder.gather.assert_called_once_with(home)
+
+
+async def test_a_non_builder_still_joins_the_populating_base():
+    idle = _worker(1, idle=True)
+    populating = _field(8)
+    await BuildOrderBot.manage_economy(
+        _econ_bot([idle], home=None, populating=populating))
+    idle.gather.assert_called_once_with(populating)
+
+
+def test_builder_home_lookup_consumes_the_record():
+    """One trip home per pull — the record shouldn't outlive it."""
+    base = fake_unit(tag=3)
+    patch = _field(7)
+    fake = fake_bot(home_base_by_builder={1: 3},
+                    townhalls=FakeUnits([base]),
+                    _base_field=lambda b: patch)
+    w = _worker(1)
+    assert BuildOrderBot._builder_home_field(fake, w) is patch
+    assert fake.home_base_by_builder == {}
+    assert BuildOrderBot._builder_home_field(fake, w) is None
+
+
+def test_builder_home_lookup_is_none_for_a_probe_we_never_pulled():
+    fake = fake_bot(home_base_by_builder={}, townhalls=FakeUnits())
+    assert BuildOrderBot._builder_home_field(fake, _worker(1)) is None
 
 
 # ------------------------------------------------------------------ base fields

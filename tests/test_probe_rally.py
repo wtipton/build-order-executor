@@ -26,14 +26,15 @@ def test_free_probe_near_reuses_idle_probe_at_target():
     gathering_home = fake_unit(tag=2, position=Point2((10.0, 10.0)),
                                is_idle=False, is_gathering=True, is_carrying_minerals=False)
     fake = fake_bot(workers=FakeUnits([idle_at_target, gathering_home]),
-                    _excluded_tags=lambda: set())
+                    _excluded_tags=lambda: set(), townhalls=FakeUnits(),
+                    home_base_by_builder={})
     assert BuildOrderBot._free_probe_near(fake, target).tag == 1
 
 
 # ------------------------------------------------------------------ send_probe
 async def test_send_probe_reuses_named_probe():
     existing = fake_unit(tag=1)
-    fake = fake_bot(_resolve_place=lambda w: DEST, named_probes={"scout": 1},
+    fake = fake_bot(_resolve_place=lambda w: DEST, named_probes={"scout": 1}, home_base_by_builder={},
                     _named_worker=lambda label: existing, _free_probe_near=lambda p: None)
     assert await BuildOrderBot.do_send_probe(fake, fake_bot(where="proxy", label="scout")) is True
     existing.move.assert_called_once_with(DEST)
@@ -42,7 +43,7 @@ async def test_send_probe_reuses_named_probe():
 
 async def test_send_probe_pulls_and_registers_fresh_probe():
     fresh = fake_unit(tag=7)
-    fake = fake_bot(_resolve_place=lambda w: DEST, named_probes={},
+    fake = fake_bot(_resolve_place=lambda w: DEST, named_probes={}, home_base_by_builder={},
                     _named_worker=lambda label: None, _free_probe_near=lambda p: fresh)
     assert await BuildOrderBot.do_send_probe(fake, fake_bot(where="proxy", label="scout")) is True
     assert fake.named_probes == {"scout": 7}  # registered so it's held out of automation
@@ -50,7 +51,7 @@ async def test_send_probe_pulls_and_registers_fresh_probe():
 
 
 async def test_send_probe_holds_when_no_probe_available():
-    fake = fake_bot(_resolve_place=lambda w: DEST, named_probes={},
+    fake = fake_bot(_resolve_place=lambda w: DEST, named_probes={}, home_base_by_builder={},
                     _named_worker=lambda label: None, _free_probe_near=lambda p: None)
     assert await BuildOrderBot.do_send_probe(fake, fake_bot(where="proxy", label="scout")) is False
 
@@ -58,7 +59,7 @@ async def test_send_probe_holds_when_no_probe_available():
 def _named_probe_bot(pool):
     """Fake bot that drives the REAL _named_worker / _worker_by_tag lookups (rather
     than stubbing them), so the label -> live-probe reuse path is genuinely exercised."""
-    fake = fake_bot(_resolve_place=lambda w: DEST, named_probes={}, workers=FakeUnits(pool))
+    fake = fake_bot(_resolve_place=lambda w: DEST, named_probes={}, home_base_by_builder={}, workers=FakeUnits(pool))
     fake._worker_by_tag = lambda tag: BuildOrderBot._worker_by_tag(fake, tag)
     fake._named_worker = lambda label: BuildOrderBot._named_worker(fake, label)
     return fake
