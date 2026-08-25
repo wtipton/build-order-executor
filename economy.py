@@ -155,7 +155,7 @@ class EconomyMixin:
         # Make sure we have the right number of workers on gasses
         while state.num_gas_workers() < self.gas_target and 0 < state.num_non_gas_workers():
             gas = state.least_busy_gas()
-            w = state.non_gas_worker_near(gas)
+            w = state.non_gas_worker_near(self._populating_field())
             if not state.send_worker(w, gas):
                 break  # we have no ready geyser to put them on
 

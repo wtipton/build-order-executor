@@ -54,8 +54,8 @@ def _geyser(tag, x=0.0, ideal=3, ready=True, assigned=None, workers=()):
                      assigned_harvesters=assigned)
 
 
-def _field(tag=99):
-    return fake_unit(tag=tag, position=_at(0))
+def _field(tag=99, x=0.0):
+    return fake_unit(tag=tag, position=_at(x))
 
 
 def _state(workers, gasses=()):
@@ -426,4 +426,18 @@ async def test_rebalance_waits_when_busiest_workers_are_mid_return():
     await BuildOrderBot.manage_economy(
         _econ_bot([r1, r2, r3], gas=[gas1, gas2], gas_target=3, populating=_field()))
     assert not any(r.gather.called for r in (r1, r2, r3))
+
+
+async def test_gas_workers_pulled_from_populating_base_not_old_base():
+    """When populating gas on an older base after rallying has moved to a new base,
+    probes must be pulled from the populating base to avoid leaving the older base undersaturated."""
+    gas_at_base1 = _geyser(5, x=0)
+    w_base1 = _worker(1, x=2)
+    w_base2 = _worker(2, x=100)
+    field_base2 = _field(x=100)
+    await BuildOrderBot.manage_economy(
+        _econ_bot([w_base1, w_base2], gas=[gas_at_base1], gas_target=1, populating=field_base2))
+    assert not w_base1.gather.called, "Probe from saturated older base was incorrectly pulled"
+    w_base2.gather.assert_called_once_with(gas_at_base1)
+
 
