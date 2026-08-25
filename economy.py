@@ -42,7 +42,9 @@ class EconomyFrameState:
         # worker tag -> the geyser it is gathering from. GATHER LEG ONLY — a worker on the
         # return leg is missing from here even though it is on gas.
         self._gas_by_gathering_worker: dict[int, int] = {
-            w.tag: w.order_target for w in econ_workers if w.order_target in self._gas_tags
+            w.tag: w.order_target
+            for w in econ_workers
+            if w.order_target in self._gas_tags and not w.is_carrying_vespene
         }
 
     # ---------------------------------------------------------------- mutation
