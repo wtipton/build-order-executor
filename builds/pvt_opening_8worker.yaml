@@ -9,38 +9,34 @@
 #
 # Schema defined + validated in schema.py.
 
-name: Protoss 8-worker economic opening (PvT)
-race: Protoss
-
-steps:
-  - {at: {time: 7},     do: chrono, target: Nexus, note: "1st chrono on probes (~6.5s)"}
-  - {at: {supply: 12},  do: build,  what: Pylon,   prewalk: {minerals: 75},  note: "Pylon=100"}
-  - {at: {supply: 14},  do: build,  what: Gateway, prewalk: {minerals: 100}, note: "Gateway=150"}
-  - {at: {supply: 14},  do: send_probe, where: enemy_main, label: scout, note: "poke-scout the enemy"}
-  - {at: {supply: 14},  do: chrono, target: Nexus, note: "2nd chrono the moment Nexus hits 50 energy"}
-  # cut probes at 18 to bank Nexus (400) + Gas (75) + Core (150) so all three land
-  # on 18; resume after the Core, then 2nd Gas (19) and Pylon (20) follow naturally.
-  - {at: {supply: 18},  do: workers, state: stop,  note: "cut for Nexus + Gas + Core"}
-  - {at: {supply: 18},  do: build,  what: Nexus,   prewalk: {minerals: 300}, note: "natural expansion (Nexus=400)"}
-  - {at: {supply: 18},  do: build,  what: Assimilator, note: "1st gas"}
-  - {at: {supply: 18},  do: gas_workers, count: 6, note: "fully saturate both gases (3 each) as they finish"}
-  - {at: {supply: 18},  do: build,  what: CyberneticsCore, prewalk: {minerals: 100}, note: "Core=150"}
-  - {at: {supply: 18},  do: workers, state: start, note: "resume probes"}
-  - {at: {supply: 18},  do: return_probe, label: scout, note: "scout home to mining"}
-  - {at: {supply: 19},  do: build,  what: Assimilator, note: "2nd gas"}
-  - {at: {supply: 20},  do: build,  what: Pylon,   prewalk: {minerals: 75}}
-  # @core: 1st Stalker (chrono) + Warpgate, then Sentry, Twilight, 2nd Stalker, 2nd Gate, Pylon
-  - {at: {count: {CyberneticsCore: 1}}, do: train,    what: Stalker, note: "1st Stalker (chrono'd)"}
-  - {at: {count: {CyberneticsCore: 1}}, do: chrono,   target: Gateway, note: "chrono the Stalker"}
-  - {at: {count: {CyberneticsCore: 1}}, do: research, what: Warpgate}
-  - {at: {count: {CyberneticsCore: 1}}, do: train,    what: Sentry}
-  - {at: {count: {CyberneticsCore: 1}}, do: build,    what: TwilightCouncil}
-  - {at: {count: {CyberneticsCore: 1}}, do: train,    what: Stalker, note: "2nd Stalker"}
-  - {at: {count: {CyberneticsCore: 1}}, do: build,    what: Gateway, note: "2nd Gateway"}
-  - {at: {count: {CyberneticsCore: 1}}, do: build,    what: Pylon}
-  # @twilight: Blink (chrono) + hallu (Sentry hallucinates a Phoenix, ~scout)
-  - {at: {count: {TwilightCouncil: 1}}, do: research, what: Blink}
-  - {at: {count: {TwilightCouncil: 1}}, do: chrono,   target: TwilightCouncil, note: "chrono Blink"}
-  - {at: {count: {TwilightCouncil: 1}}, do: hallucinate, note: "Sentry hallucinates a Phoenix"}
-  # once the natural finishes, transfer workers onto it and rally new probes there
-  - {at: {count: {Nexus: 2}}, do: rally_and_transfer_probes, base: 2, note: "saturate the natural"}
+- {at: {time: 7},     do: chrono, target: Nexus, note: "1st chrono on probes (~6.5s)"}
+- {at: {supply: 12},  do: build,  what: Pylon,   prewalk: {minerals: 75},  note: "Pylon=100"}
+- {at: {supply: 14},  do: build,  what: Gateway, prewalk: {minerals: 100}, note: "Gateway=150"}
+- {at: {supply: 14},  do: send_probe, where: enemy_main, label: scout, note: "poke-scout the enemy"}
+- {at: {supply: 14},  do: chrono, target: Nexus, note: "2nd chrono the moment Nexus hits 50 energy"}
+# cut probes at 18 to bank Nexus (400) + Gas (75) + Core (150) so all three land
+# on 18; resume after the Core, then 2nd Gas (19) and Pylon (20) follow naturally.
+- {at: {supply: 18},  do: workers, state: stop,  note: "cut for Nexus + Gas + Core"}
+- {at: {supply: 18},  do: build,  what: Nexus,   prewalk: {minerals: 300}, note: "natural expansion (Nexus=400)"}
+- {at: {supply: 18},  do: build,  what: Assimilator, note: "1st gas"}
+- {at: {supply: 18},  do: gas_workers, count: 6, note: "fully saturate both gases (3 each) as they finish"}
+- {at: {supply: 18},  do: build,  what: CyberneticsCore, prewalk: {minerals: 100}, note: "Core=150"}
+- {at: {supply: 18},  do: workers, state: start, note: "resume probes"}
+- {at: {supply: 18},  do: return_probe, label: scout, note: "scout home to mining"}
+- {at: {supply: 19},  do: build,  what: Assimilator, note: "2nd gas"}
+- {at: {supply: 20},  do: build,  what: Pylon,   prewalk: {minerals: 75}}
+# @core: 1st Stalker (chrono) + Warpgate, then Sentry, Twilight, 2nd Stalker, 2nd Gate, Pylon
+- {at: {count: {CyberneticsCore: 1}}, do: train,    what: Stalker, note: "1st Stalker (chrono'd)"}
+- {at: {count: {CyberneticsCore: 1}}, do: chrono,   target: Gateway, note: "chrono the Stalker"}
+- {at: {count: {CyberneticsCore: 1}}, do: research, what: Warpgate}
+- {at: {count: {CyberneticsCore: 1}}, do: train,    what: Sentry}
+- {at: {count: {CyberneticsCore: 1}}, do: build,    what: TwilightCouncil}
+- {at: {count: {CyberneticsCore: 1}}, do: train,    what: Stalker, note: "2nd Stalker"}
+- {at: {count: {CyberneticsCore: 1}}, do: build,    what: Gateway, note: "2nd Gateway"}
+- {at: {count: {CyberneticsCore: 1}}, do: build,    what: Pylon}
+# @twilight: Blink (chrono) + hallu (Sentry hallucinates a Phoenix, ~scout)
+- {at: {count: {TwilightCouncil: 1}}, do: research, what: Blink}
+- {at: {count: {TwilightCouncil: 1}}, do: chrono,   target: TwilightCouncil, note: "chrono Blink"}
+- {at: {count: {TwilightCouncil: 1}}, do: hallucinate, note: "Sentry hallucinates a Phoenix"}
+# once the natural finishes, transfer workers onto it and rally new probes there
+- {at: {count: {Nexus: 2}}, do: rally_and_transfer_probes, base: 2, note: "saturate the natural"}

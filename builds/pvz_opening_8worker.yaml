@@ -9,40 +9,36 @@
 #
 # Patch facts / targets: 8 starting workers, Nexus = 13 supply, Adept out ~2:57.
 
-name: Protoss 8-worker safe opening (PvZ)
-race: Protoss
-
-steps:
-  - {at: {time: 7},   do: chrono, target: Nexus, note: "1st chrono on probes (~6.5s)"}
-  # A builder is pulled off the line as soon as we can afford the building. Add
-  # prewalk: {minerals: N} to send it EARLIER — once we'd have N minerals left AFTER
-  # paying for the probes still needed to reach the step's supply (so it can't fire
-  # early on a transient mineral spike). Pick N under the build's cost by roughly
-  # what the walk is worth.
-  - {at: {supply: 12},  do: build,  what: Pylon,   prewalk: {minerals: 75},  note: "Pylon=100"}
-  - {at: {supply: 12},  do: send_probe, where: enemy_main, label: scout, note: "poke-scout the enemy"}
-  - {at: {supply: 14},  do: build,  what: Gateway, prewalk: {minerals: 100}, note: "Gateway=150"}
-  - {at: {supply: 14},  do: chrono, target: Nexus, note: "2nd chrono the moment Nexus hits 50 energy"}
-  - {at: {supply: 15},  do: build,  what: Assimilator}
-  - {at: {count: {Assimilator: 1}}, do: gas_workers,  count: 1, note: "pull one one gas1"}
-  - {at: {count: {Probe: 17}}, do: gas_workers, count: 2, note: "17th probe -> gas"}
-  # cut probe production to bank Nexus (400) + Core (150), resume after Core.
-  - {at: {supply: 19},  do: workers, state: stop,  note: "cut probes for Nexus + Core"}
-  - {at: {supply: 19},  do: return_probe, label: scout, note: "scout home to mining"}
-  - {at: {count: {Probe: 19}}, do: gas_workers, count: 3, note: "19th probe -> gas"}
-  # long walk to the natural, so give it a big lead: walk at 300 (Nexus=400).
-  - {at: {supply: 19},  do: build,  what: Nexus,   prewalk: {minerals: 300}, note: "natural expansion (Nexus=400)"}
-  - {at: {supply: 19},  do: build,  what: CyberneticsCore}
-  - {at: {supply: 19},  do: workers, state: start, note: "just one probe then small cut for pylon"}
-  - {at: {supply: 20},  do: workers, state: stop,  note: ""}
-  - {at: {supply: 20},  do: set_rally_point,  where: natural}
-  - {at: {supply: 20},  do: build,  what: Assimilator}
-  - {at: {supply: 20},  do: build,  what: Pylon}
-  - {at: {supply: 20},  do: workers, state: start, note: "resume"}
-  - {at: {count: {Probe: 21}}, do: gas_workers, count: 4, note: ""}
-  - {at: {count: {CyberneticsCore: 1}}, do: train,  what: Adept,    note: "out by ~2:57"}
-  - {at: {count: {CyberneticsCore: 1}}, do: chrono, target: Gateway, note: "chrono the Adept"}
-  - {at: {count: {Probe: 22}}, do: gas_workers, count: 5, note: ""}
-  - {at: {count: {Probe: 23}}, do: gas_workers, count: 6, note: ""}
-  # once the natural finishes, transfer workers onto it and rally new probes there
-  - {at: {count: {Nexus: 2}}, do: rally_and_transfer_probes, base: 2, note: "saturate the natural"}
+- {at: {time: 7},   do: chrono, target: Nexus, note: "1st chrono on probes (~6.5s)"}
+# A builder is pulled off the line as soon as we can afford the building. Add
+# prewalk: {minerals: N} to send it EARLIER — once we'd have N minerals left AFTER
+# paying for the probes still needed to reach the step's supply (so it can't fire
+# early on a transient mineral spike). Pick N under the build's cost by roughly
+# what the walk is worth.
+- {at: {supply: 12},  do: build,  what: Pylon,   prewalk: {minerals: 75},  note: "Pylon=100"}
+- {at: {supply: 12},  do: send_probe, where: enemy_main, label: scout, note: "poke-scout the enemy"}
+- {at: {supply: 14},  do: build,  what: Gateway, prewalk: {minerals: 100}, note: "Gateway=150"}
+- {at: {supply: 14},  do: chrono, target: Nexus, note: "2nd chrono the moment Nexus hits 50 energy"}
+- {at: {supply: 15},  do: build,  what: Assimilator}
+- {at: {count: {Assimilator: 1}}, do: gas_workers,  count: 1, note: "pull one one gas1"}
+- {at: {count: {Probe: 17}}, do: gas_workers, count: 2, note: "17th probe -> gas"}
+# cut probe production to bank Nexus (400) + Core (150), resume after Core.
+- {at: {supply: 19},  do: workers, state: stop,  note: "cut probes for Nexus + Core"}
+- {at: {supply: 19},  do: return_probe, label: scout, note: "scout home to mining"}
+- {at: {count: {Probe: 19}}, do: gas_workers, count: 3, note: "19th probe -> gas"}
+# long walk to the natural, so give it a big lead: walk at 300 (Nexus=400).
+- {at: {supply: 19},  do: build,  what: Nexus,   prewalk: {minerals: 300}, note: "natural expansion (Nexus=400)"}
+- {at: {supply: 19},  do: build,  what: CyberneticsCore}
+- {at: {supply: 19},  do: workers, state: start, note: "just one probe then small cut for pylon"}
+- {at: {supply: 20},  do: workers, state: stop,  note: ""}
+- {at: {supply: 20},  do: set_rally_point,  where: natural}
+- {at: {supply: 20},  do: build,  what: Assimilator}
+- {at: {supply: 20},  do: build,  what: Pylon}
+- {at: {supply: 20},  do: workers, state: start, note: "resume"}
+- {at: {count: {Probe: 21}}, do: gas_workers, count: 4, note: ""}
+- {at: {count: {CyberneticsCore: 1}}, do: train,  what: Adept,    note: "out by ~2:57"}
+- {at: {count: {CyberneticsCore: 1}}, do: chrono, target: Gateway, note: "chrono the Adept"}
+- {at: {count: {Probe: 22}}, do: gas_workers, count: 5, note: ""}
+- {at: {count: {Probe: 23}}, do: gas_workers, count: 6, note: ""}
+# once the natural finishes, transfer workers onto it and rally new probes there
+- {at: {count: {Nexus: 2}}, do: rally_and_transfer_probes, base: 2, note: "saturate the natural"}

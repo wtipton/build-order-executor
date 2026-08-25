@@ -165,7 +165,7 @@ def main() -> None:
     run_game(
         game_map,
         [
-            Bot(Race[build.race],
+            Bot(Race.Protoss,
                 BuildOrderBot(build, dump_data=args.dump_data),
                 name="BuildOrderBot", fullscreen=args.fullscreen),
             Bot(Race.Terran, PassiveBot(), name="PassiveBot"),

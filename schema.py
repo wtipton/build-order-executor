@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Annotated, Literal, Union
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, field_validator, model_validator
 
 import catalog
 
@@ -189,11 +189,14 @@ Step = Annotated[
 class BuildConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
     name: str = "build"
-    race: Literal["Protoss"] = "Protoss"  # bot is Protoss-only for now; anything else fails validation
     steps: list[Step]
 
 
 def load_build(path: str | Path) -> BuildConfig:
-    with open(path) as f:
+    p = Path(path)
+    with open(p) as f:
         data = yaml.safe_load(f)
-    return BuildConfig.model_validate(data)
+    if not isinstance(data, list):
+        raise ValueError(f"expected a YAML list of steps in {path}, got {type(data).__name__}")
+    steps = TypeAdapter(list[Step]).validate_python(data)
+    return BuildConfig(name=p.stem, steps=steps)

@@ -6,7 +6,8 @@ import glob
 
 import pytest
 
-from schema import BuildConfig, load_build
+from schema import BuildConfig, Step, load_build
+from pydantic import TypeAdapter
 
 
 def test_all_shipped_builds_load():
@@ -17,7 +18,7 @@ def test_all_shipped_builds_load():
 
 
 def _one_step(**step):
-    return {"steps": [{"at": {"time": 1}, **step}]}
+    return {"at": {"time": 1}, **step}
 
 
 # Each case: a step dict that must fail validation, and a substring the error
@@ -36,30 +37,38 @@ BAD_STEPS = [
 @pytest.mark.parametrize("step,needle", BAD_STEPS)
 def test_bad_step_rejected(step, needle):
     with pytest.raises(Exception) as ei:
-        BuildConfig.model_validate(_one_step(**step))
+        TypeAdapter(Step).validate_python(_one_step(**step))
     assert needle in str(ei.value)
 
 
 def test_extra_field_rejected():
     with pytest.raises(Exception) as ei:
-        BuildConfig.model_validate(_one_step(do="hallucinate", unit="Phoenix"))
+        TypeAdapter(Step).validate_python(_one_step(do="hallucinate", unit="Phoenix"))
     assert "Extra inputs are not permitted" in str(ei.value)
 
 
 def test_trigger_needs_exactly_one_key():
     with pytest.raises(Exception):
-        BuildConfig.model_validate({"steps": [{"at": {}, "do": "hallucinate"}]})
+        TypeAdapter(Step).validate_python({"at": {}, "do": "hallucinate"})
     with pytest.raises(Exception):
-        BuildConfig.model_validate({"steps": [{"at": {"time": 1, "supply": 2}, "do": "hallucinate"}]})
+        TypeAdapter(Step).validate_python({"at": {"time": 1, "supply": 2}, "do": "hallucinate"})
 
 
 def test_count_trigger_bad_name_rejected():
     with pytest.raises(Exception) as ei:
-        BuildConfig.model_validate({"steps": [{"at": {"count": {"TemplarArchives": 1}}, "do": "hallucinate"}]})
+        TypeAdapter(Step).validate_python({"at": {"count": {"TemplarArchives": 1}}, "do": "hallucinate"})
     assert "unit/structure to count" in str(ei.value) or "unknown unit type" in str(ei.value)
 
 
 @pytest.mark.parametrize("name", ["Probe", "Gateway", "TemplarArchive", "WarpGate", "Archon", "HighTemplar"])
 def test_count_trigger_accepts_ownable_types(name):
     # includes the morph-only results (WarpGate, Archon) a build legitimately gates on
-    BuildConfig.model_validate({"steps": [{"at": {"count": {name: 1}}, "do": "hallucinate"}]})
+    TypeAdapter(Step).validate_python({"at": {"count": {name: 1}}, "do": "hallucinate"})
+
+
+def test_non_list_yaml_rejected(tmp_path):
+    dict_file = tmp_path / "dict_build.yaml"
+    dict_file.write_text("steps:\n  - {at: {time: 1}, do: hallucinate}\n")
+    with pytest.raises(ValueError, match="expected a YAML list of steps"):
+        load_build(dict_file)
+

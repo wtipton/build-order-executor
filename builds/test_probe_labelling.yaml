@@ -5,31 +5,28 @@
 # returned to mining. Asserted via [summary] named_probes_held
 # / census in tests/test_integration.py.
 
-name: Probe Labelling
+# create the three labelled probes
+- {at: {time: 3},  do: send_probe, where: main,       label: scout1}
+- {at: {time: 3},  do: send_probe, where: enemy_main, label: scout2}
+- {at: {time: 3},  do: send_probe, where: main,       label: builder}
 
-steps:
-  # create the three labelled probes
-  - {at: {time: 3},  do: send_probe, where: main,       label: scout1}
-  - {at: {time: 3},  do: send_probe, where: enemy_main, label: scout2}
-  - {at: {time: 3},  do: send_probe, where: main,       label: builder}
+# tour: scout1 walks our bases, scout2 the enemy side — re-sent by label, spaced
+# in time so it's a real tour (each leg moves the SAME probe)
+- {at: {time: 15}, do: send_probe, where: natural, label: scout1}
+- {at: {time: 25}, do: send_probe, where: enemy_natural, label: scout2}
+- {at: {time: 35}, do: send_probe, where: third,   label: scout1}
+- {at: {time: 45}, do: send_probe, where: proxy,   label: scout2}
+- {at: {time: 55}, do: send_probe, where: fourth,  label: scout1}
+- {at: {time: 70}, do: send_probe, where: fifth,   label: scout1}
+- {at: {time: 80}, do: send_probe, where: main,    label: scout2}
+- {at: {time: 90}, do: send_probe, where: sixth,   label: scout1}
 
-  # tour: scout1 walks our bases, scout2 the enemy side — re-sent by label, spaced
-  # in time so it's a real tour (each leg moves the SAME probe)
-  - {at: {time: 15}, do: send_probe, where: natural, label: scout1}
-  - {at: {time: 25}, do: send_probe, where: enemy_natural, label: scout2}
-  - {at: {time: 35}, do: send_probe, where: third,   label: scout1}
-  - {at: {time: 45}, do: send_probe, where: proxy,   label: scout2}
-  - {at: {time: 55}, do: send_probe, where: fourth,  label: scout1}
-  - {at: {time: 70}, do: send_probe, where: fifth,   label: scout1}
-  - {at: {time: 80}, do: send_probe, where: main,    label: scout2}
-  - {at: {time: 90}, do: send_probe, where: sixth,   label: scout1}
+# the builder probe runs a small home build order (labelled builds use it)
+- {at: {time: 95}, do: build, what: Pylon, label: builder}
+- {at: {count: {Pylon: 1}}, do: build, what: Gateway, label: builder}
+- {at: {count: {Gateway: 1}}, do: build, what: CyberneticsCore, label: builder}
 
-  # the builder probe runs a small home build order (labelled builds use it)
-  - {at: {time: 95}, do: build, what: Pylon, label: builder}
-  - {at: {count: {Pylon: 1}}, do: build, what: Gateway, label: builder}
-  - {at: {count: {Gateway: 1}}, do: build, what: CyberneticsCore, label: builder}
-
-  # hand every labelled probe back to mining
-  - {at: {count: {CyberneticsCore: 1}}, do: return_probe, label: scout1}
-  - {at: {count: {CyberneticsCore: 1}}, do: return_probe, label: scout2}
-  - {at: {count: {CyberneticsCore: 1}}, do: return_probe, label: builder}
+# hand every labelled probe back to mining
+- {at: {count: {CyberneticsCore: 1}}, do: return_probe, label: scout1}
+- {at: {count: {CyberneticsCore: 1}}, do: return_probe, label: scout2}
+- {at: {count: {CyberneticsCore: 1}}, do: return_probe, label: builder}
