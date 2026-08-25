@@ -381,3 +381,49 @@ def test_populating_field_uses_the_designated_base():
                     populating_base_num=2,
                     _base_field=lambda pos: patch if pos == 2 else None)
     assert BuildOrderBot._populating_field(fake) is patch
+
+
+# ------------------------------------------------------------------ gas rebalancing
+async def test_rebalance_gas_workers_from_4_0_to_2_2():
+    w1, w2, w3, w4 = [_worker(i, 10, from_gas=5) for i in (1, 2, 3, 4)]
+    gas1 = _geyser(5, x=10, assigned=4)
+    gas2 = _geyser(6, x=20, assigned=0)
+    await BuildOrderBot.manage_economy(
+        _econ_bot([w1, w2, w3, w4], gas=[gas1, gas2], gas_target=4, populating=_field()))
+    reassigned = [w for w in (w1, w2, w3, w4) if w.gather.called]
+    assert len(reassigned) == 2
+    for w in reassigned:
+        w.gather.assert_called_with(gas2)
+
+
+async def test_rebalance_gas_workers_from_3_1_to_2_2():
+    w1, w2, w3 = [_worker(i, 10, from_gas=5) for i in (1, 2, 3)]
+    w4 = _worker(4, 20, from_gas=6)
+    gas1 = _geyser(5, x=10, assigned=3)
+    gas2 = _geyser(6, x=20, assigned=1)
+    await BuildOrderBot.manage_economy(
+        _econ_bot([w1, w2, w3, w4], gas=[gas1, gas2], gas_target=4, populating=_field()))
+    reassigned = [w for w in (w1, w2, w3) if w.gather.called]
+    assert len(reassigned) == 1
+    reassigned[0].gather.assert_called_with(gas2)
+    assert not w4.gather.called
+
+
+async def test_does_not_rebalance_when_already_balanced():
+    w1, w2, w3 = [_worker(i, 10, from_gas=5) for i in (1, 2, 3)]
+    w4, w5 = [_worker(i, 20, from_gas=6) for i in (4, 5)]
+    gas1 = _geyser(5, x=10, assigned=3)
+    gas2 = _geyser(6, x=20, assigned=2)
+    await BuildOrderBot.manage_economy(
+        _econ_bot([w1, w2, w3, w4, w5], gas=[gas1, gas2], gas_target=5, populating=_field()))
+    assert not any(w.gather.called for w in (w1, w2, w3, w4, w5))
+
+
+async def test_rebalance_waits_when_busiest_workers_are_mid_return():
+    r1, r2, r3 = [_returning(i, 10) for i in (1, 2, 3)]
+    gas1 = _geyser(5, x=10, assigned=3)
+    gas2 = _geyser(6, x=20, assigned=0)
+    await BuildOrderBot.manage_economy(
+        _econ_bot([r1, r2, r3], gas=[gas1, gas2], gas_target=3, populating=_field()))
+    assert not any(r.gather.called for r in (r1, r2, r3))
+

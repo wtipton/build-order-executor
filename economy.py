@@ -79,6 +79,9 @@ class EconomyFrameState:
         """Econ workers not on any geyser"""
         return sum(1 for w in self._workers.values() if not self._is_on_gas(w))
 
+    def num_workers_on(self, gas: Unit | None) -> int:
+        return self._num_workers_by_gas[gas.tag] if gas else 0
+
     # ---------------------------------------------------------------- selection
     def least_busy_gas(self) -> Unit | None:
         """The ready geyser with the fewest workers on it, or None if we have none."""
@@ -159,6 +162,18 @@ class EconomyMixin:
             w = state.worker_mining_from(gas)
             if not state.send_worker(w, self._populating_field()):
                 break  # nowhere to put them
+
+        # Rebalance workers across ready geysers if unevenly distributed.
+        while len(state._gasses) >= 2:
+            most_gas = state.most_busy_gas()
+            least_gas = state.least_busy_gas()
+            if most_gas is None or least_gas is None or most_gas.tag == least_gas.tag:
+                break
+            if state.num_workers_on(most_gas) - state.num_workers_on(least_gas) <= 1:
+                break
+            w = state.worker_mining_from(most_gas)
+            if not state.send_worker(w, least_gas):
+                break  # we have no reassignable worker on the gather leg this frame
 
     def _builder_home_field(self, worker: Unit) -> Unit | None:
         """A field at the base `worker` was mining before we pulled it off to build, or
