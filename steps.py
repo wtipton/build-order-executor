@@ -349,7 +349,7 @@ class StepsMixin:
         if field is None:
             return True  # no patches there (mined out, or off the map's expansion list)
         # rally every Nexus's new probes onto that base's minerals
-        for nexus in self.townhalls(U.NEXUS).ready:
+        for nexus in self.townhalls(U.NEXUS):
             nexus(AbilityId.RALLY_WORKERS, field)
         # transfer every OTHER base's excess mineral workers here, leaving each at
         # the cap. assigned_harvesters is the accurate count, so moving exactly

@@ -165,9 +165,10 @@ async def test_rally_sets_target():
 # ------------------------------------------------------------------ rally_and_transfer_probes
 async def test_rally_and_transfer_probes_does_not_wait_for_the_nexus():
     """The build says populate base N, so we do. Probes sent to that base's minerals will
-    be mining by the time the Nexus finishes — no reason to stall on owning it."""
+    be mining by the time the Nexus finishes — no reason to stall on owning it.
+    Also ensures unready/in-construction Nexuses receive the rally command."""
     field = object()
-    nexus = fake_unit()
+    nexus = fake_unit(is_ready=False)
     fake = fake_bot(
         base_position=lambda n: Point2((100.0, 100.0)),
         _base_field=lambda pos: field,
