@@ -75,12 +75,11 @@ class Trigger(BaseModel):
 class _StepBase(BaseModel):
     model_config = ConfigDict(extra="forbid")
     at: Trigger          # when the action fires
-    note: str = ""       # human comment, echoed in the [build] log
 
     def __str__(self) -> str:
         """The action and its arguments, e.g. `build what=Nexus where=natural`. Trigger
-        and note are left out — callers that want them have them."""
-        args = self.model_dump(exclude={"at", "prewalk", "note", "do"}, exclude_none=True)
+        is left out — callers that want it have it."""
+        args = self.model_dump(exclude={"at", "prewalk", "do"}, exclude_none=True)
         return f"{self.do} {' '.join(f'{k}={v}' for k, v in args.items())}".rstrip()
 
 

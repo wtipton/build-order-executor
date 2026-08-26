@@ -45,6 +45,9 @@ def test_extra_field_rejected():
     with pytest.raises(Exception) as ei:
         TypeAdapter(Step).validate_python(_one_step(do="hallucinate", unit="Phoenix"))
     assert "Extra inputs are not permitted" in str(ei.value)
+    with pytest.raises(Exception) as ei:
+        TypeAdapter(Step).validate_python(_one_step(do="wait", note="some comment"))
+    assert "Extra inputs are not permitted" in str(ei.value)
 
 
 def test_trigger_needs_exactly_one_key():

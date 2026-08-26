@@ -54,8 +54,7 @@ class StepsMixin:
                 self.step_state.trigger_fired = True  # commit; a non-monotonic trigger must not un-fire it
             if not await self.run_handler(step):
                 return  # stall the line until this step can be done (strict order)
-            note = f"  # {step.note}" if step.note else ""
-            print(f"[step] {self._clock():>4}  sup{self.supply_used:<3} {step}{note}", flush=True)
+            print(f"[step] {self._clock():>4}  sup{self.supply_used:<3} {step}", flush=True)
             self.steps_done += 1
             self.step_state.reset(self.time)  # the finished step's in-flight state dies with it
 

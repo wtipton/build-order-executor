@@ -25,68 +25,68 @@
 # ===================== matched pvz_opening_8worker.yaml ======================
 # (identical opener; its trailing rally_and_transfer_probes is relocated below so it
 #  can't stall the tech divergence — the economic decisions are unchanged.)
-- {at: {time: 7},   do: chrono, target: Nexus, note: "1st chrono on probes (~6.5s)"}
-- {at: {supply: 12},  do: build,  what: Pylon,   prewalk: {minerals: 75},  note: "Pylon=100"}
-- {at: {supply: 12},  do: send_probe, where: enemy_main, label: scout, note: "poke-scout the enemy"}
-- {at: {supply: 14},  do: build,  what: Gateway, prewalk: {minerals: 100}, note: "Gateway=150"}
-- {at: {supply: 14},  do: chrono, target: Nexus, note: "2nd chrono the moment Nexus hits 50 energy"}
+- {at: {time: 7},   do: chrono, target: Nexus}  # 1st chrono on probes (~6.5s)
+- {at: {supply: 12},  do: build,  what: Pylon,   prewalk: {minerals: 75}}  # Pylon=100
+- {at: {supply: 12},  do: send_probe, where: enemy_main, label: scout}  # poke-scout the enemy
+- {at: {supply: 14},  do: build,  what: Gateway, prewalk: {minerals: 100}}  # Gateway=150
+- {at: {supply: 14},  do: chrono, target: Nexus}  # 2nd chrono the moment Nexus hits 50 energy
 - {at: {supply: 15},  do: build,  what: Assimilator}
-- {at: {count: {Assimilator: 1}}, do: gas_workers,  count: 1, note: "pull one onto gas1"}
-- {at: {count: {Probe: 17}}, do: gas_workers, count: 2, note: "17th probe -> gas"}
-- {at: {supply: 19},  do: workers, state: stop,  note: "cut probes for Nexus + Core"}
-- {at: {supply: 19},  do: return_probe, label: scout, note: "scout home to mining"}
-- {at: {count: {Probe: 19}}, do: gas_workers, count: 3, note: "19th probe -> gas"}
-- {at: {supply: 19},  do: build,  what: Nexus,   prewalk: {minerals: 300}, note: "natural expansion (Nexus=400)"}
+- {at: {count: {Assimilator: 1}}, do: gas_workers,  count: 1}  # pull one onto gas1
+- {at: {count: {Probe: 17}}, do: gas_workers, count: 2}  # 17th probe -> gas
+- {at: {supply: 19},  do: workers, state: stop}  # cut probes for Nexus + Core
+- {at: {supply: 19},  do: return_probe, label: scout}  # scout home to mining
+- {at: {count: {Probe: 19}}, do: gas_workers, count: 3}  # 19th probe -> gas
+- {at: {supply: 19},  do: build,  what: Nexus,   prewalk: {minerals: 300}}  # natural expansion (Nexus=400)
 - {at: {supply: 19},  do: build,  what: CyberneticsCore}
-- {at: {supply: 19},  do: workers, state: start, note: "just one probe then small cut for pylon"}
-- {at: {supply: 20},  do: workers, state: stop,  note: ""}
+- {at: {supply: 19},  do: workers, state: start}  # just one probe then small cut for pylon
+- {at: {supply: 20},  do: workers, state: stop}
 - {at: {supply: 20},  do: set_rally_point,  where: natural}
 - {at: {supply: 20},  do: build,  what: Assimilator}
 - {at: {supply: 20},  do: build,  what: Pylon}
-- {at: {supply: 20},  do: workers, state: start, note: "resume"}
-- {at: {count: {Probe: 21}}, do: gas_workers, count: 4, note: ""}
-- {at: {count: {CyberneticsCore: 1}}, do: train,  what: Adept,    note: "1st Adept, out ~2:57"}
-- {at: {count: {CyberneticsCore: 1}}, do: chrono, target: Gateway, note: "chrono the Adept"}
+- {at: {supply: 20},  do: workers, state: start}  # resume
+- {at: {count: {Probe: 21}}, do: gas_workers, count: 4}
+- {at: {count: {CyberneticsCore: 1}}, do: train,  what: Adept}  # 1st Adept, out ~2:57
+- {at: {count: {CyberneticsCore: 1}}, do: chrono, target: Gateway}  # chrono the Adept
 
 # ===================== diverge: tech, ordered by the binding resource =========
 # Core done ~2:42. Both minerals AND gas are tight here; the trap is to over-pull
 # gas (mineral-starving the 250-min Void Ray). Keep gas at 5.
-- {at: {count: {CyberneticsCore: 1}}, do: gas_workers, count: 6, note: "full gas — GAS is the limiter (Twilight/Charge/Warpgate/morphs all need it)"}
+- {at: {count: {CyberneticsCore: 1}}, do: gas_workers, count: 6}  # full gas — GAS is the limiter (Twilight/Charge/Warpgate/morphs all need it)
 
 # 1) Stargate first — the Void Ray (4:15) is the tightest deadline (150/150).
-- {at: {count: {CyberneticsCore: 1}}, do: build, what: Stargate, prewalk: {minerals: 130}, note: "for the Void Ray"}
-- {at: {count: {CyberneticsCore: 1}}, do: train, what: Adept, note: "2nd Adept (both done well before 4:15)"}
-- {at: {count: {CyberneticsCore: 1}}, do: send_probe, where: proxy, label: scout, note: "scout -> proxy (long walk overlaps)"}
-- {at: {count: {CyberneticsCore: 1}}, do: set_rally_point, where: proxy, note: "gateway Zealots gather at the proxy"}
+- {at: {count: {CyberneticsCore: 1}}, do: build, what: Stargate, prewalk: {minerals: 130}}  # for the Void Ray
+- {at: {count: {CyberneticsCore: 1}}, do: train, what: Adept}  # 2nd Adept (both done well before 4:15)
+- {at: {count: {CyberneticsCore: 1}}, do: send_probe, where: proxy, label: scout}  # scout -> proxy (long walk overlaps)
+- {at: {count: {CyberneticsCore: 1}}, do: set_rally_point, where: proxy}  # gateway Zealots gather at the proxy
 
 # Warpgate research EARLY (before the Void Ray) — it's only 50 gas, and it gates the
 # morph->warp finish, so it must be DONE by ~4:40. Starting it ~3:05 (not 3:36) +
 # chrono lands it ~4:25 so the Gateways can morph and warp the FULL 4:45-5:45 window.
 # The Void Ray still makes 4:15 without its own chrono, so chrono goes here instead.
-- {at: {count: {CyberneticsCore: 1}}, do: research, what: Warpgate, note: "Warpgate (50/50) — gates the warp finish"}
-- {at: {count: {CyberneticsCore: 1}}, do: chrono, target: CyberneticsCore, note: "chrono Warpgate research"}
+- {at: {count: {CyberneticsCore: 1}}, do: research, what: Warpgate}  # Warpgate (50/50) — gates the warp finish
+- {at: {count: {CyberneticsCore: 1}}, do: chrono, target: CyberneticsCore}  # chrono Warpgate research
 
 # 2) Saturate the natural EARLY (~3:15, once Nexus 2 is up) — mineral income for the
 #    Void Ray + Twilight. Must precede the mineral sinks below or they starve.
-- {at: {count: {Nexus: 2}}, do: rally_and_transfer_probes, base: 2, note: "saturate the natural"}
+- {at: {count: {Nexus: 2}}, do: rally_and_transfer_probes, base: 2}  # saturate the natural
 
 # 3) Void Ray FIRST (gas + mineral priority) — the 4:15 deadline is tightest. Trains
 #    the instant the Stargate is up (~3:35) + 2 chronos -> done ~4:10. Twilight/Charge
 #    have more slack (5:45), so the Void Ray wins the early economy.
-- {at: {count: {Stargate: 1}}, do: train,  what: VoidRay, note: "Void Ray, done by 4:15"}
-- {at: {count: {Stargate: 1}}, do: chrono, target: Stargate, note: "chrono the Void Ray"}
-- {at: {count: {Stargate: 1}}, do: chrono, target: Stargate, note: "chrono the Void Ray x2 -> ~4:10 (a 3rd chrono steals energy from Charge, so stop at 2)"}
+- {at: {count: {Stargate: 1}}, do: train,  what: VoidRay}  # Void Ray, done by 4:15
+- {at: {count: {Stargate: 1}}, do: chrono, target: Stargate}  # chrono the Void Ray
+- {at: {count: {Stargate: 1}}, do: chrono, target: Stargate}  # chrono the Void Ray x2 -> ~4:10 (a 3rd chrono steals energy from Charge, so stop at 2)
 
 # cut probes now (~3:50) to rush minerals into Twilight + the Gateways.
-- {at: {time: 215}, do: workers, state: stop, note: "cut probes to rush the army buildings"}
+- {at: {time: 215}, do: workers, state: stop}  # cut probes to rush the army buildings
 
 # 4) Twilight right after the Void Ray, BEFORE the Gateways — Charge (5:45) needs it
 #    ready ASAP. Built ~3:55 -> ready ~4:30.
-- {at: {count: {Stargate: 1}}, do: build, what: TwilightCouncil, prewalk: {minerals: 130}, note: "for Charge (150/100)"}
+- {at: {count: {Stargate: 1}}, do: build, what: TwilightCouncil, prewalk: {minerals: 130}}  # for Charge (150/100)
 
 # 5) home Gateways — 2 NEW (3 total with the opener); fewer = READY sooner (~4:45), so
 #    the morph/warp window opens earlier for MORE rounds.
-- {at: {count: {Stargate: 1}}, do: build, what: Pylon, where: main, note: "power for the Gateways"}
+- {at: {count: {Stargate: 1}}, do: build, what: Pylon, where: main}  # power for the Gateways
 - {at: {count: {Stargate: 1}}, do: build, what: Gateway, prewalk: {minerals: 100}}
 - {at: {count: {Stargate: 1}}, do: build, what: Gateway, prewalk: {minerals: 100}}
 
@@ -95,8 +95,8 @@
 #    section, placed in the morph's "dead time" (the morph waits for the Gateways
 #    ~5:00 anyway), so they're free. Energy is banked + Twilight is researching, so
 #    they fire instantly rather than block.
-- {at: {count: {TwilightCouncil: 1}}, do: research, what: Charge, note: "Charge (100/100)"}
-- {at: {count: {TwilightCouncil: 1}}, do: chrono, target: TwilightCouncil, note: "chrono Charge #1"}
+- {at: {count: {TwilightCouncil: 1}}, do: research, what: Charge}  # Charge (100/100)
+- {at: {count: {TwilightCouncil: 1}}, do: chrono, target: TwilightCouncil}  # chrono Charge #1
 # NOTE: the proxy pylon is built LAST (in the warp-finish section) — it's a slow
 # across-map build, and `already_pending(Pylon)` is type-wide, so while it's in
 # flight it stalls EVERY home pylon build behind it (~40s). Keep all home pylons
@@ -118,18 +118,18 @@
 # min banked). Two pylons ~double the powered tiles so the whole warp window lands.
 # Built after the home pylons (their across-map pending count is type-wide and would
 # otherwise stall home pylons).
-- {at: {time: 250}, do: build, what: Pylon, where: proxy, label: scout, note: "proxy pylon 1"}
-- {at: {time: 250}, do: build, what: Pylon, where: proxy, label: scout, note: "proxy pylon 2 (more warp-in space)"}
+- {at: {time: 250}, do: build, what: Pylon, where: proxy, label: scout}  # proxy pylon 1
+- {at: {time: 250}, do: build, what: Pylon, where: proxy, label: scout}  # proxy pylon 2 (more warp-in space)
 
 # tech gas is all paid now (Twilight/Charge/Warpgate); the morph only needs 100 more
 # (banked). Pull gas to minerals so the 100-min warp-ins are well funded.
-- {at: {time: 275}, do: gas_workers, count: 1, note: "gas -> minerals for the warp-ins"}
+- {at: {time: 275}, do: gas_workers, count: 1}  # gas -> minerals for the warp-ins
 
 # Charge chronos #2/#3 — time-gated to spread them across the research (the buff wears
 # off, so re-cast). These land in the morph's dead time (it waits for the Gateways
 # ~5:00), so they don't delay the finish; together the 3 chronos land Charge ~5:30.
-- {at: {time: 278}, do: chrono, target: TwilightCouncil, note: "chrono Charge #2 (~4:38)"}
-- {at: {time: 293}, do: chrono, target: TwilightCouncil, note: "chrono Charge #3 (~4:53)"}
+- {at: {time: 278}, do: chrono, target: TwilightCouncil}  # chrono Charge #2 (~4:38)
+- {at: {time: 293}, do: chrono, target: TwilightCouncil}  # chrono Charge #3 (~4:53)
 
 # The Gateways are ready ~4:50, so skip walking Zealots (they'd need to finish ~5:00
 # AND walk 30s). Morph all 3 Gateways to Warp Gates as soon as they're up + Warpgate
@@ -137,7 +137,7 @@
 # warp-ins arrive AT the two proxy pylons instantly, ~2 cooldown rounds x 3 gates.
 # Measured result (with the old best-effort chronos): VoidRay done ~4:08, Charge
 # ~5:36, ~5 Zealots at the proxy by 5:45. Charge now ~5:47 (see note below).
-- {at: {time: 273}, do: morph, to: warpgate, count: 3, note: "warp finish — morph all 3 (25 min+25 gas/gate)"}
+- {at: {time: 273}, do: morph, to: warpgate, count: 3}  # warp finish — morph all 3 (25 min+25 gas/gate)
 # Charge is boosted by the 3 front-loaded chronos in the research section. The
 # old build sprinkled 2 more best-effort chronos here (interleaved with the warps)
 # to shave Charge from ~5:47 to ~5:36 — but that relied on `optional` (skip if the

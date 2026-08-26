@@ -18,30 +18,30 @@
 #
 # Schema defined + validated in schema.py.
 
-- {at: {time: 7},     do: chrono, target: Nexus, note: "1st chrono on probes"}
-- {at: {supply: 12},  do: build,  what: Pylon,   prewalk: {minerals: 75},  note: "home Pylon=100"}
-- {at: {supply: 12},  do: send_probe, where: enemy_main, label: scout, note: "scout the enemy with a labelled probe"}
-- {at: {supply: 13},  do: build,  what: Gateway, prewalk: {minerals: 100}, note: "Gateway=150"}
-- {at: {supply: 14},  do: build,  what: Assimilator, note: "gas for Warpgate research"}
-- {at: {count: {Assimilator: 1}}, do: gas_workers, count: 3, note: "saturate the gas"}
-- {at: {supply: 15},  do: build,  what: Gateway, prewalk: {minerals: 100}, note: "2nd Gateway"}
+- {at: {time: 7},     do: chrono, target: Nexus}  # 1st chrono on probes
+- {at: {supply: 12},  do: build,  what: Pylon,   prewalk: {minerals: 75}}  # home Pylon=100
+- {at: {supply: 12},  do: send_probe, where: enemy_main, label: scout}  # scout the enemy with a labelled probe
+- {at: {supply: 13},  do: build,  what: Gateway, prewalk: {minerals: 100}}  # Gateway=150
+- {at: {supply: 14},  do: build,  what: Assimilator}  # gas for Warpgate research
+- {at: {count: {Assimilator: 1}}, do: gas_workers, count: 3}  # saturate the gas
+- {at: {supply: 15},  do: build,  what: Gateway, prewalk: {minerals: 100}}  # 2nd Gateway
 # Send the scout out to the proxy EARLY, reusing the same probe that scouted the
 # enemy main — a real cross-map send is its own build-order step, so it's in
 # position long before we need it (rather than fudged a few seconds by prewalk).
-- {at: {supply: 15},  do: send_probe, where: proxy, label: scout, note: "scout probe out to the proxy (early)"}
-- {at: {count: {Gateway: 1}}, do: build, what: CyberneticsCore, prewalk: {minerals: 100}, note: "Core=150"}
+- {at: {supply: 15},  do: send_probe, where: proxy, label: scout}  # scout probe out to the proxy (early)
+- {at: {count: {Gateway: 1}}, do: build, what: CyberneticsCore, prewalk: {minerals: 100}}  # Core=150
 - {at: {count: {CyberneticsCore: 1}}, do: research, what: Warpgate}
-- {at: {count: {CyberneticsCore: 1}}, do: chrono,   target: CyberneticsCore, note: "chrono Warpgate research"}
+- {at: {count: {CyberneticsCore: 1}}, do: chrono,   target: CyberneticsCore}  # chrono Warpgate research
 # Cap probes so the proxy Pylon's supply goes to the Zealot wave, not more probes.
-- {at: {supply: 18},  do: workers, state: stop, note: "hold probes for the all-in"}
+- {at: {supply: 18},  do: workers, state: stop}  # hold probes for the all-in
 # The scout is already forward, so the Pylon goes up without a cross-map walk.
-- {at: {supply: 18},  do: build, what: Pylon, where: proxy, label: scout, note: "scout builds the proxy Pylon"}
-- {at: {supply: 18},  do: return_probe, label: scout, note: "scout back to mining (or drop this to leave it hidden out there)"}
+- {at: {supply: 18},  do: build, what: Pylon, where: proxy, label: scout}  # scout builds the proxy Pylon
+- {at: {supply: 18},  do: return_probe, label: scout}  # scout back to mining (or drop this to leave it hidden out there)
 # Switch both Gateways to Warpgates (holds until research is done + they convert).
-- {at: {supply: 18},  do: morph, to: warpgate, note: "convert all Gateways -> Warpgates"}
+- {at: {supply: 18},  do: morph, to: warpgate}  # convert all Gateways -> Warpgates
 # Warp a wave of Zealots in at the proxy Pylon (each holds until a Warpgate is up).
-- {at: {supply: 18},  do: warp, what: Zealot, where: proxy, note: "1st warp-in"}
+- {at: {supply: 18},  do: warp, what: Zealot, where: proxy}  # 1st warp-in
 - {at: {supply: 18},  do: warp, what: Zealot, where: proxy}
 - {at: {supply: 18},  do: warp, what: Zealot, where: proxy}
 - {at: {supply: 18},  do: warp, what: Zealot, where: proxy}
-- {at: {supply: 18},  do: set_rally_point, where: proxy, note: "rally reinforcements to the proxy"}
+- {at: {supply: 18},  do: set_rally_point, where: proxy}  # rally reinforcements to the proxy

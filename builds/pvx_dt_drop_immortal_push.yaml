@@ -12,97 +12,97 @@
 #   ~6:00  Immortal #3 (chrono) -> 3-Immortal Moveout @ ~6:30 with +2 Weapons
 
 # ===================== 1. Opener: 1-Gate Expand =====================
-- {at: {time: 7},     do: chrono, target: Nexus, note: "1st chrono on probes (~6.5s)"}
-- {at: {supply: 12},  do: build,  what: Pylon,   prewalk: {minerals: 75},  note: "home Pylon=100"}
-- {at: {supply: 12},  do: send_probe, where: enemy_main, label: scout, note: "scout probe"}
-- {at: {supply: 14},  do: build,  what: Gateway, prewalk: {minerals: 100}, note: "1st Gateway"}
-- {at: {supply: 14},  do: chrono, target: Nexus, note: "2nd chrono at 50 energy"}
-- {at: {supply: 15},  do: build,  what: Assimilator, note: "main gas 1"}
+- {at: {time: 7},     do: chrono, target: Nexus}  # 1st chrono on probes (~6.5s)
+- {at: {supply: 12},  do: build,  what: Pylon,   prewalk: {minerals: 75}}  # home Pylon=100
+- {at: {supply: 12},  do: send_probe, where: enemy_main, label: scout}  # scout probe
+- {at: {supply: 14},  do: build,  what: Gateway, prewalk: {minerals: 100}}  # 1st Gateway
+- {at: {supply: 14},  do: chrono, target: Nexus}  # 2nd chrono at 50 energy
+- {at: {supply: 15},  do: build,  what: Assimilator}  # main gas 1
 - {at: {count: {Assimilator: 1}}, do: gas_workers, count: 1}
 - {at: {count: {Probe: 17}}, do: gas_workers, count: 2}
-- {at: {supply: 18},  do: workers, state: stop, note: "cut probes for Nexus + Core + Gas 2"}
+- {at: {supply: 18},  do: workers, state: stop}  # cut probes for Nexus + Core + Gas 2
 - {at: {supply: 18},  do: return_probe, label: scout}
-- {at: {supply: 18},  do: build,  what: Nexus,   prewalk: {minerals: 300}, note: "natural expansion (Nexus=400)"}
-- {at: {supply: 18},  do: build,  what: Assimilator, note: "main gas 2"}
+- {at: {supply: 18},  do: build,  what: Nexus,   prewalk: {minerals: 300}}  # natural expansion (Nexus=400)
+- {at: {supply: 18},  do: build,  what: Assimilator}  # main gas 2
 - {at: {supply: 18},  do: build,  what: CyberneticsCore, prewalk: {minerals: 100}}
-- {at: {supply: 18},  do: workers, state: start, note: "resume probes"}
-- {at: {supply: 19},  do: gas_workers, count: 6, note: "saturate both main gases"}
+- {at: {supply: 18},  do: workers, state: start}  # resume probes
+- {at: {supply: 19},  do: gas_workers, count: 6}  # saturate both main gases
 - {at: {supply: 20},  do: build,  what: Pylon, prewalk: {minerals: 75}}
 
 # ===================== 2. Tech: Adept, Stalker, Warpgate, Twilight, Robo =====================
-- {at: {count: {CyberneticsCore: 1}}, do: train, what: Adept, note: "1st unit: Adept"}
-- {at: {count: {CyberneticsCore: 1}}, do: chrono, target: Gateway, note: "chrono Adept"}
-- {at: {count: {CyberneticsCore: 1}}, do: research, what: Warpgate, note: "Warpgate research"}
-- {at: {count: {CyberneticsCore: 1}}, do: build, what: TwilightCouncil, prewalk: {minerals: 100}, note: "Twilight Council"}
-- {at: {count: {CyberneticsCore: 1}}, do: train, what: Stalker, note: "2nd unit: Stalker"}
-- {at: {count: {CyberneticsCore: 1}}, do: chrono, target: Gateway, note: "chrono Stalker"}
-- {at: {count: {CyberneticsCore: 1}}, do: build, what: RoboticsFacility, prewalk: {minerals: 100}, note: "Robo Facility"}
+- {at: {count: {CyberneticsCore: 1}}, do: train, what: Adept}  # 1st unit: Adept
+- {at: {count: {CyberneticsCore: 1}}, do: chrono, target: Gateway}  # chrono Adept
+- {at: {count: {CyberneticsCore: 1}}, do: research, what: Warpgate}  # Warpgate research
+- {at: {count: {CyberneticsCore: 1}}, do: build, what: TwilightCouncil, prewalk: {minerals: 100}}  # Twilight Council
+- {at: {count: {CyberneticsCore: 1}}, do: train, what: Stalker}  # 2nd unit: Stalker
+- {at: {count: {CyberneticsCore: 1}}, do: chrono, target: Gateway}  # chrono Stalker
+- {at: {count: {CyberneticsCore: 1}}, do: build, what: RoboticsFacility, prewalk: {minerals: 100}}  # Robo Facility
 
 # Transfer to natural once Nexus 2 finishes & take natural gases
-- {at: {count: {Nexus: 2}}, do: rally_and_transfer_probes, base: 2, note: "saturate natural"}
-- {at: {count: {Nexus: 2}}, do: build, what: Assimilator, note: "natural gas 1"}
-- {at: {count: {Nexus: 2}}, do: build, what: Assimilator, note: "natural gas 2"}
-- {at: {count: {Nexus: 2}}, do: gas_workers, count: 12, note: "saturate all 4 gases for DTs & tech"}
+- {at: {count: {Nexus: 2}}, do: rally_and_transfer_probes, base: 2}  # saturate natural
+- {at: {count: {Nexus: 2}}, do: build, what: Assimilator}  # natural gas 1
+- {at: {count: {Nexus: 2}}, do: build, what: Assimilator}  # natural gas 2
+- {at: {count: {Nexus: 2}}, do: gas_workers, count: 12}  # saturate all 4 gases for DTs & tech
 
 # ===================== 3. Dark Shrine, Gateways 2-4, Pylons =====================
-- {at: {count: {TwilightCouncil: 1}}, do: build, what: DarkShrine, prewalk: {minerals: 100}, note: "Dark Shrine"}
-- {at: {count: {TwilightCouncil: 1}}, do: build, what: Pylon, where: natural, note: "supply pylon"}
-- {at: {count: {TwilightCouncil: 1}}, do: build, what: Gateway, prewalk: {minerals: 100}, note: "Gate 2"}
-- {at: {count: {TwilightCouncil: 1}}, do: build, what: Gateway, prewalk: {minerals: 100}, note: "Gate 3"}
-- {at: {count: {TwilightCouncil: 1}}, do: build, what: Gateway, prewalk: {minerals: 100}, note: "Gate 4"}
-- {at: {count: {TwilightCouncil: 1}}, do: build, what: Pylon, where: natural, note: "supply pylon"}
-- {at: {count: {TwilightCouncil: 1}}, do: build, what: Pylon, where: natural, note: "supply pylon"}
+- {at: {count: {TwilightCouncil: 1}}, do: build, what: DarkShrine, prewalk: {minerals: 100}}  # Dark Shrine
+- {at: {count: {TwilightCouncil: 1}}, do: build, what: Pylon, where: natural}  # supply pylon
+- {at: {count: {TwilightCouncil: 1}}, do: build, what: Gateway, prewalk: {minerals: 100}}  # Gate 2
+- {at: {count: {TwilightCouncil: 1}}, do: build, what: Gateway, prewalk: {minerals: 100}}  # Gate 3
+- {at: {count: {TwilightCouncil: 1}}, do: build, what: Gateway, prewalk: {minerals: 100}}  # Gate 4
+- {at: {count: {TwilightCouncil: 1}}, do: build, what: Pylon, where: natural}  # supply pylon
+- {at: {count: {TwilightCouncil: 1}}, do: build, what: Pylon, where: natural}  # supply pylon
 
 # Cap probes at ~42 (2 saturated bases) for DT warpin & push tech
-- {at: {count: {Probe: 42}}, do: workers, state: stop, note: "cap probes at 42"}
+- {at: {count: {Probe: 42}}, do: workers, state: stop}  # cap probes at 42
 
 # ===================== 4. Warp Prism + Morph 4 Warpgates =====================
-- {at: {count: {RoboticsFacility: 1}}, do: train, what: WarpPrism, note: "Warp Prism for DT drop"}
-- {at: {count: {RoboticsFacility: 1}}, do: chrono, target: RoboticsFacility, note: "chrono Warp Prism"}
-- {at: {count: {Gateway: 1}}, do: morph, to: warpgate, count: 4, note: "morph 4 Warpgates"}
+- {at: {count: {RoboticsFacility: 1}}, do: train, what: WarpPrism}  # Warp Prism for DT drop
+- {at: {count: {RoboticsFacility: 1}}, do: chrono, target: RoboticsFacility}  # chrono Warp Prism
+- {at: {count: {Gateway: 1}}, do: morph, to: warpgate, count: 4}  # morph 4 Warpgates
 
 # ===================== 5. 4 DT Warpin + Archon Morph =====================
-- {at: {count: {DarkShrine: 1}}, do: warp, what: DarkTemplar, where: natural, note: "DT 1"}
-- {at: {count: {DarkShrine: 1}}, do: warp, what: DarkTemplar, where: natural, note: "DT 2"}
-- {at: {count: {DarkShrine: 1}}, do: warp, what: DarkTemplar, where: natural, note: "DT 3"}
-- {at: {count: {DarkShrine: 1}}, do: warp, what: DarkTemplar, where: natural, note: "DT 4"}
-- {at: {count: {DarkTemplar: 4}}, do: morph, to: archon, count: 2, note: "morph 2 Archons from DTs"}
+- {at: {count: {DarkShrine: 1}}, do: warp, what: DarkTemplar, where: natural}  # DT 1
+- {at: {count: {DarkShrine: 1}}, do: warp, what: DarkTemplar, where: natural}  # DT 2
+- {at: {count: {DarkShrine: 1}}, do: warp, what: DarkTemplar, where: natural}  # DT 3
+- {at: {count: {DarkShrine: 1}}, do: warp, what: DarkTemplar, where: natural}  # DT 4
+- {at: {count: {DarkTemplar: 4}}, do: morph, to: archon, count: 2}  # morph 2 Archons from DTs
 
 # ===================== 6. Observer, 3rd Nexus, Forge, Charge =====================
-- {at: {count: {WarpPrism: 1}}, do: train, what: Observer, note: "Observer"}
-- {at: {count: {DarkShrine: 1}}, do: build, what: Nexus, prewalk: {minerals: 350}, note: "3rd Nexus"}
-- {at: {count: {DarkShrine: 1}}, do: build, what: Forge, prewalk: {minerals: 100}, note: "Forge for +1 Weapons"}
+- {at: {count: {WarpPrism: 1}}, do: train, what: Observer}  # Observer
+- {at: {count: {DarkShrine: 1}}, do: build, what: Nexus, prewalk: {minerals: 350}}  # 3rd Nexus
+- {at: {count: {DarkShrine: 1}}, do: build, what: Forge, prewalk: {minerals: 100}}  # Forge for +1 Weapons
 - {at: {count: {DarkShrine: 1}}, do: build, what: Pylon, where: natural}
 
 # ===================== 7. 3 Immortals (chrono x3) + Upgrades + Sentries =====================
-- {at: {count: {Observer: 1}}, do: train, what: Immortal, note: "Immortal #1"}
-- {at: {count: {Observer: 1}}, do: chrono, target: RoboticsFacility, note: "chrono Immortal 1"}
-- {at: {count: {Forge: 1}}, do: research, what: GroundWeapons1, note: "+1 Ground Weapons"}
-- {at: {count: {Forge: 1}}, do: chrono, target: Forge, note: "chrono +1 Weapons"}
-- {at: {count: {TwilightCouncil: 1}}, do: research, what: Charge, note: "Charge research"}
-- {at: {count: {TwilightCouncil: 1}}, do: chrono, target: TwilightCouncil, note: "chrono Charge"}
-- {at: {count: {WarpGate: 1}}, do: warp, what: Sentry, where: natural, note: "Sentry 1"}
-- {at: {count: {WarpGate: 1}}, do: warp, what: Sentry, where: natural, note: "Sentry 2"}
+- {at: {count: {Observer: 1}}, do: train, what: Immortal}  # Immortal #1
+- {at: {count: {Observer: 1}}, do: chrono, target: RoboticsFacility}  # chrono Immortal 1
+- {at: {count: {Forge: 1}}, do: research, what: GroundWeapons1}  # +1 Ground Weapons
+- {at: {count: {Forge: 1}}, do: chrono, target: Forge}  # chrono +1 Weapons
+- {at: {count: {TwilightCouncil: 1}}, do: research, what: Charge}  # Charge research
+- {at: {count: {TwilightCouncil: 1}}, do: chrono, target: TwilightCouncil}  # chrono Charge
+- {at: {count: {WarpGate: 1}}, do: warp, what: Sentry, where: natural}  # Sentry 1
+- {at: {count: {WarpGate: 1}}, do: warp, what: Sentry, where: natural}  # Sentry 2
 
-- {at: {count: {Immortal: 1}}, do: train, what: Immortal, note: "Immortal #2"}
-- {at: {count: {Immortal: 1}}, do: chrono, target: RoboticsFacility, note: "chrono Immortal 2"}
-- {at: {count: {WarpGate: 1}}, do: warp, what: Sentry, where: natural, note: "Sentry 3"}
-- {at: {count: {WarpGate: 1}}, do: warp, what: Sentry, where: natural, note: "Sentry 4"}
+- {at: {count: {Immortal: 1}}, do: train, what: Immortal}  # Immortal #2
+- {at: {count: {Immortal: 1}}, do: chrono, target: RoboticsFacility}  # chrono Immortal 2
+- {at: {count: {WarpGate: 1}}, do: warp, what: Sentry, where: natural}  # Sentry 3
+- {at: {count: {WarpGate: 1}}, do: warp, what: Sentry, where: natural}  # Sentry 4
 
-- {at: {count: {Immortal: 2}}, do: train, what: Immortal, note: "Immortal #3"}
-- {at: {count: {Immortal: 2}}, do: chrono, target: RoboticsFacility, note: "chrono Immortal 3"}
-- {at: {count: {Nexus: 3}}, do: rally_and_transfer_probes, base: 3, note: "saturate 3rd base"}
+- {at: {count: {Immortal: 2}}, do: train, what: Immortal}  # Immortal #3
+- {at: {count: {Immortal: 2}}, do: chrono, target: RoboticsFacility}  # chrono Immortal 3
+- {at: {count: {Nexus: 3}}, do: rally_and_transfer_probes, base: 3}  # saturate 3rd base
 
 # Additional production & supply for moveout
 - {at: {count: {Immortal: 1}}, do: build, what: Pylon, where: third}
 - {at: {count: {Immortal: 1}}, do: build, what: Pylon, where: third}
-- {at: {count: {Immortal: 1}}, do: build, what: Gateway, prewalk: {minerals: 100}, note: "Gate 5"}
-- {at: {count: {Immortal: 1}}, do: build, what: Gateway, prewalk: {minerals: 100}, note: "Gate 6"}
-- {at: {count: {Immortal: 1}}, do: build, what: Gateway, prewalk: {minerals: 100}, note: "Gate 7"}
-- {at: {count: {Immortal: 1}}, do: build, what: Gateway, prewalk: {minerals: 100}, note: "Gate 8"}
-- {at: {count: {Immortal: 1}}, do: morph, to: warpgate, count: 4, note: "morph new gates"}
+- {at: {count: {Immortal: 1}}, do: build, what: Gateway, prewalk: {minerals: 100}}  # Gate 5
+- {at: {count: {Immortal: 1}}, do: build, what: Gateway, prewalk: {minerals: 100}}  # Gate 6
+- {at: {count: {Immortal: 1}}, do: build, what: Gateway, prewalk: {minerals: 100}}  # Gate 7
+- {at: {count: {Immortal: 1}}, do: build, what: Gateway, prewalk: {minerals: 100}}  # Gate 8
+- {at: {count: {Immortal: 1}}, do: morph, to: warpgate, count: 4}  # morph new gates
 - {at: {count: {Immortal: 2}}, do: build, what: Pylon, where: third}
 - {at: {count: {Immortal: 2}}, do: build, what: Pylon, where: third}
-- {at: {count: {Forge: 1}}, do: research, what: GroundWeapons2, note: "+2 Ground Weapons"}
-- {at: {count: {Immortal: 3}}, do: set_rally_point, where: natural, note: "3 Immortals ready - moveout!"}
-- {at: {time: 500}, do: wait, note: "hold for push"}
+- {at: {count: {Forge: 1}}, do: research, what: GroundWeapons2}  # +2 Ground Weapons
+- {at: {count: {Immortal: 3}}, do: set_rally_point, where: natural}  # 3 Immortals ready - moveout!
+- {at: {time: 500}, do: wait}  # hold for push

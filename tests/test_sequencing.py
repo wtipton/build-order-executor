@@ -13,7 +13,7 @@ from state import StepState
 
 
 def _step(at=None, **kw):
-    return SimpleNamespace(at=at or Trigger(time=1), note="", **kw)
+    return SimpleNamespace(at=at or Trigger(time=1), **kw)
 
 
 class _SeqBot(SimpleNamespace):
