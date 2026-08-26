@@ -1,4 +1,4 @@
-# TODOs — build_orders → polished final state
+# TODOs — build-order-executor → polished final state
 
 Goals: (1) schema can completely specify rich Protoss build orders, (2) what's
 left unspecified (placement, etc.) executes correctly, (3) clean, well-tested

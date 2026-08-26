@@ -1,4 +1,4 @@
-# build_orders
+# build-order-executor
 
 A generic [python-sc2](https://github.com/BurnySc2/python-sc2) bot that executes a
 Protoss build order described in a YAML config, for practicing/validating openings
@@ -7,7 +7,7 @@ Protoss build order described in a YAML config, for practicing/validating openin
 ## Run
 
 ```bash
-cd ~/projects/build_orders && .venv/bin/python run.py --fullscreen
+cd ~/projects/build-order-executor && .venv/bin/python run.py --fullscreen
 ```
 
 `run.py` launches SC2 itself (via Wine/Lutris — paths are baked into `run.py`),
@@ -19,7 +19,7 @@ All flags, set explicitly (`--fullscreen` is needed — windowed is unusably slo
 under Wine):
 
 ```bash
-cd ~/projects/build_orders && .venv/bin/python run.py \
+cd ~/projects/build-order-executor && .venv/bin/python run.py \
   --build builds/pvz_opening_8worker.yaml \
   --map LockdownLE \
   --fullscreen
@@ -57,7 +57,7 @@ well under a second.
 
 ```bash
 .venv/bin/pip install pytest pytest-asyncio   # one-time dev deps
-cd ~/projects/build_orders && .venv/bin/python -m pytest
+cd ~/projects/build-order-executor && .venv/bin/python -m pytest
 ```
 
 ### Integration tests (launch real SC2)
@@ -67,7 +67,7 @@ validated against **both** game versions:
 
 ```bash
 # Current retail, via local Wine (fullscreen; ~6 min):
-cd ~/projects/build_orders && .venv/bin/python -m pytest tests/test_integration.py --run-integration
+cd ~/projects/build-order-executor && .venv/bin/python -m pytest tests/test_integration.py --run-integration
 
 # Game version 4.10, via the headless Docker image (~3 min; see docker/):
 docker run --rm -e SC2_TEST_MAP=CatalystLE -v "$PWD":/app build-orders-headless \

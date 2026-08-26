@@ -1,9 +1,9 @@
 ---
 name: optimizing-sc2-build-orders
-description: Write, optimize, and debug YAML build orders for the build_orders python-sc2 bot (~/projects/build_orders, builds/*.yaml). Use when tuning a build toward a timing/quantity goal (e.g. "most zealots at X by 5:30"), when a build stalls / underperforms / deadlocks, or when reasoning about the executor's step semantics, placement, or SC2 production mechanics.
+description: Write, optimize, and debug YAML build orders for the build-order-executor python-sc2 bot (~/projects/build-order-executor, builds/*.yaml). Use when tuning a build toward a timing/quantity goal (e.g. "most zealots at X by 5:30"), when a build stalls / underperforms / deadlocks, or when reasoning about the executor's step semantics, placement, or SC2 production mechanics.
 ---
 
-# Optimizing SC2 Build Orders (build_orders bot)
+# Optimizing SC2 Build Orders (build-order-executor)
 
 The bot executes a YAML build (`builds/*.yaml`) validated by `schema.py` and run by
 `bot.py`. Steps fire **in list order, strictly**: each step holds the line until it
@@ -34,7 +34,7 @@ mislead yourself and the user. Run to a file and grep; don't trust piped `tail` 
 buffers until the process exits).
 
 ```bash
-cd ~/projects/build_orders
+cd ~/projects/build-order-executor
 .venv/bin/python run.py --build builds/<x>.yaml --fullscreen --time-limit 330 2>&1 \
   | grep -E "\[end\]|\[complete\]|\[status\]"
 ```
