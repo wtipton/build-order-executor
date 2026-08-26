@@ -6,12 +6,12 @@
 # FROM). Nothing about any eval framework lives here.
 #
 # Build (context is the REPO ROOT so the whole repo is available to COPY):
-#   docker build -f docker/Dockerfile -t build-orders-headless .
+#   docker build -f docker/Dockerfile -t build-order-executor-headless .
 # Run a build once (agent/CI style; prints the machine-readable [summary] line):
-#   docker run --rm build-orders-headless \
+#   docker run --rm build-order-executor-headless \
 #       python run.py --build builds/pvz_opening_8worker.yaml --map <MapName> --time-limit 300
 # Interactive shell (the mode a terminal agent iterates in):
-#   docker run --rm -it build-orders-headless
+#   docker run --rm -it build-order-executor-headless
 #
 # NOTE: the game is version 4.10 (base build shipped in SC2.4.10.zip) — the only
 # headless Linux build Blizzard publishes. Costs/timings differ from the current

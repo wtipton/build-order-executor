@@ -70,7 +70,7 @@ validated against **both** game versions:
 cd ~/projects/build-order-executor && .venv/bin/python -m pytest tests/test_integration.py --run-integration
 
 # Game version 4.10, via the headless Docker image (~3 min; see docker/):
-docker run --rm -e SC2_TEST_MAP=CatalystLE -v "$PWD":/app build-orders-headless \
+docker run --rm -e SC2_TEST_MAP=CatalystLE -v "$PWD":/app build-order-executor-headless \
   python -m pytest tests/test_integration.py --run-integration
 ```
 
