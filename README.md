@@ -70,10 +70,10 @@ validated against **both** game versions:
 cd ~/projects/build-order-executor && .venv/bin/python -m pytest tests/test_integration.py --run-integration
 
 # Game version 4.10, via the headless Docker image (~3 min; see docker/):
-docker run --rm -e SC2_TEST_MAP=CatalystLE -v "$PWD":/app build-order-executor-headless \
+docker run --rm -v "$PWD":/app build-order-executor-headless \
   python -m pytest tests/test_integration.py --run-integration
 ```
 
-`SC2_TEST_MAP` selects a map that ships with the 4.10 build (the local run defaults to
-`LockdownLE`). A couple of upgrades don't exist in 4.10, so the one suite covers only what's
-valid in both — see the build/test headers.
+The map defaults automatically by target (`CatalystLE` for `linux` / Docker, `LockdownLE` for `wine`),
+and can be overridden with `--map` or `SC2_TEST_MAP`/`SC2_MAP`. A couple of upgrades don't exist in
+4.10, so the one suite covers only what's valid in both — see the build/test headers.

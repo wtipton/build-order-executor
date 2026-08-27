@@ -18,9 +18,10 @@ import pytest
 
 import catalog
 
-# Map to run these on. Defaults to the local (wine) map; override with SC2_TEST_MAP
-# to run the same suite against another target — e.g. CatalystLE for the 4.10 image.
-TEST_MAP = os.environ.get("SC2_TEST_MAP", "LockdownLE")
+# Map to run these on. Defaults target-aware (LockdownLE for wine, CatalystLE for linux);
+# override with SC2_TEST_MAP / SC2_MAP to run against another map.
+_DEFAULT_MAP = "CatalystLE" if os.environ.get("SC2_TARGET") == "linux" else "LockdownLE"
+TEST_MAP = os.environ.get("SC2_TEST_MAP", os.environ.get("SC2_MAP", _DEFAULT_MAP))
 
 
 RUN_TIMEOUT = 1800  # seconds of wall-clock per game before we give up on the child

@@ -126,11 +126,13 @@ def resolve_map(name: str) -> Map:
 
 
 def main() -> None:
+    default_map = os.environ.get("SC2_MAP", "CatalystLE" if _TARGET == "linux" else "LockdownLE")
     ap = argparse.ArgumentParser()
     ap.add_argument("--target", default=_TARGET, choices=sorted(TARGETS),
                     help="launch target (also via SC2_TARGET env); resolved before sc2 import")
     ap.add_argument("--build", default="builds/pvz_opening_8worker.yaml", help="build-order config")
-    ap.add_argument("--map", default="LockdownLE", help="map filename without .SC2Map")
+    ap.add_argument("--map", default=default_map,
+                    help="map filename without .SC2Map (default: CatalystLE for linux, LockdownLE for wine; also via SC2_MAP env)")
     ap.add_argument("--fullscreen", action="store_true", help="launch SC2 fullscreen (-displayMode 1)")
     ap.add_argument("--replay", default=None, help="replay output path (default: in-game Replays dir)")
     ap.add_argument("--time-limit", type=int, default=300, help="end game after N game-seconds (0 = no limit)")

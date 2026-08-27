@@ -16,7 +16,7 @@ First build downloads the ~4.1 GB game zip.
 
 ```
 docker run --rm build-order-executor-headless \
-  python run.py --build builds/pvz_opening_8worker.yaml --map CatalystLE --time-limit 300
+  python run.py --build builds/pvz_opening_8worker.yaml --time-limit 300
 ```
 
 **Interactive shell** (how a terminal agent iterates — edit a build, run it, read
@@ -30,7 +30,7 @@ docker run --rm -it build-order-executor-headless
 runs your current tests/code):
 
 ```
-docker run --rm -e SC2_TEST_MAP=CatalystLE -v "$PWD":/app build-order-executor-headless \
+docker run --rm -v "$PWD":/app build-order-executor-headless \
   python -m pytest tests/test_integration.py --run-integration
 ```
 
