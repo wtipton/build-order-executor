@@ -25,29 +25,6 @@ cd ~/projects/build-order-executor && .venv/bin/python run.py \
   --fullscreen
 ```
 
-## Reading the output
-
-Every line is tagged. Always-on (the report a build reads back):
-
-| Tag | Meaning |
-|---|---|
-| `[run]` | lifecycle: build loaded, output legend, build complete, conceding, replay/summary paths |
-| `[step]` | a build step fired, with clock + supply, e.g. `[step] 1:54  sup19  build what=Nexus` |
-| `[complete]` | every unit/structure completion with a running per-type count, e.g. `[complete] 4:19  Gateway #3`, plus each upgrade, e.g. `[complete] 5:19  Warpgate`. Exact to the frame — use these for deadlines, not `[status]`. Probes are skipped (worker count is on every `[status]` line) |
-| `[builder]` | the lifecycle of the one probe pulled off the mineral line for a build: `assigned` when it's pulled and starts walking (by default as soon as we can afford the building; earlier if the step has a `prewalk:` trigger), then `building` when the order goes in. `dist=` is how far it still is from the spot — near-zero on the `building` line means the walk was overlapped with saving up, a big number means it was on the critical path. At most one probe is assigned this way at a time |
-| `[status]` | every 10 game-seconds, two lines: economy snapshot; the current step with how long it's been current and what it's waiting on |
-| `[end]` | final state + army report |
-
-There is no `[stall]` tag: `[status]` always reports the current step's age and reason,
-so a stall shows up as an age that keeps growing — no threshold to tune.
-
-All of the above are unconditional — there is no verbosity flag, so a run never has to be
-repeated just to diagnose it.
-
-The final `[summary]` line is a machine-readable JSON blob (steps done, `completions`
-mapping each type to its list of completion times, `upgrades_at`, unit/upgrade census,
-where it stalled) — grep `^[summary] ` and `json.loads` the rest.
-
 ## Tests
 
 Fast unit tests, no SC2 required — the executor's methods are tested unbound
@@ -77,3 +54,19 @@ docker run --rm -v "$PWD":/app build-order-executor-headless \
 The map defaults automatically by target (`CatalystLE` for `linux` / Docker, `LockdownLE` for `wine`),
 and can be overridden with `--map` or `SC2_TEST_MAP`/`SC2_MAP`. A couple of upgrades don't exist in
 4.10, so the one suite covers only what's valid in both — see the build/test headers.
+
+### Economic data
+
+Regenerate (the engine calls the game a Tie at ~1320 game-seconds, so it runs in chunks;
+the slices are positional indices into `phases()`, so re-derive them if you edit it):
+```bash
+for s in 0:12 12:24 24:32 32:40 40:46 46:54 54:58; do
+  docker run --rm -v "$PWD":/app build-order-executor-headless \
+    python economy_measure.py --target linux --slice $s 2>&1 | grep -E '^\[econ\]'
+done
+```
+
+`min`/`gas` phases count resources over a 60s window and can't resolve anything below one
+5-mineral trip (~8%), so use the frame-timed `trip` phases for finer effects — that gap is
+why the close-vs-far patch difference was missed on the first pass.
+

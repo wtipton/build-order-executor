@@ -35,19 +35,6 @@ Regenerate after a patch:
 - **Gateway↔Warp Gate transformation: 4s** (5.0.16b, was 7s/5s) and **costs 25 minerals +
   25 gas** per transform. (The static unit-type diff shows 0/0; this is an ability cost.)
 
-## Mining income (ESTIMATES — verify by measuring)
-
-Rough planning figures for a close/main base. **Flag: approximate.** Best measured
-empirically (track `minerals`/`gas` gained per second at a known worker count).
-
-| resource | per worker/sec | notes |
-|---|---|---|
-| minerals | ~0.7–0.9 | 1st–2nd worker on a close patch; 3rd worker/patch adds ~0.3 (diminishing) |
-| gas | ~0.55–0.65 | ~3 workers saturate a geyser at ~1.8 gas/sec total |
-
-Practical: a saturated 2-base Protoss economy (~32 mineral workers) ≈ **~22–25 min/sec**
-income. Probe = 50 min, 12.1s build.
-
 ## Structures
 
 | structure | min | gas | build s | supply |
@@ -112,4 +99,6 @@ income. Probe = 50 min, 12.1s build.
 | Extended Thermal Lance (colossus range) | 150 | 150 | 100.0 |
 
 ## Open items / to verify
-- **Mining rates** — replace the estimates above with measured values.
+- ~~**Mining rates**~~ — done: measured in-engine, see `economic_data.md`
+  (`economy_measure.py` regenerates them). Headline: **0.95 min/s per worker** up to 16
+  on a base, **0.45** for workers 17–24, **2.73 gas/s** for a saturated geyser.
