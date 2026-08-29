@@ -87,8 +87,7 @@
 # 5) home Gateways — 2 NEW (3 total with the opener); fewer = READY sooner (~4:45), so
 #    the morph/warp window opens earlier for MORE rounds.
 - {at: {count: {Stargate: 1}}, do: build, what: Pylon, where: main}  # power for the Gateways
-- {at: {count: {Stargate: 1}}, do: build, what: Gateway, prewalk: {minerals: 100}}
-- {at: {count: {Stargate: 1}}, do: build, what: Gateway, prewalk: {minerals: 100}}
+- {at: {count: {Stargate: 1}}, do: build, what: Gateway, prewalk: {minerals: 100}, count: 2}
 
 # 6) Charge — fires ~4:30 (Twilight ready + 100 gas). A 100s research from 4:30 needs
 #    ~3 chronos to beat 5:45. One here now; two more are time-gated in the warp
@@ -109,17 +108,14 @@
 
 # supply Pylons auto-placed near the main (where the probes are); on a time trigger
 # so they build ~4:00 without waiting for the Gateways to finish.
-- {at: {time: 235}, do: build, what: Pylon}
-- {at: {time: 235}, do: build, what: Pylon}
-- {at: {time: 235}, do: build, what: Pylon}
+- {at: {time: 235}, do: build, what: Pylon, count: 3}
 
 # TWO proxy pylons (built by the same scout, back to back) — one pylon's powered area
 # fills with warp-ins and then warp placement fails (warps stalled at ~5 with 1000+
 # min banked). Two pylons ~double the powered tiles so the whole warp window lands.
 # Built after the home pylons (their across-map pending count is type-wide and would
 # otherwise stall home pylons).
-- {at: {time: 250}, do: build, what: Pylon, where: proxy, who: scout}  # proxy pylon 1
-- {at: {time: 250}, do: build, what: Pylon, where: proxy, who: scout}  # proxy pylon 2 (more warp-in space)
+- {at: {time: 250}, do: build, what: Pylon, where: proxy, who: scout, count: 2}  # proxy pylons 1-2 (more warp-in space)
 
 # tech gas is all paid now (Twilight/Charge/Warpgate); the morph only needs 100 more
 # (banked). Pull gas to minerals so the 100-min warp-ins are well funded.

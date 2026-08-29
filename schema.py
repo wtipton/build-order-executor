@@ -139,6 +139,7 @@ class BuildStep(_StepBase):
     what: str            # structure / expansion (UnitTypeId name, e.g. Pylon, Nexus)
     where: Place | None = None      # where to place it; None = auto (at home). "proxy" builds it near the enemy.
     who: Who | None = None          # build with the named probe (see send_probe) instead of auto-selecting one
+    count: Count = None             # how many to put up, one after another; omit = 1
     # When to pull a probe off the line and walk it to the spot. Default: as soon as we
     # can afford the building. Set this to send it EARLIER, e.g. {minerals: 300} on a
     # 400 Nexus so the walk overlaps the saving. Independent of `at`.

@@ -140,6 +140,15 @@ def test_prewalk_default_still_reserves_probe_cost():
     assert BuildOrderBot._prewalk_due(_cost_bot(500, 0, supply_used=18, cost=(400, 0)), step) is True
 
 
+def test_prewalk_default_weighs_one_building_not_the_whole_count():
+    # `count: 4` Gateways pulls a probe at 150, not at 600. That one probe then builds all
+    # four, walking to each next spot as the previous goes up, so requiring the whole
+    # count up front would just delay the first Gateway.
+    step = fake_bot(prewalk=None, at=Trigger(time=1), what="Gateway", count=4)
+    assert BuildOrderBot._prewalk_due(_cost_bot(149, 0, cost=(150, 0)), step) is False
+    assert BuildOrderBot._prewalk_due(_cost_bot(150, 0, cost=(150, 0)), step) is True
+
+
 def test_explicit_prewalk_overrides_the_cost_default():
     # the whole point of `prewalk:` — pull EARLIER than affording it (300 < 400)
     step = fake_bot(prewalk=Trigger(minerals=300), at=Trigger(time=1), what="Nexus")

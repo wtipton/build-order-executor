@@ -29,10 +29,7 @@
 - {at: {count: {Forge: 1}}, do: build, what: PhotonCannon}
 
 # natural + third gas (6 geysers total)
-- {at: {count: {Nexus: 3}}, do: build, what: Assimilator}
-- {at: {count: {Nexus: 3}}, do: build, what: Assimilator}
-- {at: {count: {Nexus: 3}}, do: build, what: Assimilator}
-- {at: {count: {Nexus: 3}}, do: build, what: Assimilator}
+- {at: {count: {Nexus: 3}}, do: build, what: Assimilator, count: 4}
 - {at: {count: {Assimilator: 6}}, do: set_gas_probes, count: 18}
 
 # ===================== tier-2 tech =====================

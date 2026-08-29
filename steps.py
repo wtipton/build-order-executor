@@ -80,6 +80,12 @@ class StepsMixin:
         {minerals: 300}` on a 400-mineral Nexus sends it 100 short, so the walk
         overlaps the saving).
 
+        Asked once per step, and weighs ONE building even when the step has a `count`:
+        `count: 4` Gateways pulls a probe at 150 minerals, not 600. After that the probe is
+        held for the whole group and walks to each next spot as soon as the previous
+        building goes up (see BuilderState.reset_for_next_structure), so this is never consulted
+        again — it decides when to take a probe off minerals, and that already happened.
+
         Deliberately NOT keyed off `step.at`: when the builder leaves the mineral line
         is then a property of the build itself, so reordering steps or retuning a
         trigger doesn't silently move it.
@@ -129,22 +135,41 @@ class StepsMixin:
 
     # ----------------------------------------------------------- step handlers
     async def do_build(self, step: Step) -> bool:
-        """Drive `builder_state` for this step: get a probe assigned, issue the build once,
-        then hold until the structure actually appears. Picks neither the probe nor the
-        spot itself — `_assign_builder` owns both, for every build."""
+        """Put up `count` structures (default 1), one after another. Get a probe assigned,
+        issue the build once, hold until the structure actually appears, then go again if
+        more are owed. Picks neither the probe nor the spot itself — `_assign_builder` owns
+        both, for every build, and re-runs per structure so each gets its own spot."""
         unit = unit_id(step.what)
+        want = step.count or 1
         bs = self.builder_state
 
-        # A build isn't "done" when the command is issued — the probe may walk a
-        # long way, and a probe over the tile can block placement so the order is
-        # dropped. Confirm the structure actually appears: the type's count grows
-        # past the baseline captured on our first frame on this step.
+        # A build isn't "done" when the command is issued — the probe may walk a long way,
+        # and a probe over the tile can block placement so the order is dropped. Confirm
+        # the structures actually appear, against two different baselines:
+        #
+        #   step_state.build.baseline — the count when the STEP started. How many we've
+        #     added over the whole step is `amount - this`, which is what `count` is
+        #     measured against. Deliberately not a tally of confirm events: `amount` can
+        #     grow by 2 at once (the re-issue guard below can duplicate a build that had
+        #     in fact landed), and counting that as one would leave us owing one too many.
+        #   builder_state.baseline — the count when the CURRENT probe was put to work.
+        #     Only decides when to release that probe and start the next structure.
+        if self.step_state.build.baseline is None:
+            self.step_state.build.baseline = self.structures(unit).amount
         if bs.baseline is None:
             bs.baseline = self.structures(unit).amount
 
-        if self.structures(unit).amount > bs.baseline:
+        built = self.structures(unit).amount - self.step_state.build.baseline
+        if built >= want:
             bs.clear()  # spans steps, so release the probe explicitly
             return True
+
+        if self.structures(unit).amount > bs.baseline:
+            # A structure appeared, but we still need more. Prep to use the same worker to
+            # build the next building.
+            bs.reset_for_next_structure()
+            self._status = f"{step.what} {built}/{want} up"
+            await self._assign_builder(step)
 
         if not self.can_afford(unit):
             self._status = f"can't afford {step.what}"
@@ -186,12 +211,12 @@ class StepsMixin:
 
     async def do_train(self, step: Step) -> bool:
         """Order `count` of a unit (default 1), as many this frame as we can pay for and
-        find queue space for — what a human does holding the hotkey down.
+        find queue space for.
 
-        Issuing several in one frame is safe on both counts the observation can't see:
-        `Unit.train` subtracts the cost as it goes (so can_afford stays honest within the
-        frame), and the Scheduler records each producer it hands out. Whatever we can't
-        place now carries in step_state and resumes next frame."""
+        Two things could go stale while issuing several in one frame, and neither does:
+        `Unit.train` subtracts the cost immediately, so can_afford stays accurate, and
+        the Scheduler records each producer it hands out. Any we can't order this frame
+        are recorded in step_state and ordered on a later one."""
         unit = unit_id(step.what)
         want = step.count or 1
         ts = self.step_state.train
@@ -214,11 +239,13 @@ class StepsMixin:
 
         A warp isn't "done" when we issue it: a Warpgate still reads as off-cooldown to
         get_available_abilities on the frame(s) right after we warp from it, so trusting
-        the issue would over-warp (mark N done with only 2 gates). Confirm the units
-        actually appear — the count grown past the baseline captured when this step
-        started — and only then advance. That's also what makes `count` safe: the gate a
-        round just used may still read ready next frame, but the unit it made lands in
-        that same observation, so `remaining` shrinks in step with it."""
+        the issue would over-warp (mark N done with only 2 gates). Instead advance only
+        once the units appear, i.e. the count has grown past the baseline captured when
+        the step started.
+
+        This is also why `count` can't over-warp. A gate used this frame may still read
+        ready next frame, but the unit it produced appears in that same observation, so
+        `remaining` drops by one at the same time."""
         unit = unit_id(step.what)
         want = step.count or 1
         if self.step_state.warp.baseline is None:

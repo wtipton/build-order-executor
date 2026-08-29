@@ -212,6 +212,11 @@ class WorldMixin:
             if worker is None:
                 self.builder_state.clear()
                 return
+            if self.builder_state.spot is None:
+                # Held between two structures of a `count:` group, and do_build's re-target
+                # didn't land (no placement yet). Retry with no pre-walk check.
+                await self._assign_builder(step)
+                return
             # TODO: a little suspicious that we don't need this nudge behavior
             spot = self.builder_state.spot
             if worker.is_idle and worker.distance_to(spot) > 1:
@@ -227,21 +232,28 @@ class WorldMixin:
 
         The single place a builder is chosen, for every build — called early by
         manage_builder (the pre-walk) and inline by do_build when the step came due
-        before manage_builder saw it. Idempotent: already assigned for `step` is True
-        with nothing done. False means not yet possible (no placement, no free probe)
-        and `_status` says which, so the caller can just stall."""
-        if self.builder_state.for_step is step and self.builder_state.builder_tag is not None:
+        before manage_builder saw it. Idempotent: already assigned for `step` — meaning it
+        has both a probe AND a spot — is True with nothing done. False means not yet
+        possible (no placement, no free probe) and `_status` says which, so the caller can
+        just stall."""
+        if (self.builder_state.for_step is step and self.builder_state.builder_tag is not None
+                and self.builder_state.spot is not None):
             return True
         spot = await self._find_build_target(step)
         if spot is None:
             return False  # _find_build_target set _status where it can explain itself
         pos = spot.position  # Point2.position is itself, so this covers both
-        # A `who:` build names its own probe (already off the line via send_probe).
-        # If that probe is dead we fall back to the pool rather than stalling: losing the
-        # author's choice of probe is bad, hanging the whole build order over it is worse.
+        # Partway through a `count:` group the probe is still held (spot cleared,
+        # builder_tag kept), so send that one to the next spot instead of pulling another.
+        # A `who:` build names its own probe; if that probe is dead we fall back to the
+        # pool rather than stalling, since losing the author's choice of probe is bad but
+        # hanging the whole build order over it is worse.
         who = getattr(step, "who", None)
-        worker = self._worker_by_name(who) if who is not None else None
-        origin = f"who:{who}" if worker is not None else "pool"
+        worker = self._worker_by_tag(self.builder_state.builder_tag)
+        origin = "held"
+        if worker is None:
+            worker = self._worker_by_name(who) if who is not None else None
+            origin = f"who:{who}" if worker is not None else "pool"
         if worker is None:
             worker = self._free_probe_near(pos)
         if worker is None:

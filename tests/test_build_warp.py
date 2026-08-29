@@ -20,6 +20,12 @@ from state import BuilderState, StepState
 
 
 # ============================================================ do_build
+def _build_step(*, what="Pylon", count=None, **over):
+    """A build step as the schema would hand it over: every field do_build reads is
+    present, so a missing one shows up as a test bug rather than an AttributeError."""
+    return fake_bot(**{"what": what, "who": None, "count": count, **over})
+
+
 def _build_bot(*, struct_amount, afford, builder=None, assigned=True, **over):
     # do_build picks neither probe nor spot — _assign_builder owns both — so `assigned`
     # stubs its verdict and `builder` is whoever builder_state.builder_tag resolves to.
@@ -37,18 +43,25 @@ def _build_bot(*, struct_amount, afford, builder=None, assigned=True, **over):
 
 
 async def test_build_captures_baseline_on_first_sight_then_holds():
-    step = fake_bot(what="Pylon", who=None)
+    step = _build_step()
     fake = _build_bot(struct_amount=0, afford=False)
     assert await BuildOrderBot.do_build(fake, step) is False
     # baseline captured for this step (None -> 0 means we're now in flight)
     assert fake.builder_state.baseline == 0 and fake.builder_state.issued is False
 
 
+def _in_flight(fake, step, *, baseline, tag=7):
+    """Mid-build: both baselines were captured on an earlier frame. They're taken together
+    on the step's first frame, so setting only one is a state the bot can't be in."""
+    fake.step_state.build.baseline = baseline   # the whole step's, fixed
+    fake.builder_state.baseline = baseline      # this structure's, re-taken per structure
+    fake.builder_state.for_step, fake.builder_state.builder_tag = step, tag
+
+
 async def test_build_confirms_when_structure_appears_and_frees_the_probe():
-    step = fake_bot(what="Pylon", who=None)
+    step = _build_step()
     fake = _build_bot(struct_amount=1, afford=True)
-    fake.builder_state.baseline = 0     # in progress, and one has now appeared (amount 1 > 0)
-    fake.builder_state.for_step, fake.builder_state.builder_tag = step, 7
+    _in_flight(fake, step, baseline=0)  # in progress, and one has now appeared (amount 1 > 0)
     assert await BuildOrderBot.do_build(fake, step) is True
     # builder_state spans steps, so the probe must be released here or it never mines again
     assert fake.builder_state.for_step is None and fake.builder_state.builder_tag is None
@@ -56,7 +69,7 @@ async def test_build_confirms_when_structure_appears_and_frees_the_probe():
 
 async def test_build_issues_to_the_assigned_probe():
     probe = fake_unit(tag=99)
-    step = fake_bot(what="Pylon", who=None)
+    step = _build_step()
     fake = _build_bot(struct_amount=0, afford=True, builder=probe)
     fake.builder_state.for_step, fake.builder_state.builder_tag = step, 99
     fake.builder_state.spot = Point2((50.0, 50.0))
@@ -69,7 +82,7 @@ async def test_build_holds_without_reissue_while_builder_walks():
     # the assigned probe is still walking to / placing the build (not idle, not
     # gathering) — must NOT re-issue a duplicate.
     walking = fake_unit(is_idle=False, is_gathering=False)
-    step = fake_bot(what="Pylon", who=None)
+    step = _build_step()
     fake = _build_bot(struct_amount=0, afford=True, builder=walking)
     fake.builder_state.baseline, fake.builder_state.issued = 0, True
     fake.builder_state.for_step, fake.builder_state.builder_tag = step, 7
@@ -81,7 +94,7 @@ async def test_build_reissues_when_the_builder_dropped_the_order():
     # issued, but the probe is back to gathering and no structure appeared: the order
     # was dropped (a probe on the tile blocks placement), so issue it again.
     idle = fake_unit(tag=99, is_idle=False, is_gathering=True)
-    step = fake_bot(what="Pylon", who=None)
+    step = _build_step()
     fake = _build_bot(struct_amount=0, afford=True, builder=idle)
     fake.builder_state.baseline, fake.builder_state.issued = 0, True
     fake.builder_state.for_step, fake.builder_state.builder_tag = step, 99
@@ -92,7 +105,7 @@ async def test_build_reissues_when_the_builder_dropped_the_order():
 
 
 async def test_build_holds_when_no_probe_could_be_assigned():
-    step = fake_bot(what="Pylon", who=None)
+    step = _build_step()
     fake = _build_bot(struct_amount=0, afford=True, assigned=False)
     assert await BuildOrderBot.do_build(fake, step) is False
     fake.build.assert_not_awaited()
@@ -101,7 +114,7 @@ async def test_build_holds_when_no_probe_could_be_assigned():
 async def test_build_releases_the_assignment_when_the_builder_dies():
     # assigned, but the tag no longer resolves to a live probe -> drop the assignment
     # so manage_builder picks a fresh one, rather than stalling on a ghost forever.
-    step = fake_bot(what="Pylon", who=None)
+    step = _build_step()
     fake = _build_bot(struct_amount=0, afford=True, builder=None)
     fake.builder_state.for_step, fake.builder_state.builder_tag = step, 7
     assert await BuildOrderBot.do_build(fake, step) is False
@@ -110,10 +123,92 @@ async def test_build_releases_the_assignment_when_the_builder_dies():
     assert fake._status == "builder for Pylon died"
 
 
+def _amount(fake, n):
+    """Set how many of the structure type we own right now."""
+    fake.structures = lambda t, n=n: FakeUnits([object()] * n)
+
+
+async def test_build_count_holds_after_each_one_until_the_last():
+    # `count: 3` puts them up one after another; the step only completes on the third.
+    step = _build_step(count=3)
+    fake = _build_bot(struct_amount=0, afford=True)
+    assert await BuildOrderBot.do_build(fake, step) is False  # captures both baselines at 0
+
+    for built in (1, 2):
+        _amount(fake, built)
+        assert await BuildOrderBot.do_build(fake, step) is False, f"{built}/3 — must hold"
+        assert fake.step_state.build.baseline == 0, "the step's baseline must NOT be re-taken"
+        await BuildOrderBot.do_build(fake, step)  # next frame re-baselines the builder
+
+    _amount(fake, 3)
+    assert await BuildOrderBot.do_build(fake, step) is True
+
+
+async def test_build_count_keeps_the_same_probe_for_the_whole_group():
+    # A `count:` is one errand for one probe. Releasing it between structures would drop it
+    # out of _probes_unavailable_to_automation, so manage_economy would walk it back to a
+    # patch and the next structure would pull whichever probe happened to be nearest.
+    step = _build_step(count=3)
+    fake = _build_bot(struct_amount=0, afford=True, builder=fake_unit(tag=77))
+    await BuildOrderBot.do_build(fake, step)                     # baselines at 0
+    fake.builder_state.for_step, fake.builder_state.builder_tag = step, 77
+    fake.builder_state.spot, fake.builder_state.issued = Point2((5.0, 5.0)), True
+
+    _amount(fake, 1)  # first structure lands, two still owed
+    assert await BuildOrderBot.do_build(fake, step) is False
+    assert fake.builder_state.builder_tag == 77, "the probe must be held for the next one"
+    assert fake.builder_state.for_step is step
+    assert fake.builder_state.spot is None, "but re-targeted: a fresh spot for the next"
+
+    _amount(fake, 3)  # the group finishes
+    assert await BuildOrderBot.do_build(fake, step) is True
+    assert fake.builder_state.builder_tag is None, "released once the group is done"
+
+
+async def test_build_count_walks_to_the_next_spot_without_waiting_for_money():
+    # The pre-walk gate is a once-per-step decision about taking a probe off minerals. The
+    # probe is already off, so once one building is up it heads for the next spot right
+    # away and we save up while it walks — it must not stand at the finished building.
+    step = _build_step(count=3)
+    fake = _build_bot(struct_amount=0, afford=True, builder=fake_unit(tag=77))
+    await BuildOrderBot.do_build(fake, step)
+    fake.builder_state.for_step, fake.builder_state.builder_tag = step, 77
+    fake.builder_state.spot, fake.builder_state.issued = Point2((5.0, 5.0)), True
+
+    fake.can_afford = lambda u: False   # broke: can't pay for the next one yet
+    fake._assign_builder.reset_mock()   # ignore the assignment for the first structure
+    _amount(fake, 1)
+    assert await BuildOrderBot.do_build(fake, step) is False
+    fake._assign_builder.assert_awaited_once()  # re-targeted despite being unable to pay
+
+
+async def test_build_count_measures_structures_not_confirm_events():
+    # The re-issue guard can duplicate a build that had in fact landed, so the count can
+    # grow by 2 at once. Counting that as one confirm would leave the step owing one too
+    # many and put up `count + 1`. Measured from the step's baseline, 2 counts as 2.
+    step = _build_step(count=2)
+    fake = _build_bot(struct_amount=0, afford=True)
+    assert await BuildOrderBot.do_build(fake, step) is False  # baselines at 0
+    _amount(fake, 2)                                          # both appeared at once
+    assert await BuildOrderBot.do_build(fake, step) is True, "2 of 2 up — must not order a third"
+
+
+async def test_build_count_baseline_outlives_each_structure():
+    # BuilderState.baseline is re-taken per structure — the very event `count` is measured
+    # against — so the step's baseline has to live outside it. Pinned against a refactor.
+    step = _build_step(count=2)
+    fake = _build_bot(struct_amount=0, afford=True)
+    await BuildOrderBot.do_build(fake, step)
+    _amount(fake, 1)
+    assert await BuildOrderBot.do_build(fake, step) is False
+    assert fake.builder_state.baseline is None, "this structure's baseline is reset"
+    assert fake.step_state.build.baseline == 0, "the step's baseline survived"
+
+
 async def test_build_gas_uses_build_gas_not_build():
     # an Assimilator's spot is the geyser Unit, and it goes through Unit.build_gas
     geyser, probe = fake_unit(tag=1), fake_unit(tag=99)
-    step = fake_bot(what="Assimilator", who=None)
+    step = _build_step(what="Assimilator")
     fake = _build_bot(struct_amount=0, afford=True, builder=probe)
     fake.builder_state.for_step, fake.builder_state.builder_tag = step, 99
     fake.builder_state.spot = geyser
@@ -123,12 +218,13 @@ async def test_build_gas_uses_build_gas_not_build():
 
 
 # ============================================================ _assign_builder
-def _assign_bot(*, spot=Point2((50.0, 50.0)), free=None, named=None, **over):
+def _assign_bot(*, spot=Point2((50.0, 50.0)), free=None, named=None, held=None, **over):
     base = dict(
         builder_state=BuilderState(),
         _find_build_target=AsyncMock(return_value=spot),
         _free_probe_near=lambda pos: free,
         _worker_by_name=lambda name: named,
+        _worker_by_tag=lambda tag: held,   # the probe held across a `count:` group
         _log_builder=MagicMock(), _status="",
     )
     base.update(over)
@@ -137,7 +233,7 @@ def _assign_bot(*, spot=Point2((50.0, 50.0)), free=None, named=None, **over):
 
 async def test_assign_pulls_a_probe_and_walks_it_to_the_spot():
     probe = fake_unit(tag=99)
-    step = fake_bot(what="Pylon", who=None, at="supply>=20")
+    step = _build_step(at="supply>=20")
     fake = _assign_bot(free=probe)
     assert await BuildOrderBot._assign_builder(fake, step) is True
     assert fake.builder_state.for_step is step
@@ -149,7 +245,7 @@ async def test_assign_pulls_a_probe_and_walks_it_to_the_spot():
 async def test_assign_is_idempotent_for_the_same_step():
     # do_build calls this every frame; it must not re-issue a move or re-pick a probe
     probe = fake_unit(tag=99)
-    step = fake_bot(what="Pylon", who=None, at="supply>=20")
+    step = _build_step(at="supply>=20")
     fake = _assign_bot(free=probe)
     await BuildOrderBot._assign_builder(fake, step)
     probe.move.reset_mock()
@@ -159,7 +255,7 @@ async def test_assign_is_idempotent_for_the_same_step():
 
 async def test_assign_prefers_the_named_probe():
     named, pool = fake_unit(tag=1), fake_unit(tag=2)
-    step = fake_bot(what="Pylon", who="scout", at="time>=250")
+    step = _build_step(who="scout", at="time>=250")
     fake = _assign_bot(free=pool, named=named)
     assert await BuildOrderBot._assign_builder(fake, step) is True
     assert fake.builder_state.builder_tag == 1
@@ -168,14 +264,39 @@ async def test_assign_prefers_the_named_probe():
 async def test_assign_falls_back_to_the_pool_when_the_named_probe_died():
     # a dead scout must not hang the build order forever
     pool = fake_unit(tag=2)
-    step = fake_bot(what="Pylon", who="scout", at="time>=250")
+    step = _build_step(who="scout", at="time>=250")
     fake = _assign_bot(free=pool, named=None)
     assert await BuildOrderBot._assign_builder(fake, step) is True
     assert fake.builder_state.builder_tag == 2
 
 
+async def test_assign_reuses_the_held_probe_mid_group():
+    # spot cleared but builder_tag kept = between two structures of a `count:` group. The
+    # held probe walks on to the next spot; pulling a fresh one would strand it.
+    held, pool = fake_unit(tag=1), fake_unit(tag=2)
+    step = _build_step(count=3, at="time>=1")
+    fake = _assign_bot(free=pool, held=held)
+    fake.builder_state.for_step, fake.builder_state.builder_tag = step, 1
+    assert await BuildOrderBot._assign_builder(fake, step) is True
+    assert fake.builder_state.builder_tag == 1
+    held.move.assert_called_once_with(Point2((50.0, 50.0)))
+    pool.move.assert_not_called()
+
+
+async def test_assign_re_targets_when_the_spot_was_cleared():
+    # the idempotence check must require a SPOT as well as a probe, or a mid-group
+    # assignment short-circuits and do_build builds at a stale/None spot
+    held = fake_unit(tag=1)
+    step = _build_step(count=2, at="time>=1")
+    fake = _assign_bot(held=held)
+    fake.builder_state.for_step, fake.builder_state.builder_tag = step, 1
+    fake.builder_state.spot = None
+    assert await BuildOrderBot._assign_builder(fake, step) is True
+    assert fake.builder_state.spot == Point2((50.0, 50.0))
+
+
 async def test_assign_fails_without_a_placement_or_a_probe():
-    step = fake_bot(what="Pylon", who=None, at="supply>=20")
+    step = _build_step(at="supply>=20")
     no_spot = _assign_bot(spot=None, free=fake_unit(tag=99))
     assert await BuildOrderBot._assign_builder(no_spot, step) is False
     assert no_spot.builder_state.for_step is None
@@ -244,7 +365,7 @@ async def test_stalled_build_says_there_is_nowhere_to_put_it():
 
 async def test_pylon_with_nowhere_to_go_says_so():
     fake = _placement_bot(pos=None)
-    step = fake_bot(what="Pylon", where=None)
+    step = _build_step(where=None)
     assert await BuildOrderBot._find_build_target(fake, step) is None
     assert fake._status == "nowhere left to put a Pylon"
 

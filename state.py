@@ -24,20 +24,31 @@ from schema import Step
 
 @dataclass
 class WarpConfirm:
-    """The unit-count baseline to confirm the warps landed. No `issued` counter: how many
-    of `count` are done is measured from the units themselves, so a warp order the game
-    dropped is simply re-issued rather than counted as delivered."""
+    """The unit-count baseline for confirming warps completed. There is no `issued`
+    counter: progress is measured from the units that appeared, so a warp order the game
+    dropped gets re-issued instead of counting toward `count`."""
     baseline: int | None = None      # unit count when the step started
+
+
+@dataclass
+class BuildState:
+    """The structure-count baseline for the step as a WHOLE, against which `count` is
+    measured (`amount - baseline` is how many we've put up).
+
+    Distinct from BuilderState.baseline, which is re-taken for each structure and only
+    says when to move on to the next one. This one can't live there: that field is reset
+    every time a structure lands, which is precisely the event being measured."""
+    baseline: int | None = None
 
 
 @dataclass
 class TrainState:
     """How many of the step's `count` have been ORDERED so far.
 
-    Counted rather than measured, unlike warp/morph: a trained unit doesn't exist until
-    it pops ~30s later, and `train` deliberately completes at the order (the next step
-    shouldn't wait on the Zealot). So the tally is the only record that survives a step
-    that could afford 3 of its 7 and has to resume next frame."""
+    Counted rather than measured from the units, unlike warp/morph: a trained unit doesn't
+    exist until it finishes ~30s later, and `train` completes at the order so the next
+    step doesn't wait on it. That makes this count the only record of progress when a step
+    can afford 3 of its 7 and has to finish the rest on a later frame."""
     issued: int = 0
 
 
@@ -62,6 +73,7 @@ class StepState:
     # Game-time this became the current step.
     started_at: float = 0.0
     
+    build: BuildState = field(default_factory=BuildState)
     warp: WarpConfirm = field(default_factory=WarpConfirm)
     train: TrainState = field(default_factory=TrainState)
     morph: MorphState = field(default_factory=MorphState)
@@ -71,6 +83,7 @@ class StepState:
         `now` stamps when the incoming step became current."""
         self.trigger_fired = False
         self.started_at = now
+        self.build = BuildState()
         self.warp = WarpConfirm()
         self.train = TrainState()
         self.morph = MorphState()
@@ -85,7 +98,10 @@ class BuilderState:
     be current yet, walks to the spot while intervening steps fire, is handed to
     do_build, and is held until the structure appears. `manage_builder` owns the
     lifecycle; the reservation dies when the step it was made for is no longer the next
-    build (i.e. at the first train/warp/research step), or when the build completes.
+    build (i.e. at the first train/warp/research step), or when the build completes. On a
+    `count:` step the probe is held across the whole group — see
+    `reset_for_next_structure`, which keeps it while dropping the finished structure's
+    spot and order.
 
     The invariant, which is also the contract with the build author: AT MOST ONE probe
     is off the mineral line for building at any time. A probe that has to be held
@@ -96,11 +112,23 @@ class BuilderState:
     builder_tag: int | None = None      # the probe, once one has been assigned
     spot: Point2 | Unit | None = None   # placement point, or the geyser for gas
     issued: bool = False                # do_build has given it the build order
-    baseline: int | None = None         # structure count when the step started
+    baseline: int | None = None         # structure count when THIS structure was started
 
     def clear(self) -> None:
         self.for_step = None
         self.builder_tag = None
+        self.spot = None
+        self.issued = False
+        self.baseline = None
+
+    def reset_for_next_structure(self) -> None:
+        """Move on to the next structure of a `count:` group: forget this structure's
+        spot/order/baseline, but KEEP the probe and the step.
+
+        Keeping `builder_tag` is what holds the probe. While it's set, the tag stays in
+        `_probes_unavailable_to_automation`, so manage_economy won't reclaim the probe and
+        send it back to a mineral patch partway through a group. One probe builds all of
+        them, like a player queueing several buildings on one worker."""
         self.spot = None
         self.issued = False
         self.baseline = None

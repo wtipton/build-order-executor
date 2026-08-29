@@ -18,16 +18,13 @@
 - {at: {time: 62},  do: build, what: Assimilator}  # main gas 2
 - {at: {count: {Assimilator: 2}}, do: set_gas_probes, count: 6}
 - {at: {count: {Nexus: 2}}, do: rally_and_transfer_probes, where: natural}
-- {at: {count: {Nexus: 2}}, do: build, what: Assimilator}  # natural gas 1
-- {at: {count: {Nexus: 2}}, do: build, what: Assimilator}  # natural gas 2
+- {at: {count: {Nexus: 2}}, do: build, what: Assimilator, count: 2}  # natural gases 1-2
 - {at: {count: {Assimilator: 4}}, do: set_gas_probes, count: 12}
 - {at: {time: 150}, do: cut_probes}  # cap probes — this build is gas-bound, not supply-bound
 
 # ===================== tech: all upgrade buildings (extra forges/cores for parallelism) =====================
 - {at: {count: {Gateway: 1}}, do: build, what: CyberneticsCore}  # 2nd core (parallel air upgrades)
-- {at: {count: {CyberneticsCore: 1}}, do: build, what: Forge}
-- {at: {count: {CyberneticsCore: 1}}, do: build, what: Forge}
-- {at: {count: {CyberneticsCore: 1}}, do: build, what: Forge}
+- {at: {count: {CyberneticsCore: 1}}, do: build, what: Forge, count: 3}
 - {at: {count: {CyberneticsCore: 1}}, do: build, what: TwilightCouncil}
 - {at: {count: {CyberneticsCore: 1}}, do: build, what: RoboticsFacility}
 - {at: {count: {CyberneticsCore: 1}}, do: build, what: Stargate}

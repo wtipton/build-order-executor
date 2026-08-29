@@ -48,10 +48,7 @@
 # only 4 home gateways (mineral-capped, so more gates just idle); proxy pylon
 # after them so the scout's walk overlaps the money-limited builds
 - {at: {count: {CyberneticsCore: 1}}, do: build, what: Pylon, where: main}
-- {at: {count: {CyberneticsCore: 1}}, do: build, what: Gateway, prewalk: {minerals: 100}}
-- {at: {count: {CyberneticsCore: 1}}, do: build, what: Gateway, prewalk: {minerals: 100}}
-- {at: {count: {CyberneticsCore: 1}}, do: build, what: Gateway, prewalk: {minerals: 100}}
-- {at: {count: {CyberneticsCore: 1}}, do: build, what: Gateway, prewalk: {minerals: 100}}
+- {at: {count: {CyberneticsCore: 1}}, do: build, what: Gateway, prewalk: {minerals: 100}, count: 4}
 - {at: {count: {CyberneticsCore: 1}}, do: build, what: Pylon, where: proxy, who: scout}  # proxy pylon
 # keep chrono flowing onto the warpgate research, then the gateways
 - {at: {time: 205}, do: chrono, target: CyberneticsCore}  # chrono research again

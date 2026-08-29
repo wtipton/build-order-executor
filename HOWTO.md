@@ -35,7 +35,7 @@ The build order config is a list of steps. Each step has:
 - an `at` field which specifies a triggering criterion (exactly one of supply, time, minerals, vespene, or count). Count is (e.g., {Pylon: 2}, {CyberneticsCore: 1})
 - and a `do` field which specifies the action to takke in the build
 
-Various other fields are specific to the type of action. Values, including building and unit names, are case-insensitive, but field names are not.
+Various other fields are specific to the type of action. Values, including building and unit names, are case-insensitive, but field names are not. Several steps take a `count`. The step isn't complete until all of them have been made, so the build order waits for the whole group before moving on.
 
 Steps are executed one at a time, i.e. a step's trigger is checked and its action taken only after the previous step is complete. (There is a single exception to this, the prewalk system for builders, described below, which involves some limit lookahead past the current step.) For each step, we wait until the triggering condition becomes true, and then execute it.
 
@@ -118,18 +118,20 @@ All protoss buildings must be placed near a pylon, except for nexuses and pylons
 
 Generally these heuristics should be sufficient to exercise a build order. An explicit `where` may be provided to override, however. This may be useful e.g. for proxy builds.
 
-To build a building, a nearby worker is pulled from mineral mining to the location where we want to construct the new building. The probe has to walk to the location, but it doesn't have to wait for completion. It immediately returns to the same minerals from whence it came.
+To build a building, a nearby worker is pulled from mineral mining to the location where we want to build. The probe has to walk to the location, but it doesn't have to wait for completion. After building all buildings for the step, it returns to the same minerals from whence it came.
 
-By default, a worker is pulled once we're on the build step *and* we have sufficient resources to construct the building. In this case, the building will definitely start later than necessary, by however much time it takes the worker to walk to the building location.
+By default, a worker is pulled once we're on the build step *and* we have sufficient resources to construct a building. In this case, the building will definitely start later than necessary, by however much time it takes the worker to walk to the building location.
 
 To be as efficient as possible, a build will usually want to perform actions as soon as possible. To execute a tighter build, you can use the `prewalk` field on build steps, to start the probe walking to the building location a bit earlier. This step takes a `trigger` field whose value is of the same type as `at`. This trigger criterion is then used to decide when to send the worker. A common pattern will be to pre-walk a probe a little while before resources for the building are available.
 
-A couple important notes about prewalk:
+If a build step specifies a `count`, the probe is pulled by default when we have resources to build a single building. Regardless, the prewalk condition is only checked once per build step, and the same pulled probe is used to build all buildings in the step.
+
+A couple other important notes about prewalk:
 
 - This is the only case where a step can have any effect before previous steps are complete.
 - In general, at any particular point in time, we look ahead as far as the next resource-spending step. If it's a build step, we check the prewalk criterion. And if the criterion is true, we walk the probe.
 - Effectively, this means that we partition steps into minimal groups ending with a resource-spending step. If that last step is a build step with a prewalk, then we check the prewalk criterion whenever any steps in the partition are active.
-- A consequecne of this is that only one prewalking probe can be active at a time. I.e. we'll have at most one builder probe off of mining due to this system.
+- A consequence of this is that only one prewalking probe can be active at a time. I.e. we'll have at most one builder probe off of mining due to this system.
 
 A final detail about probe walking: in case the build step has a `supply` trigger which is higher than our current supply, we need to build probes (at a cost of 50 minerals apiece) before we can build the building. We deduct these probe costs from our current mineral count before checking the probe-sending criterion, whether it's explicit via `prewalk: {minerals: ...}` or implicit via the default building cost check. A `count: {Probe: N}` trigger reserves the same way as well.
 
@@ -164,7 +166,7 @@ The bot's output contains semi-structured data to help understand what happened 
 | `[run]` | lifecycle: build loaded, output legend, build complete, conceding, replay/summary paths |
 | `[step]` | a build step fired, with clock + supply, e.g. `[step] 1:54  sup19  build what=Nexus` |
 | `[complete]` | a unit, structure, or upgrade completed, with a running per-type count, e.g. `[complete] 4:19  Gateway #3`. Probes are skipped. |
-| `[builder]` | the lifecycle of the one probe pulled off the mineral line for a build: `assigned` when it's pulled and starts walking, then `building` when the order goes in. `dist=` is how far it still is from the spot — near-zero on the `building` line means the walk was overlapped with saving up, a big number means it was on the critical path. |
+| `[builder]` | the lifecycle of the one probe pulled off the mineral line for a build: `assigned` when it's pulled and starts walking, then `building` when the order goes in. `dist=` is how far it still is from the spot — near-zero on the `building` line means the walk was overlapped with saving up, a big number means it was on the critical path. A `count` step logs `assigned` and `building` for each structure; after the first, `assigned` says `held`, meaning it reused the probe already building for this step. |
 | `[status]` | every 10 game-seconds, two lines: economy snapshot; the current step with how long it's been current and what it's waiting on |
 | `[end]` | final state + army report |
 
