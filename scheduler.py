@@ -18,6 +18,7 @@ from typing import TYPE_CHECKING
 from sc2.ids.unit_typeid import UnitTypeId as U
 from sc2.ids.upgrade_id import UpgradeId
 from sc2.unit import Unit
+from sc2.units import Units
 
 from catalog import (
     CHRONO_CASTER,
@@ -39,11 +40,29 @@ class Scheduler:
         # Commitments made THIS frame, invisible to the observation until it refreshes.
         self._queued: dict[int, list[float]] = {}     # producer tag -> build seconds added
         self._chrono_spent: Counter[int] = Counter()  # Nexus tag -> energy committed
+        self._morphing: set[int] = set()              # tags told to morph
 
     def new_frame(self) -> None:
         """Called once per on_step, before any handler runs."""
         self._queued.clear()
         self._chrono_spent.clear()
+        self._morphing.clear()
+
+    # ============================================================ morphing
+    def morph_sources(self, sources: Units) -> list[Unit]:
+        """Those of `sources` free to be told to morph: idle, and not already given work
+        this frame.
+
+        The second half is the point. Orders aren't sent until the frame ends, so a
+        structure this scheduler just handed a unit to still reads `is_idle` with an empty
+        `orders` list."""
+        return [s for s in sources.idle
+                if s.tag not in self._queued and s.tag not in self._morphing]
+
+    def commit_morph(self, tag: int) -> None:
+        """Record that `tag` was told to morph this frame, so nothing else hands it work
+        before the observation catches up."""
+        self._morphing.add(tag)
 
     # ============================================================ training
     def producer_for(self, unit: U) -> Unit | None:
@@ -56,7 +75,8 @@ class Scheduler:
         if producer_type is None:
             return None
         pool = self.bot.structures(producer_type).ready
-        free = [s for s in pool if self._queue_depth(s) < MAX_PRODUCTION_QUEUE]
+        free = [s for s in pool
+                if self._queue_depth(s) < MAX_PRODUCTION_QUEUE and s.tag not in self._morphing]
         if not free:
             return None
         # Tag breaks ties LAST: the observation's structure order isn't stable between

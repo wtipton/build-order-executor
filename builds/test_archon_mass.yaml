@@ -1,0 +1,37 @@
+# Archon stress fixture: train 10 HighTemplar, then morph exactly 3 Archons from them.
+#
+# `morph count: N` with plenty of SPARE sources is the case unit tests can only fake. 3
+# Archons consume 6 templar and must leave 4 standing — over-morphing shows up as missing
+# templar, under-morphing as missing Archons, and a stall as the step never completing.
+#
+# Self-checking: the last step waits on `count: {Archon: 3}`, so the build only reaches
+# 'complete' if three Archons actually exist.
+#
+# Supply triggers follow the 8-worker openers: the start cap is 13, so the first Pylon
+# has to be gated at 12 or the build deadlocks waiting for supply it can't reach.
+
+- {at: {time: 7},     do: chrono, target: Nexus}
+- {at: {supply: 12},  do: build,  what: Pylon,   prewalk: {minerals: 75}}
+- {at: {supply: 14},  do: build,  what: Gateway, prewalk: {minerals: 100}}
+- {at: {supply: 14},  do: chrono, target: Nexus}
+- {at: {supply: 15},  do: build,  what: Assimilator, count: 2}
+- {at: {count: {Assimilator: 1}}, do: set_gas_probes, count: 6}
+- {at: {count: {Gateway: 1}}, do: build, what: CyberneticsCore, prewalk: {minerals: 100}}
+- {at: {supply: 19},  do: build,  what: Nexus, prewalk: {minerals: 300}}
+- {at: {supply: 20},  do: build,  what: Pylon, prewalk: {minerals: 75}}
+
+# Tech to Templar Archives, and take the natural gases — 10 templar is 1500 gas.
+- {at: {count: {CyberneticsCore: 1}}, do: build, what: TwilightCouncil, prewalk: {minerals: 100}}
+- {at: {count: {TwilightCouncil: 1}}, do: build, what: TemplarArchive, prewalk: {minerals: 100}}
+- {at: {count: {Nexus: 2}}, do: rally_and_transfer_probes, where: natural}
+- {at: {count: {Nexus: 2}}, do: build, what: Assimilator, count: 2}
+- {at: {count: {Assimilator: 4}}, do: set_gas_probes, count: 12}
+
+# Gateways to train them from, and supply to hold them (10 templar = 20 supply).
+- {at: {count: {TwilightCouncil: 1}}, do: build, what: Gateway, prewalk: {minerals: 100}, count: 3}
+- {at: {count: {Probe: 34}}, do: cut_probes}  # stop at 34 so the templar have supply
+- {at: {count: {Probe: 34}}, do: build, what: Pylon, count: 5}
+
+- {at: {count: {TemplarArchive: 1}}, do: train, what: HighTemplar, count: 10}
+- {at: {count: {HighTemplar: 10}}, do: morph, to: archon, count: 3}
+- {at: {count: {Archon: 3}}, do: wait}  # only completes if all 3 were really made

@@ -97,15 +97,15 @@ async def test_step_state_is_reset_on_advance():
     seen = []
 
     async def run_handler(step):
-        seen.append((step, fake.step_state.warp.warped_in, fake.step_state.morph.target))
+        seen.append((step, fake.step_state.warp.warped_in, fake.step_state.morph.dest_wanted))
         fake.step_state.warp.warped_in = {7}      # pretend this step went in flight
-        fake.step_state.morph.target = 3
+        fake.step_state.morph.dest_wanted = 3
         return True
 
     fake = _seq_bot(steps, trigger_met=lambda at: True, run_handler=run_handler)
     await BuildOrderBot.run_steps(fake)
 
-    assert seen == [(steps[0], set(), 0), (steps[1], set(), 0)], "state leaked between steps"
+    assert seen == [(steps[0], set(), None), (steps[1], set(), None)], "state leaked between steps"
     assert fake.step_state == StepState(), "StepState not fully cleared after the last step"
     assert fake.step_state.started_at == fake.time, "advance must stamp when the new step began"
 

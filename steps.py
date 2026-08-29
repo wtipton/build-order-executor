@@ -33,6 +33,9 @@ from catalog import (
 from schema import Step, Trigger
 
 
+
+
+
 class StepsMixin:
     # ============================================================ engine
     @property
@@ -324,29 +327,58 @@ class StepsMixin:
         return pylons.closest_to(self._resolve_place(where))
 
     async def do_morph(self, step: Step) -> bool:
+        """Convert sources into `count` of `dest`, finishing once every source we committed
+        is either consumed or visibly morphing.
+
+        Issuing the ability is not the same as it happening. The order is invisible until
+        the next observation, and it is often refused outright, e.g. when trying to morph
+        a Gateway that's producing a unit."""
         spec = MORPH[step.to]
-        if self.step_state.morph.baseline is None:
-            # start: how many `dest` to make — every ready source for a 1:1 convert
+        ms = self.step_state.morph
+        if ms.dest_wanted is None:
+            # First frame: how many `dest` to make — every ready source for a 1:1 convert
             # (gateway<->warpgate), or as many pairs as we have for a 2:1 combine
-            # (2 HT/DT -> 1 Archon) — and the dest-count baseline to measure against.
+            # (2 HT/DT -> 1 Archon). Fixed here and never recomputed; see MorphState.
             ready = self._morph_sources(spec).ready.amount
-            self.step_state.morph.target = step.count if step.count is not None else ready // spec.consumes
-            self.step_state.morph.baseline = self.all_own_units(spec.dest).amount
+            ms.dest_wanted = step.count if step.count is not None else ready // spec.consumes
 
-        remaining = self.step_state.morph.target - (self.all_own_units(spec.dest).amount - self.step_state.morph.baseline)
-        if remaining <= 0:
-            return True  # enough have morphed — done
+        sources = self._morph_sources(spec)
+        by_tag = {s.tag: s for s in sources}
+        wanted_sources = ms.dest_wanted * spec.consumes
 
-        # issue to idle sources in groups of `consumes` (a converting/merging one
-        # isn't idle, so it's never double-issued); stall until `remaining` appear as
-        # `dest`. For the Archon combine, both templar of a pair get the ability and
-        # merge into one Archon.
-        idle = list(self._morph_sources(spec).idle)
-        for i in range(min(remaining, len(idle) // spec.consumes)):
-            for s in idle[i * spec.consumes:(i + 1) * spec.consumes]:
-                s(spec.ability)
-        self._status = f"morphing to {step.to} ({remaining} left)"
+        # A committed source is settled once it's gone from the source list (consumed by a
+        # merge, or converted and so no longer that type) or is carrying the morph ability.
+        def settled(tag: int) -> bool:
+            return tag not in by_tag or spec.in_progress(by_tag[tag])
+
+        if len(ms.committed) >= wanted_sources and all(settled(t) for t in ms.committed):
+            return True  # everything we asked for is done or under way
+
+        free = {s.tag: s for s in self.scheduler.morph_sources(sources)}
+
+        # Re-issue to committed sources still sitting idle — their order never took, or the
+        # game merged their partner with somebody else and left them behind.
+        stragglers = [free[t] for t in ms.committed if t in free]
+        if stragglers:
+            self._order_morph(spec, stragglers)
+
+        # Commit more, in whole multiples of `consumes` so a merge always has a partner.
+        spare = [s for tag, s in free.items() if tag not in ms.committed]
+        take = min(wanted_sources - len(ms.committed), len(spare)) // spec.consumes * spec.consumes
+        if take:
+            self._order_morph(spec, spare[:take])
+            ms.committed.update(s.tag for s in spare[:take])
+
+        done = sum(settled(t) for t in ms.committed) // spec.consumes
+        self._status = f"morphing to {step.to} ({ms.dest_wanted - done} left)"
         return False
+
+    def _order_morph(self, spec: MorphSpec, group: list[Unit]) -> None:
+        """Give one group the morph ability, and tell the Scheduler they are spoken for, so
+        nothing hands them a unit to train before the observation catches up."""
+        for s in group:
+            s(spec.ability)
+            self.scheduler.commit_morph(s.tag)
 
     def _morph_sources(self, spec: MorphSpec) -> Units:
         """Ready units/structures that can morph into `spec.dest` (both HT and DT

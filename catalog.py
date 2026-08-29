@@ -198,14 +198,27 @@ HALLUCINATION_ABILITY: AbilityId = AbilityId.HALLUCINATION_PHOENIX
 class MorphSpec:
     sources: tuple[U, ...]  # unit/structure type(s) that can morph into `dest`
     dest: U                 # what they become
-    ability: AbilityId
+    ability: AbilityId      # what we issue to start it
     consumes: int           # source units consumed per dest produced (1: convert; 2: combine)
+    # The abilities a source carries in its `orders` WHILE the morph runs, which is how we
+    # tell a source that took our order from one that ignored it. Usually just `ability`,
+    # but the Archon merge reports ARCHON_WARP_TARGET rather than the MORPH_ARCHON we
+    # issue — python-sc2 carries CREATION_ABILITY_FIX for the same mismatch. Hand-listed
+    # because nothing in the game data links the two.
+    under_way: frozenset[AbilityId] = frozenset()
+
+    def in_progress(self, unit) -> bool:
+        """Whether `unit` is currently carrying out this morph."""
+        return any(o.ability.id in (self.under_way or {self.ability}) for o in unit.orders)
 
 
 MORPH: dict[str, MorphSpec] = {
-    "warpgate": MorphSpec((U.GATEWAY,), U.WARPGATE, AbilityId.MORPH_WARPGATE, 1),
-    "gateway": MorphSpec((U.WARPGATE,), U.GATEWAY, AbilityId.MORPH_GATEWAY, 1),
-    "archon": MorphSpec((U.HIGHTEMPLAR, U.DARKTEMPLAR), U.ARCHON, AbilityId.MORPH_ARCHON, 2),
+    "warpgate": MorphSpec((U.GATEWAY,), U.WARPGATE, AbilityId.MORPH_WARPGATE, 1,
+                          frozenset({AbilityId.MORPH_WARPGATE})),
+    "gateway": MorphSpec((U.WARPGATE,), U.GATEWAY, AbilityId.MORPH_GATEWAY, 1,
+                         frozenset({AbilityId.MORPH_GATEWAY})),
+    "archon": MorphSpec((U.HIGHTEMPLAR, U.DARKTEMPLAR), U.ARCHON, AbilityId.MORPH_ARCHON, 2,
+                        frozenset({AbilityId.MORPH_ARCHON, AbilityId.ARCHON_WARP_TARGET})),
 }
 
 

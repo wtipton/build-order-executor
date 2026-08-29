@@ -180,3 +180,29 @@ def test_all_upgrades_researched():
         f"upgrades not completed: {missing} "
         f"(still researching: {data.get('researching')}, completed: {sorted(done)})"
     )
+
+
+@pytest.mark.integration
+def test_morph_count_consumes_exactly_what_it_needs():
+    """`morph to: archon count: 3` from 10 HighTemplar: exactly 3 Archons, exactly 4 left.
+
+    Exact numbers, because both ways of being wrong are silent. The game decides which
+    templar merge with which — python-sc2 batches same-ability orders into one action —
+    and a live run produced one Archon from the pair we intended, one from two templar of
+    two DIFFERENT intended pairs, and two stragglers. Tracking pairs stranded those two:
+    2 Archons, 6 templar, and a step that never finished. Over-morphing is the mirror
+    image and eats templar the build wanted to keep.
+
+    Not reachable from unit tests: the whole bug is in what the game does with an action
+    we hand it, so the fakes would have to encode the very behaviour in question.
+    """
+    data = _run("builds/test_archon_mass.yaml", time_limit=600)
+    assert data["completed"], (
+        f"stalled on {data['next_step']!r} at {data['final_time']}s "
+        f"({data['steps_done']}/{data['steps_total']})"
+    )
+    census = _census(data)
+    assert census.get("ARCHON") == 3, f"expected exactly 3 Archons: {data['census']}"
+    assert census.get("HIGHTEMPLAR") == 4, (
+        f"expected exactly 4 HighTemplar left of 10 (3 Archons consume 6): {data['census']}"
+    )

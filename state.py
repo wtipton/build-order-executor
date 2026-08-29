@@ -63,9 +63,16 @@ class TrainState:
 
 @dataclass
 class MorphState:
-    """How many `dest` (i.e. archon) to make + the dest-count baseline"""
-    target: int = 0                  # how many `dest` this step should produce
-    baseline: int | None = None      # dest count when the step started
+    """How many `dest` to make, and which sources have been told to make them.
+
+    `dest_wanted` is fixed on the step's first frame — None until then, which is what marks
+    that frame.
+
+    `committed` is a flat set of source tags. Note that we don't need to e.g. group into
+    pairs when morphing archons. The game game pairs the tags itself on groups of units
+    given the morph order."""
+    dest_wanted: int | None = None   # how many `dest` to produce; None before the first frame
+    committed: set[int] = field(default_factory=set)  # source tags told to morph
 
 
 @dataclass
