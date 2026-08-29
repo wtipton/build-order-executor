@@ -24,8 +24,21 @@ from schema import Step
 
 @dataclass
 class WarpConfirm:
-    """The unit-count baseline to confirm the warp landed"""
+    """The unit-count baseline to confirm the warps landed. No `issued` counter: how many
+    of `count` are done is measured from the units themselves, so a warp order the game
+    dropped is simply re-issued rather than counted as delivered."""
     baseline: int | None = None      # unit count when the step started
+
+
+@dataclass
+class TrainState:
+    """How many of the step's `count` have been ORDERED so far.
+
+    Counted rather than measured, unlike warp/morph: a trained unit doesn't exist until
+    it pops ~30s later, and `train` deliberately completes at the order (the next step
+    shouldn't wait on the Zealot). So the tally is the only record that survives a step
+    that could afford 3 of its 7 and has to resume next frame."""
+    issued: int = 0
 
 
 @dataclass
@@ -50,6 +63,7 @@ class StepState:
     started_at: float = 0.0
     
     warp: WarpConfirm = field(default_factory=WarpConfirm)
+    train: TrainState = field(default_factory=TrainState)
     morph: MorphState = field(default_factory=MorphState)
 
     def reset(self, now: float) -> None:
@@ -58,6 +72,7 @@ class StepState:
         self.trigger_fired = False
         self.started_at = now
         self.warp = WarpConfirm()
+        self.train = TrainState()
         self.morph = MorphState()
 
 

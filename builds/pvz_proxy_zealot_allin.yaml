@@ -64,28 +64,10 @@
 # Gateway Zealots that can still WALK to the proxy by 5:30 (stop ~4:40 so
 # the gateways are idle in time to morph); start ASAP so the 1st gateway
 # (ready ~2:00) isn't idle waiting.
-- {at: {count: {CyberneticsCore: 1}}, do: train, what: Zealot}
-- {at: {count: {CyberneticsCore: 1}}, do: train, what: Zealot}
-- {at: {count: {CyberneticsCore: 1}}, do: train, what: Zealot}
-- {at: {count: {CyberneticsCore: 1}}, do: train, what: Zealot}
-- {at: {count: {CyberneticsCore: 1}}, do: train, what: Zealot}
+- {at: {count: {CyberneticsCore: 1}}, do: train, what: Zealot, count: 5}
 - {at: {count: {CyberneticsCore: 1}}, do: chrono, target: Gateway}  # chrono zealot production
-- {at: {count: {CyberneticsCore: 1}}, do: train, what: Zealot}
-- {at: {count: {CyberneticsCore: 1}}, do: train, what: Zealot}
+- {at: {count: {CyberneticsCore: 1}}, do: train, what: Zealot, count: 2}
 # free gateways now idle: convert what the gas affords and WARP the rest of
 # the window straight onto the proxy (instant, no walk)
 - {at: {count: {Gateway: 1}}, do: morph, to: warpgate, count: 4}  # warp finish (25 gas/gate)
-- {at: {count: {WarpGate: 1}}, do: warp, what: Zealot, where: proxy}
-- {at: {count: {WarpGate: 1}}, do: warp, what: Zealot, where: proxy}
-- {at: {count: {WarpGate: 1}}, do: warp, what: Zealot, where: proxy}
-- {at: {count: {WarpGate: 1}}, do: warp, what: Zealot, where: proxy}
-- {at: {count: {WarpGate: 1}}, do: warp, what: Zealot, where: proxy}
-- {at: {count: {WarpGate: 1}}, do: warp, what: Zealot, where: proxy}
-- {at: {count: {WarpGate: 1}}, do: warp, what: Zealot, where: proxy}
-- {at: {count: {WarpGate: 1}}, do: warp, what: Zealot, where: proxy}
-- {at: {count: {WarpGate: 1}}, do: warp, what: Zealot, where: proxy}
-- {at: {count: {WarpGate: 1}}, do: warp, what: Zealot, where: proxy}
-- {at: {count: {WarpGate: 1}}, do: warp, what: Zealot, where: proxy}
-- {at: {count: {WarpGate: 1}}, do: warp, what: Zealot, where: proxy}
-- {at: {count: {WarpGate: 1}}, do: warp, what: Zealot, where: proxy}
-- {at: {count: {WarpGate: 1}}, do: warp, what: Zealot, where: proxy}
+- {at: {count: {WarpGate: 1}}, do: warp, what: Zealot, where: proxy, count: 14}

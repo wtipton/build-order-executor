@@ -102,7 +102,9 @@ def test_warp_in():
         f"stalled on {data['next_step']!r} at {data['final_time']}s "
         f"({data['steps_done']}/{data['steps_total']})"
     )
-    assert _census(data).get("ZEALOT", 0) >= 1, f"no warped-in Zealot (census={data['census']})"
+    # 2, not 1: the build warps `count: 2` off a single gate, so this also pins that a
+    # multi-unit warp resumes across frames rather than completing after the first.
+    assert _census(data).get("ZEALOT", 0) >= 2, f"warp count didn't finish (census={data['census']})"
 
 
 @pytest.mark.integration

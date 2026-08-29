@@ -39,9 +39,6 @@
 - {at: {supply: 18},  do: return_probe, who: scout}  # scout back to mining (or drop this to leave it hidden out there)
 # Switch both Gateways to Warpgates (holds until research is done + they convert).
 - {at: {supply: 18},  do: morph, to: warpgate}  # convert all Gateways -> Warpgates
-# Warp a wave of Zealots in at the proxy Pylon (each holds until a Warpgate is up).
-- {at: {supply: 18},  do: warp, what: Zealot, where: proxy}  # 1st warp-in
-- {at: {supply: 18},  do: warp, what: Zealot, where: proxy}
-- {at: {supply: 18},  do: warp, what: Zealot, where: proxy}
-- {at: {supply: 18},  do: warp, what: Zealot, where: proxy}
+# Warp a wave of Zealots in at the proxy Pylon (holds until all 4 have landed).
+- {at: {supply: 18},  do: warp, what: Zealot, where: proxy, count: 4}
 - {at: {supply: 18},  do: set_rally_point, where: proxy}  # rally reinforcements to the proxy

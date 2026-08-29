@@ -23,29 +23,59 @@ from state import StepState
 # ------------------------------------------------------------------ do_train
 # NB: WHICH producer gets the unit is Scheduler's job now — see tests/test_scheduler.py.
 # These cover only do_train's own decision: afford, delegate, issue.
-def _train_bot(producer):
-    return fake_bot(can_afford=lambda u: True,
+def _train_bot(producer, afford=True):
+    return fake_bot(can_afford=lambda u: afford, step_state=StepState(), _status="",
                     scheduler=SimpleNamespace(producer_for=lambda unit: producer))
 
 
+def _zealot(count=None):
+    return fake_bot(what="Zealot", count=count)
+
+
 async def test_train_holds_when_cant_afford():
-    fake = fake_bot(can_afford=lambda u: False)
-    assert await BuildOrderBot.do_train(fake, fake_bot(what="Zealot")) is False
+    fake = _train_bot(fake_unit(tag=1), afford=False)
+    assert await BuildOrderBot.do_train(fake, _zealot()) is False
 
 
 async def test_train_holds_when_every_producer_queue_is_full():
     # scheduler returning None means "no producer with queue space" — ordering past the
     # game's limit is silently dropped, so the step must stall instead.
     fake = _train_bot(None)
-    fake._status = ""
-    assert await BuildOrderBot.do_train(fake, fake_bot(what="Zealot")) is False
+    assert await BuildOrderBot.do_train(fake, _zealot()) is False
 
 
 async def test_train_issues_to_the_producer_the_scheduler_picked():
     gw = fake_unit(tag=1)
     fake = _train_bot(gw)
-    assert await BuildOrderBot.do_train(fake, fake_bot(what="Zealot")) is True
+    assert await BuildOrderBot.do_train(fake, _zealot()) is True
     gw.train.assert_called_once_with(U.ZEALOT)
+
+
+async def test_train_count_orders_them_all_in_one_frame():
+    # what a human does holding the hotkey: the whole batch goes out this frame if the
+    # money and the queues allow. Unit.train subtracts cost as it goes, and the Scheduler
+    # records each producer it hands out, so neither check goes stale mid-loop.
+    gw = fake_unit(tag=1)
+    fake = _train_bot(gw)
+    assert await BuildOrderBot.do_train(fake, _zealot(count=5)) is True
+    assert gw.train.call_count == 5
+    assert fake.step_state.train.issued == 5
+
+
+async def test_train_count_resumes_next_frame_after_a_partial_batch():
+    # afford 2 of 5, then the money arrives: the step must order the REMAINING 3, not
+    # start over — the tally is the only record that a partial batch went out.
+    gw = fake_unit(tag=1)
+    budget = [2]
+    fake = _train_bot(gw)
+    fake.can_afford = lambda u: budget[0] > 0 and (budget.__setitem__(0, budget[0] - 1) or True)
+    step = _zealot(count=5)
+    assert await BuildOrderBot.do_train(fake, step) is False, "2 of 5 ordered — must hold"
+    assert gw.train.call_count == 2
+
+    budget[0] = 99
+    assert await BuildOrderBot.do_train(fake, step) is True
+    assert gw.train.call_count == 5, "must top up to 5, not re-order all 5"
 
 
 # ------------------------------------------------------------------ do_research

@@ -74,6 +74,11 @@ Place = Annotated[_Place, Lower]
 # BuildConfig's held-probe check and the bot's named_probes dict.
 Who = Annotated[str, Lower]
 
+# "How many", where omitting it means the step's own default. None rather than a literal
+# 1 so `_StepBase.__str__` (which drops None) doesn't tack `count=1` onto every [step]
+# line for the single-unit case that is by far the most common.
+Count = Annotated[int, Field(ge=1)] | None
+
 
 class Trigger(BaseModel):
     """A firing condition. Exactly one key must be set.
@@ -145,6 +150,7 @@ class BuildStep(_StepBase):
 class TrainStep(_StepBase):
     do: _Do("train")
     what: str            # unit (UnitTypeId name, e.g. Adept)
+    count: Count = None  # how many to train; omit = 1
 
     _check = field_validator("what")(staticmethod(catalog.require_trainable))
 
@@ -153,6 +159,8 @@ class WarpStep(_StepBase):
     do: _Do("warp")
     what: str            # unit to warp in (Zealot, Stalker, Sentry, Adept, HighTemplar, DarkTemplar)
     where: Place         # which pylon to warp at (the ready pylon nearest this place)
+    count: Count = None  # how many to warp in; omit = 1. A round goes out across every
+                         # ready Warpgate at once, as many as `count` and the money allow.
 
     _check = field_validator("what")(staticmethod(catalog.require_warpable))
 
@@ -160,7 +168,7 @@ class WarpStep(_StepBase):
 class MorphStep(_StepBase):
     do: _Do("morph")
     to: str              # warpgate | gateway (convert 1:1) | archon (combine 2 HT/DT). ->warpgate needs Warpgate research.
-    count: int | None = None  # how many to make; omit = as many as possible (all sources / all pairs)
+    count: Count = None  # how many to make; omit = as many as possible (all sources / all pairs)
 
     _check = field_validator("to")(staticmethod(catalog.require_morph))
 

@@ -31,6 +31,9 @@ BAD_STEPS = [
     (dict(do="research", what="Blimk"), "unknown research"),
     (dict(do="morph", to="archn"), "unknown morph target"),
     (dict(do="chrono", target="Zealot"), "chrono target"),        # a unit, not a structure
+    (dict(do="train", what="Zealot", count=0), "greater than or equal to 1"),
+    (dict(do="warp", what="Zealot", where="proxy", count=0), "greater than or equal to 1"),
+    (dict(do="morph", to="archon", count=0), "greater than or equal to 1"),
 ]
 
 

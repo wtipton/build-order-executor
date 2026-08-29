@@ -185,33 +185,51 @@ class StepsMixin:
         return False  # issued; stall the line until the structure appears (confirm)
 
     async def do_train(self, step: Step) -> bool:
+        """Order `count` of a unit (default 1), as many this frame as we can pay for and
+        find queue space for — what a human does holding the hotkey down.
+
+        Issuing several in one frame is safe on both counts the observation can't see:
+        `Unit.train` subtracts the cost as it goes (so can_afford stays honest within the
+        frame), and the Scheduler records each producer it hands out. Whatever we can't
+        place now carries in step_state and resumes next frame."""
         unit = unit_id(step.what)
-        if not self.can_afford(unit):
-            self._status = f"can't afford {step.what}"
-            return False  # save for it (costs money + supply), stalling the line
-        producer = self.scheduler.producer_for(unit)
-        if producer is None:
-            self._status = f"every {PRODUCER.get(unit, 'producer')} queue is full"
-            return False
-        producer.train(unit)
-        return True
+        want = step.count or 1
+        ts = self.step_state.train
+
+        while ts.issued < want:
+            if not self.can_afford(unit):
+                self._status = f"can't afford {step.what} ({ts.issued}/{want} ordered)"
+                break  # save for it (costs money + supply), stalling the line
+            producer = self.scheduler.producer_for(unit)
+            if producer is None:
+                self._status = f"every {PRODUCER.get(unit, 'producer')} queue is full ({ts.issued}/{want} ordered)"
+                break
+            producer.train(unit)
+            ts.issued += 1
+
+        return ts.issued >= want
 
     async def do_warp(self, step: Step) -> bool:
-        unit = unit_id(step.what)
+        """Warp in `count` of a unit (default 1) — a round across every ready Warpgate.
 
-        # A warp isn't "done" when we issue it: a Warpgate still reads as
-        # off-cooldown to get_available_abilities on the frame(s) right after we
-        # warp from it, so trusting the issue would over-warp (mark N steps done
-        # with only 2 gates). Confirm the unit actually appears — its count grows
-        # past the baseline captured when this step started — and only then advance.
+        A warp isn't "done" when we issue it: a Warpgate still reads as off-cooldown to
+        get_available_abilities on the frame(s) right after we warp from it, so trusting
+        the issue would over-warp (mark N done with only 2 gates). Confirm the units
+        actually appear — the count grown past the baseline captured when this step
+        started — and only then advance. That's also what makes `count` safe: the gate a
+        round just used may still read ready next frame, but the unit it made lands in
+        that same observation, so `remaining` shrinks in step with it."""
+        unit = unit_id(step.what)
+        want = step.count or 1
         if self.step_state.warp.baseline is None:
             self.step_state.warp.baseline = self.units(unit).amount
 
-        if self.units(unit).amount > self.step_state.warp.baseline:
+        remaining = want - (self.units(unit).amount - self.step_state.warp.baseline)
+        if remaining <= 0:
             return True
 
         if not self.can_afford(unit):
-            self._status = f"can't afford {step.what}"
+            self._status = f"can't afford {step.what} ({remaining} of {want} left)"
             return False  # save for it (costs money + supply), stalling the line
         ability = WARP_ABILITY[unit]
         warpgates = self.structures(U.WARPGATE).ready
@@ -227,12 +245,20 @@ class StepsMixin:
         if pylon is None:
             self._status = f"no powered pylon at {step.where}"
             return False  # no powering pylon at that place yet
-        pos = await self.find_placement(ability, near=pylon.position, random_alternative=True)
-        if pos is None:
-            self._status = f"no free warp tile at {step.where}"
-            return False  # no free powered tile by that pylon right now
-        ready[0].warp_in(unit, pos)
-        return False  # issued; stall until the unit appears (confirm above)
+
+        # One warp per gate per frame — never twice to the same gate, which is the only
+        # way this loop could double-issue. `Unit.warp_in` subtracts cost AND supply, so
+        # can_afford stays honest as we go down the list.
+        for gate in ready[:remaining]:
+            if not self.can_afford(unit):
+                self._status = f"can't afford the rest of {step.what} ({remaining} of {want} left)"
+                break
+            pos = await self.find_placement(ability, near=pylon.position, random_alternative=True)
+            if pos is None:
+                self._status = f"no free warp tile at {step.where}"
+                break  # no free powered tile by that pylon right now
+            gate.warp_in(unit, pos)
+        return False  # issued; stall until the units appear (confirm above)
 
     def _warp_pylon(self, where: str) -> Unit | None:
         """The ready pylon nearest the requested place — so `where: proxy` warps

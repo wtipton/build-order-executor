@@ -272,8 +272,8 @@ def _warp_bot(*, unit_amount, afford, warpgates, ready_abilities, placement, **o
     return fake_bot(**base), ability
 
 
-def _zealot_step():
-    return fake_bot(what="Zealot", where="proxy")
+def _zealot_step(count=None):
+    return fake_bot(what="Zealot", where="proxy", count=count)
 
 
 async def test_warp_confirms_when_unit_appears():
@@ -302,3 +302,36 @@ async def test_warp_issues_when_gate_ready_and_tile_free():
                         ready_abilities=[ability], placement=pos)
     assert await BuildOrderBot.do_warp(fake, _zealot_step()) is False  # issued, holds for confirm
     wg.warp_in.assert_called_once_with(U.ZEALOT, pos)
+
+
+async def test_warp_count_fills_a_round_across_every_ready_gate():
+    # `count: 4` is a warp ROUND: one unit per gate, all in this frame. Issuing a gate
+    # twice in a frame is the one way the loop could double-warp, so each appears once.
+    gates = [fake_unit(tag=i) for i in range(4)]
+    pos = Point2((11.0, 11.0))
+    fake, ability = _warp_bot(unit_amount=0, afford=True, warpgates=gates,
+                              ready_abilities=[WARP_ABILITY[U.ZEALOT]], placement=pos)
+    assert await BuildOrderBot.do_warp(fake, _zealot_step(count=4)) is False
+    for g in gates:
+        g.warp_in.assert_called_once_with(U.ZEALOT, pos)
+
+
+async def test_warp_count_never_exceeds_what_is_still_outstanding():
+    # 3 of the 4 already landed, so this frame warps ONE even though 4 gates are free
+    gates = [fake_unit(tag=i) for i in range(4)]
+    fake, _ = _warp_bot(unit_amount=3, afford=True, warpgates=gates,
+                        ready_abilities=[WARP_ABILITY[U.ZEALOT]], placement=Point2((11.0, 11.0)))
+    fake.step_state.warp.baseline = 0
+    assert await BuildOrderBot.do_warp(fake, _zealot_step(count=4)) is False
+    assert sum(g.warp_in.call_count for g in gates) == 1
+
+
+async def test_warp_count_completes_only_once_every_unit_has_appeared():
+    # measured from the units, never from the orders we issued — a dropped warp order
+    # has to leave the step unfinished so the next frame re-issues it
+    fake, _ = _warp_bot(unit_amount=3, afford=True, warpgates=[],
+                        ready_abilities=[], placement=None)
+    fake.step_state.warp.baseline = 0
+    assert await BuildOrderBot.do_warp(fake, _zealot_step(count=4)) is False, "3 of 4 — not done"
+    fake.units = lambda t: FakeUnits([object()] * 4)
+    assert await BuildOrderBot.do_warp(fake, _zealot_step(count=4)) is True

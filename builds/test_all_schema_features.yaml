@@ -47,7 +47,6 @@
 - {at: {count: {TemplarArchive: 1}}, do: chrono, target: TemplarArchive}  # chrono Storm
 # Train the templar from Gateways (both game versions still have Gateways here —
 # Warpgate isn't researched yet), then combine them into an Archon.
-- {at: {count: {TemplarArchive: 1}}, do: train, what: HighTemplar}  # HT 1
-- {at: {count: {TemplarArchive: 1}}, do: train, what: HighTemplar}  # HT 2
+- {at: {count: {TemplarArchive: 1}}, do: train, what: HighTemplar, count: 2}  # HTs 1-2 (step:train count)
 - {at: {time: 260}, do: build, what: Pylon}
 - {at: {count: {HighTemplar: 2}}, do: morph, to: archon, count: 1}  # step:morph archon

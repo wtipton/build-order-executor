@@ -145,15 +145,4 @@
 # a chrono placed here would stall the warps once Charge finishes, so it's dropped.
 # Charge therefore lands ~5:47 (just over 5:45) until it's re-tuned with a chrono
 # that's *guaranteed* to hit the Twilight mid-research. See TODOs / live-run verify.
-- {at: {count: {WarpGate: 1}}, do: warp, what: Zealot, where: proxy}
-- {at: {count: {WarpGate: 1}}, do: warp, what: Zealot, where: proxy}
-- {at: {count: {WarpGate: 1}}, do: warp, what: Zealot, where: proxy}
-- {at: {count: {WarpGate: 1}}, do: warp, what: Zealot, where: proxy}
-- {at: {count: {WarpGate: 1}}, do: warp, what: Zealot, where: proxy}
-- {at: {count: {WarpGate: 1}}, do: warp, what: Zealot, where: proxy}
-- {at: {count: {WarpGate: 1}}, do: warp, what: Zealot, where: proxy}
-- {at: {count: {WarpGate: 1}}, do: warp, what: Zealot, where: proxy}
-- {at: {count: {WarpGate: 1}}, do: warp, what: Zealot, where: proxy}
-- {at: {count: {WarpGate: 1}}, do: warp, what: Zealot, where: proxy}
-- {at: {count: {WarpGate: 1}}, do: warp, what: Zealot, where: proxy}
-- {at: {count: {WarpGate: 1}}, do: warp, what: Zealot, where: proxy}
+- {at: {count: {WarpGate: 1}}, do: warp, what: Zealot, where: proxy, count: 12}

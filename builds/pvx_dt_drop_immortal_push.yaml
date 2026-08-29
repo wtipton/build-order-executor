@@ -62,10 +62,7 @@
 - {at: {count: {Gateway: 1}}, do: morph, to: warpgate, count: 4}  # morph 4 Warpgates
 
 # ===================== 5. 4 DT Warpin + Archon Morph =====================
-- {at: {count: {DarkShrine: 1}}, do: warp, what: DarkTemplar, where: natural}  # DT 1
-- {at: {count: {DarkShrine: 1}}, do: warp, what: DarkTemplar, where: natural}  # DT 2
-- {at: {count: {DarkShrine: 1}}, do: warp, what: DarkTemplar, where: natural}  # DT 3
-- {at: {count: {DarkShrine: 1}}, do: warp, what: DarkTemplar, where: natural}  # DT 4
+- {at: {count: {DarkShrine: 1}}, do: warp, what: DarkTemplar, where: natural, count: 4}  # DTs 1-4
 - {at: {count: {DarkTemplar: 4}}, do: morph, to: archon, count: 2}  # morph 2 Archons from DTs
 
 # ===================== 6. Observer, 3rd Nexus, Forge, Charge =====================
@@ -81,13 +78,11 @@
 - {at: {count: {Forge: 1}}, do: chrono, target: Forge}  # chrono +1 Weapons
 - {at: {count: {TwilightCouncil: 1}}, do: research, what: Charge}  # Charge research
 - {at: {count: {TwilightCouncil: 1}}, do: chrono, target: TwilightCouncil}  # chrono Charge
-- {at: {count: {WarpGate: 1}}, do: warp, what: Sentry, where: natural}  # Sentry 1
-- {at: {count: {WarpGate: 1}}, do: warp, what: Sentry, where: natural}  # Sentry 2
+- {at: {count: {WarpGate: 1}}, do: warp, what: Sentry, where: natural, count: 2}  # Sentries 1-2
 
 - {at: {count: {Immortal: 1}}, do: train, what: Immortal}  # Immortal #2
 - {at: {count: {Immortal: 1}}, do: chrono, target: RoboticsFacility}  # chrono Immortal 2
-- {at: {count: {WarpGate: 1}}, do: warp, what: Sentry, where: natural}  # Sentry 3
-- {at: {count: {WarpGate: 1}}, do: warp, what: Sentry, where: natural}  # Sentry 4
+- {at: {count: {WarpGate: 1}}, do: warp, what: Sentry, where: natural, count: 2}  # Sentries 3-4
 
 - {at: {count: {Immortal: 2}}, do: train, what: Immortal}  # Immortal #3
 - {at: {count: {Immortal: 2}}, do: chrono, target: RoboticsFacility}  # chrono Immortal 3
