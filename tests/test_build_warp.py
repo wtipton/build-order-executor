@@ -221,6 +221,41 @@ async def test_nexus_without_where_reports_when_the_map_is_full():
     assert fake._status == "every expansion is already taken"
 
 
+
+# ======================================= _find_build_target (placement exhausted)
+def _placement_bot(*, pos):
+    """A bot whose placement.building_position yields `pos` (None = nothing fits)."""
+    return fake_bot(
+        _resolve_place=lambda where: Point2((0.0, 0.0)),
+        placement=fake_bot(building_position=AsyncMock(return_value=pos),
+                           pylon_position=AsyncMock(return_value=pos)),
+        _status="",
+    )
+
+
+async def test_stalled_build_says_there_is_nowhere_to_put_it():
+    """Without this, the stall reaches [status] as "issued; waiting to confirm", which
+    is indistinguishable from the build working."""
+    fake = _placement_bot(pos=None)
+    step = fake_bot(what="Gateway", where=None)
+    assert await BuildOrderBot._find_build_target(fake, step) is None
+    assert fake._status == "no powered spot for Gateway at any base"
+
+
+async def test_pylon_with_nowhere_to_go_says_so():
+    fake = _placement_bot(pos=None)
+    step = fake_bot(what="Pylon", where=None)
+    assert await BuildOrderBot._find_build_target(fake, step) is None
+    assert fake._status == "nowhere left to put a Pylon"
+
+
+async def test_successful_placement_leaves_no_stall_reason():
+    fake = _placement_bot(pos=Point2((5.0, 5.0)))
+    step = fake_bot(what="Gateway", where=None)
+    assert await BuildOrderBot._find_build_target(fake, step) == Point2((5.0, 5.0))
+    assert fake._status == ""
+
+
 # ============================================================ do_warp
 def _warp_bot(*, unit_amount, afford, warpgates, ready_abilities, placement, **over):
     ability = WARP_ABILITY[U.ZEALOT]

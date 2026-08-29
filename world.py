@@ -287,8 +287,14 @@ class WorldMixin:
                 self._status = "no geyser without an Assimilator at any of our bases"
             return geyser
         if unit == U.PYLON:
-            return await self.placement.pylon_position()
-        return await self.placement.building_position(unit)
+            pos = await self.placement.pylon_position()
+            if pos is None:
+                self._status = "nowhere left to put a Pylon"
+            return pos
+        pos = await self.placement.building_position(unit)
+        if pos is None:
+            self._status = f"no powered spot for {step.what} at any base"
+        return pos
 
     def _find_free_geyser(self) -> Unit | None:
         """A geyser at one of our bases with no Assimilator on it yet, or None."""
