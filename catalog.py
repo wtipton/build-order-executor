@@ -45,6 +45,14 @@ WARPGATE_TRAIN_SPEEDUP = 0.5
 # silently dropped by the game, which is why the scheduler refuses rather than over-commit.
 MAX_PRODUCTION_QUEUE = 5
 
+# How far a Pylon's psionic matrix reaches. Used to bound the search for a warp-in tile;
+# the matrix itself is still what decides whether a given tile is powered.
+PYLON_POWER_RADIUS = 6.5
+
+# How close a unit has to be to a tile for a warp-in there to be refused. Warping needs
+# the ground clear — unlike building placement, standing units do NOT walk out of the way.
+WARP_TILE_CLEARANCE = 1.0
+
 # Protoss buildings that produce units (their `trained_from` == one of these).
 PRODUCTION_BUILDINGS: frozenset[U] = frozenset(
     {U.NEXUS, U.GATEWAY, U.WARPGATE, U.ROBOTICSFACILITY, U.STARGATE}

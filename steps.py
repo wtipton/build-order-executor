@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from sc2.ids.ability_id import AbilityId
 from sc2.ids.unit_typeid import UnitTypeId as U
+from sc2.position import Point2
 from sc2.unit import Unit
 from sc2.units import Units
 
@@ -25,6 +26,8 @@ from catalog import (
     RESEARCH,
     WARP_ABILITY,
     MorphSpec,
+    PYLON_POWER_RADIUS,
+    WARP_TILE_CLEARANCE,
     unit_id,
 )
 from schema import Step, Trigger
@@ -279,19 +282,38 @@ class StepsMixin:
             self._status = f"no powered pylon at {step.where}"
             return False  # no powering pylon at that place yet
 
-        # One warp per gate per frame — never twice to the same gate, which is the only
-        # way this loop could double-issue. `Unit.warp_in` subtracts cost AND supply, so
-        # can_afford stays honest as we go down the list.
-        for gate in ready[:remaining]:
+        # One warp per gate per frame, each onto its OWN tile — two gates sent to the same
+        # tile means at most one of them lands. `Unit.warp_in` subtracts cost AND supply,
+        # so can_afford stays honest as we go down the list.
+        gates = ready[:remaining]
+        tiles = await self._warp_tiles(ability, pylon, len(gates))
+        if not tiles:
+            self._status = f"nowhere clear to warp in at {step.where}"
+            return False
+        for gate, pos in zip(gates, tiles):
             if not self.can_afford(unit):
                 self._status = f"can't afford the rest of {step.what} ({remaining} of {want} left)"
                 break
-            pos = await self.find_placement(ability, near=pylon.position, random_alternative=True)
-            if pos is None:
-                self._status = f"no free warp tile at {step.where}"
-                break  # no free powered tile by that pylon right now
             gate.warp_in(unit, pos)
         return False  # issued; stall until the units appear (confirm above)
+
+    async def _warp_tiles(self, ability: AbilityId, pylon: Unit, needed: int) -> list[Point2]:
+        """Up to `needed` distinct tiles by `pylon` that a unit can actually be warped
+        onto, nearest first.
+
+        Done by hand because find_placement cannot answer this question. Its placement
+        query reports a tile with a friendly unit standing on it as free, which is right
+        for a building — units walk out of the way for one — and wrong for a warp-in,
+        where they don't."""
+        near = pylon.position
+        reach = int(PYLON_POWER_RADIUS)
+        grid = [near.offset((dx, dy))
+                for dx in range(-reach, reach + 1) for dy in range(-reach, reach + 1)]
+        powered = sorted((p for p in grid if self.state.psionic_matrix.covers(p)),
+                         key=lambda p: p.distance_to(near))
+        placeable = await self.can_place(ability, powered)
+        return [p for ok, p in zip(placeable, powered)
+                if ok and not self.all_units.closer_than(WARP_TILE_CLEARANCE, p)][:needed]
 
     def _warp_pylon(self, where: str) -> Unit | None:
         """The ready pylon nearest the requested place — so `where: proxy` warps

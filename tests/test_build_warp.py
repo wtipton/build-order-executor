@@ -11,7 +11,7 @@ from __future__ import annotations
 from unittest.mock import AsyncMock, MagicMock
 
 from bot import BuildOrderBot
-from catalog import WARP_ABILITY
+from catalog import PYLON_POWER_RADIUS, WARP_ABILITY
 from sc2.ids.unit_typeid import UnitTypeId as U
 from sc2.position import Point2
 
@@ -378,7 +378,7 @@ async def test_successful_placement_leaves_no_stall_reason():
 
 
 # ============================================================ do_warp
-def _warp_bot(*, warping=(), afford=True, warpgates=(), ready_abilities=(), placement=None, **over):
+def _warp_bot(*, warping=(), afford=True, warpgates=(), ready_abilities=(), tiles=(), **over):
     """`warping` = tags of units of the step's type that are mid-warp (build_progress < 1).
     A trained unit never looks like this — it appears complete — which is what lets do_warp
     tell its own warp-ins from whatever a Gateway finished."""
@@ -391,7 +391,8 @@ def _warp_bot(*, warping=(), afford=True, warpgates=(), ready_abilities=(), plac
         structures=lambda t: FakeUnits(list(warpgates)),
         get_available_abilities=AsyncMock(return_value=[ready_abilities for _ in warpgates]),
         _warp_pylon=lambda where: fake_unit(position=Point2((10.0, 10.0))),
-        find_placement=AsyncMock(return_value=placement),
+        # the real one is exercised by the _warp_tiles tests below
+        _warp_tiles=AsyncMock(side_effect=lambda ability, pylon, needed: list(tiles)[:needed]),
         _status="",
     )
     base.update(over)
@@ -429,9 +430,18 @@ async def test_warp_holds_when_all_on_cooldown():
 async def test_warp_issues_when_gate_ready_and_tile_free():
     wg = fake_unit()
     pos = Point2((11.0, 11.0))
-    fake, _ = _warp_bot(warpgates=[wg], ready_abilities=[WARP_ABILITY[U.ZEALOT]], placement=pos)
+    fake, _ = _warp_bot(warpgates=[wg], ready_abilities=[WARP_ABILITY[U.ZEALOT]], tiles=[pos])
     assert await BuildOrderBot.do_warp(fake, _zealot_step()) is False  # issued, holds for confirm
     wg.warp_in.assert_called_once_with(U.ZEALOT, pos)
+
+
+async def test_warp_holds_when_every_tile_is_blocked():
+    # nothing clear to warp onto: say so, instead of issuing orders the game refuses
+    wg = fake_unit()
+    fake, _ = _warp_bot(warpgates=[wg], ready_abilities=[WARP_ABILITY[U.ZEALOT]], tiles=[])
+    assert await BuildOrderBot.do_warp(fake, _zealot_step()) is False
+    wg.warp_in.assert_not_called()
+    assert fake._status == "nowhere clear to warp in at proxy"
 
 
 async def test_warp_does_not_count_a_unit_the_gateway_trained():
@@ -454,21 +464,21 @@ async def test_warp_ignores_a_warp_still_in_flight_from_an_earlier_step():
 
 
 async def test_warp_count_fills_a_round_across_every_ready_gate():
-    # `count: 4` is a warp ROUND: one unit per gate, all in this frame. Issuing a gate
-    # twice in a frame is the one way the loop could double-warp, so each appears once.
+    # `count: 4` is a warp ROUND: one unit per gate, all in this frame — and each onto its
+    # OWN tile, since two gates sent to one tile means at most one of them lands.
     gates = [fake_unit(tag=i) for i in range(4)]
-    pos = Point2((11.0, 11.0))
-    fake, _ = _warp_bot(warpgates=gates, ready_abilities=[WARP_ABILITY[U.ZEALOT]], placement=pos)
+    tiles = [Point2((float(i), 11.0)) for i in range(4)]
+    fake, _ = _warp_bot(warpgates=gates, ready_abilities=[WARP_ABILITY[U.ZEALOT]], tiles=tiles)
     assert await BuildOrderBot.do_warp(fake, _zealot_step(count=4)) is False
-    for g in gates:
-        g.warp_in.assert_called_once_with(U.ZEALOT, pos)
+    used = [g.warp_in.call_args.args[1] for g in gates]
+    assert sorted(used, key=lambda p: p.x) == tiles, "each gate needs its own tile"
 
 
 async def test_warp_count_never_exceeds_what_is_still_outstanding():
     # 3 of the 4 already warped, so this frame warps ONE even though 4 gates are free
     gates = [fake_unit(tag=i) for i in range(4)]
     fake, _ = _warp_bot(warpgates=gates, ready_abilities=[WARP_ABILITY[U.ZEALOT]],
-                        placement=Point2((11.0, 11.0)))
+                        tiles=[Point2((11.0, 11.0))])
     _mid_step(fake, already_warped=[101, 102, 103])
     assert await BuildOrderBot.do_warp(fake, _zealot_step(count=4)) is False
     assert sum(g.warp_in.call_count for g in gates) == 1
@@ -482,3 +492,53 @@ async def test_warp_count_completes_only_once_every_unit_has_appeared():
     assert await BuildOrderBot.do_warp(fake, _zealot_step(count=4)) is False, "3 of 4 — not done"
     fake.units = lambda t: FakeUnits([fake_unit(tag=104, build_progress=0.5)])
     assert await BuildOrderBot.do_warp(fake, _zealot_step(count=4)) is True
+
+
+# ============================================================ _warp_tiles
+def _tiles_bot(*, occupied=(), unpowered=(), unplaceable=()):
+    """A pylon at (0,0). `occupied` tiles have a unit standing on them, `unpowered` are
+    outside the matrix, `unplaceable` fail the game's placement query (terrain)."""
+    occupied, unpowered, unplaceable = set(occupied), set(unpowered), set(unplaceable)
+    units = FakeUnits([fake_unit(position=Point2(p)) for p in occupied])
+    return fake_bot(
+        state=fake_bot(psionic_matrix=fake_bot(
+            covers=lambda p: (p.x, p.y) not in unpowered)),
+        can_place=AsyncMock(side_effect=lambda ability, ps: [(p.x, p.y) not in unplaceable
+                                                            for p in ps]),
+        all_units=units,
+    )
+
+
+async def _tiles(fake, needed=4):
+    return await BuildOrderBot._warp_tiles(
+        fake, WARP_ABILITY[U.ZEALOT], fake_unit(position=Point2((0.0, 0.0))), needed)
+
+
+async def test_warp_tiles_skips_tiles_a_unit_is_standing_on():
+    # THE bug: the placement query calls a tile with a finished unit on it free, because a
+    # unit would walk out of the way for a building. It won't for a warp-in, so we have to
+    # rule those tiles out ourselves or the warp is silently refused.
+    blocked = [(0.0, 1.0), (1.0, 0.0)]
+    got = await _tiles(_tiles_bot(occupied=blocked))
+    assert not ({(p.x, p.y) for p in got} & set(blocked))
+
+
+async def test_warp_tiles_are_distinct_and_nearest_first():
+    got = await _tiles(_tiles_bot(), needed=4)
+    assert len(set(got)) == 4, "a round of gates must not be sent to the same tile twice"
+    dists = [p.distance_to(Point2((0.0, 0.0))) for p in got]
+    assert dists == sorted(dists)
+
+
+async def test_warp_tiles_honours_power_and_terrain():
+    # both filters still apply — power from the matrix, terrain from the placement query
+    got = await _tiles(_tiles_bot(unpowered=[(0.0, 1.0)], unplaceable=[(1.0, 0.0)]), needed=8)
+    flat = {(p.x, p.y) for p in got}
+    assert (0.0, 1.0) not in flat and (1.0, 0.0) not in flat
+
+
+async def test_warp_tiles_empty_when_everything_is_blocked():
+    reach = int(PYLON_POWER_RADIUS)
+    every = [(float(x), float(y)) for x in range(-reach, reach + 1)
+             for y in range(-reach, reach + 1)]
+    assert await _tiles(_tiles_bot(occupied=every)) == []
