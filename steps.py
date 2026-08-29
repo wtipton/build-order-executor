@@ -410,8 +410,10 @@ class StepsMixin:
             self._status = f"no {step.target} ready to boost"
             return False  # nothing of that type exists yet — wait
         # Rank targets: not-already-boosted first (a second boost on the same building
-        # is wasted), then producing before idle. Tag breaks ties for determinism.
-        target = min(target_pool, key=lambda s: (s.has_buff(CHRONO_BUFF), not s.orders, s.tag))
+        # is wasted), then most remaining work/time first (so we don't waste chrono on a unit
+        # nearly done when another has full production time left), falling back to idle.
+        # Tag breaks ties for determinism.
+        target = min(target_pool, key=lambda s: (s.has_buff(CHRONO_BUFF), -self.scheduler._busy_seconds(s), s.tag))
         # Ask AFTER we know there's something to boost: the scheduler commits the energy
         # when it hands back a caster, so bailing out later would waste it for this frame.
         caster = self.scheduler.chrono_caster()

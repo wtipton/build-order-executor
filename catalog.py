@@ -30,6 +30,7 @@ from sc2.ids.unit_typeid import UnitTypeId as U
 from sc2.ids.upgrade_id import UpgradeId
 from sc2.dicts.unit_trained_from import UNIT_TRAINED_FROM
 from sc2.dicts.unit_train_build_abilities import TRAIN_INFO
+from sc2.dicts.unit_research_abilities import RESEARCH_INFO
 from sc2.dicts.upgrade_researched_from import UPGRADE_RESEARCHED_FROM
 
 # Game frames per second — the unit for every `cost.time` in game data.
@@ -123,6 +124,15 @@ TRAIN_ABILITY_UNIT: dict[AbilityId, U] = {
     info["ability"]: unit
     for units in TRAIN_INFO.values()
     for unit, info in units.items()
+}
+
+# research ability -> what it researches. Derived from RESEARCH_INFO, so a researching
+# structure's orders can be mapped back to its upgrade duration.
+RESEARCH_ABILITY_UPGRADE: dict[AbilityId, UpgradeId] = {
+    info["ability"]: upgrade
+    for upgrades in RESEARCH_INFO.values()
+    for upgrade, info in upgrades.items()
+    if isinstance(info, dict) and "ability" in info
 }
 
 # Types a `count:` trigger may reference — anything the player can OWN: every

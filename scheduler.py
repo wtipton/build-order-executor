@@ -26,6 +26,7 @@ from catalog import (
     FRAMES_PER_SEC,
     MAX_PRODUCTION_QUEUE,
     PRODUCER,
+    RESEARCH_ABILITY_UPGRADE,
     TRAIN_ABILITY_UNIT,
     WARPGATE_TRAIN_SPEEDUP,
 )
@@ -98,9 +99,13 @@ class Scheduler:
         total = sum(self._queued.get(producer.tag, []))
         for i, order in enumerate(producer.orders):
             unit = TRAIN_ABILITY_UNIT.get(order.ability.id)
-            if unit is None:
-                continue  # not a train/build order (nothing else queues on a producer)
-            secs = self._unit_seconds(unit, producer)
+            if unit is not None:
+                secs = self._unit_seconds(unit, producer)
+            elif (upgrade := RESEARCH_ABILITY_UPGRADE.get(order.ability.id)) is not None:
+                cost = self.bot.game_data.upgrades[upgrade.value].cost
+                secs = (cost.time or 0) / FRAMES_PER_SEC
+            else:
+                secs = 0.0
             total += secs * (1 - order.progress) if i == 0 else secs
         return total
 

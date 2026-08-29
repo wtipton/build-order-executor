@@ -27,9 +27,13 @@ def _order(unit: U, progress: float = 0.0):
     return SimpleNamespace(ability=SimpleNamespace(id=ability), progress=progress)
 
 
-def _bot(structures=(), townhalls=(), upgrades=frozenset()):
-    game_data = SimpleNamespace(units={u.value: SimpleNamespace(cost=SimpleNamespace(time=t))
-                                        for u, t in FRAMES.items()})
+def _bot(structures=(), townhalls=(), upgrades=frozenset(), upgrade_frames=None):
+    if upgrade_frames is None:
+        upgrade_frames = {}
+    game_data = SimpleNamespace(
+        units={u.value: SimpleNamespace(cost=SimpleNamespace(time=t)) for u, t in FRAMES.items()},
+        upgrades={up.value: SimpleNamespace(cost=SimpleNamespace(time=t)) for up, t in upgrade_frames.items()},
+    )
     # The library files EVERY own structure into `structures`, and additionally puts
     # townhalls into `townhalls` (bot_ai_internal) — the two are not disjoint. Mirror
     # that, or a Nexus read out of `structures` (how producers are found) vanishes.
@@ -157,3 +161,12 @@ def test_spends_from_the_fullest_nexus():
 def test_no_caster_when_nobody_can_pay():
     s = Scheduler(_bot(townhalls=[fake_unit(tag=1, energy=10)]))
     assert s.chrono_caster() is None
+
+
+def test_research_order_busy_seconds_derived_from_game_data():
+    wg_ability = next(a for a, u in catalog.RESEARCH_ABILITY_UPGRADE.items() if u == UpgradeId.WARPGATERESEARCH)
+    research_order = SimpleNamespace(ability=SimpleNamespace(id=wg_ability), progress=0.25)
+    core = fake_unit(tag=1, type_id=U.CYBERNETICSCORE, orders=[research_order])
+    s = Scheduler(_bot(structures=[core], upgrade_frames={UpgradeId.WARPGATERESEARCH: 2240.0}))  # 100.0s total
+    # 100s * (1 - 0.25) = 75.0s remaining
+    assert abs(s._busy_seconds(core) - 75.0) < 1e-3

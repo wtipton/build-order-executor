@@ -170,15 +170,18 @@ async def test_morph_done_when_the_committed_sources_are_consumed():
 
 
 # ------------------------------------------------------------------ do_chrono
-def _chrono_bot(nexus_energy, target_structs):
+def _chrono_bot(nexus_energy, target_structs, busy_seconds=None):
     """WHICH Nexus casts (and its energy accounting) is Scheduler's job — see
     tests/test_scheduler.py. Here the scheduler just hands back a caster, or None when
     nothing can pay, so these cover do_chrono's own job: picking the TARGET."""
     nexus = fake_unit(energy=nexus_energy, tag=99)
+    if busy_seconds is None:
+        busy_seconds = lambda s: float(len(s.orders))
     fake = fake_bot(townhalls=lambda t: FakeUnits([nexus]),
                     structures=lambda t: FakeUnits(target_structs),
                     scheduler=SimpleNamespace(
-                        chrono_caster=lambda: nexus if nexus_energy >= catalog.CHRONO_ENERGY else None))
+                        chrono_caster=lambda: nexus if nexus_energy >= catalog.CHRONO_ENERGY else None,
+                        _busy_seconds=busy_seconds))
     fake._status = ""
     return fake, nexus
 
@@ -209,6 +212,17 @@ async def test_chrono_prefers_a_producing_structure_over_an_idle_one():
     fake, nexus = _chrono_bot(nexus_energy=100, target_structs=[idle_gw, busy_gw])
     assert await BuildOrderBot.do_chrono(fake, fake_bot(target="Gateway")) is True
     nexus.assert_called_once_with(catalog.CHRONO_ABILITY, busy_gw)
+
+
+async def test_chrono_prefers_target_with_more_remaining_time():
+    """A building with 30s of work remaining beats one with 2s remaining."""
+    almost_done = fake_unit(orders=[object()], has_buff=lambda b: False, tag=1)
+    just_started = fake_unit(orders=[object()], has_buff=lambda b: False, tag=2)
+    busy_map = {1: 2.0, 2: 30.0}
+    fake, nexus = _chrono_bot(nexus_energy=100, target_structs=[almost_done, just_started],
+                              busy_seconds=lambda s: busy_map[s.tag])
+    assert await BuildOrderBot.do_chrono(fake, fake_bot(target="Gateway")) is True
+    nexus.assert_called_once_with(catalog.CHRONO_ABILITY, just_started)
 
 
 async def test_chrono_prefers_unboosted_even_over_a_producing_boosted_one():

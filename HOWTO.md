@@ -157,6 +157,16 @@ Once it's done its job, we can release the probe back to mining via `return_prob
 - {at: {supply: 18},  do: return_probe, who: scout}
 ```
 
+### Chrono boost
+
+The `chrono` step spends 50 Nexus energy to accelerate production or research on a target structure type:
+
+```yaml
+- {at: {count: {CyberneticsCore: 1}}, do: chrono, target: CyberneticsCore}
+```
+
+A chrono step will wait until a Nexus has 50 energy and at least one structure of the target type exists. When multiple structures of the same type exist, it automatically targets unboosted structures first and chooses the one with the most production or research time remaining. If none are actively producing, it will boost an idle structure as a fallback so the build order queue doesn't stall.
+
 ## Observability
 
 The bot's output contains semi-structured data to help understand what happened during the game. Every line of output starts with a tag:
