@@ -99,15 +99,27 @@ class StepsMixin:
         return self.minerals - self._probe_reserve(step) >= trig.minerals
 
     def _probe_reserve(self, step: Step) -> int:
-        """Minerals earmarked for the probes still needed to reach `step.at`'s supply,
-        so a mineral threshold isn't satisfied by money that's already spoken for.
+        """Minerals earmarked for the probes still needed to reach `step.at`, so a mineral
+        threshold isn't satisfied by money that's already spoken for.
 
-        supply_used already counts in-production probes (supply is reserved the moment
-        training starts), so DON'T also subtract already_pending — that double-counts
-        the building probe and fires the pull one supply early."""
-        if step.at.supply is None:
-            return 0
-        return 50 * max(0, step.at.supply - self.supply_used)
+        Both worker-counting trigger forms get this — `supply: 20` and `count: {Probe: 20}`
+        are the same instruction to a build-order author, so they must reserve alike — but
+        they need different arithmetic, because what we're after is the probes we haven't
+        PAID for yet:
+          * supply_used already counts in-production probes (supply is reserved the moment
+            training starts), so DON'T also subtract already_pending — that double-counts
+            the building probe and fires the pull one supply early.
+          * count_of(Probe) counts only COMPLETED probes, so here we DO subtract the ones
+            in production; they're paid for already.
+        Every other trigger form reserves nothing: it says nothing about future probes."""
+        at = step.at
+        if at.supply is not None:
+            return 50 * max(0, at.supply - self.supply_used)
+        if at.count is not None:
+            (name, want), = at.count.items()
+            if unit_id(name) == U.PROBE:
+                return 50 * max(0, want - self.count_of(name) - int(self.already_pending(U.PROBE)))
+        return 0
 
     async def run_handler(self, step: Step) -> bool:
         """Run the step's `do_<action>` handler once; True if the step completed."""

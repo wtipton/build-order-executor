@@ -91,17 +91,26 @@ class WorldMixin:
 
     # ============================================================ counting
     def count_of(self, name: str) -> int:
-        """How many completed `name` we have. Backs `count:` triggers AND the [status]
-        line that reports their progress, so the two can never disagree about what we
-        'have'.
+        """`_count_type` by build-order name — what a `count:` trigger names."""
+        return self._count_type(unit_id(name))
+
+    def _count_type(self, unit: U) -> int:
+        """How many completed `unit` we have. Backs `count:` triggers, the [status] line
+        that reports their progress, AND the [summary] census, so none of the three can
+        disagree about what we 'have'.
 
         Probes come from `supply_workers`, NOT the unit list: a probe harvesting gas is
         INSIDE the Assimilator for ~1.4s of every trip, and for that time it is absent
         from the observation entirely, so `workers.amount` (and `all_own_units`) read low
         at random once gas is running. Empirically, supply_workers excludes probes still
-        in production, so we can use it here instead."""
-        unit = unit_id(name)
-        return int(self.supply_workers) if unit == U.PROBE else self.all_own_units(unit).ready.amount
+        in production, so we can use it here instead.
+
+        Hallucinations don't count: a Sentry's hallucinated Phoenix is one of our own
+        units in the observation, so without this a `hallucinate` step would fire a later
+        `count:` trigger (and pad the census) with a unit we never actually built."""
+        if unit == U.PROBE:
+            return int(self.supply_workers)
+        return self.all_own_units(unit).ready.filter(lambda u: not u.is_hallucination).amount
 
     # ======================================================== labelled probes
     def _worker_by_tag(self, tag: int | None) -> Unit | None:

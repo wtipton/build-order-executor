@@ -17,11 +17,10 @@ from sc2.ids.upgrade_id import UpgradeId
 from sc2.unit import Unit
 
 from catalog import (
-    BUILDABLE_STRUCTURES,
     CHRONO_ENERGY,
+    COUNTABLE,
     PRODUCTION_BUILDINGS,
     RESEARCH,
-    TRAINABLE_UNITS,
     unit_id,
 )
 from schema import Place, Step, Trigger
@@ -47,8 +46,8 @@ class ObserveMixin:
         where the queue stalled) rather than parsing the human log."""
         completed = self.all_steps_done
         census = {}
-        for t in (BUILDABLE_STRUCTURES | TRAINABLE_UNITS | {U.WARPGATE, U.ARCHON}):
-            n = self.all_own_units(t).ready.amount
+        for t in COUNTABLE:  # exactly what a `count:` trigger can name, counted the same way
+            n = self._count_type(t)
             if n:
                 census[self._unit_name(t)] = n
         upgrades = sorted(UPGRADE_NAMES.get(u, u.name) for u in self.state.upgrades)
@@ -112,9 +111,12 @@ class ObserveMixin:
         a new one had finished. Tags are unique and never reused, so pairs are exact.
 
         Probes are skipped: they'd be most of the output (~45 a game) and worker count is
-        already on every [status] line.
+        already on every [status] line. Hallucinations are skipped for the same reason
+        `_count_type` excludes them — we didn't build it, and since `_completions` is a
+        latch it would outlive the 60s hallucination and sit in the summary forever.
         """
-        live = {(u.tag, u.type_id) for u in self.all_own_units.ready if u.type_id != U.PROBE}
+        live = {(u.tag, u.type_id) for u in self.all_own_units.ready
+                if u.type_id != U.PROBE and not u.is_hallucination}
         # sorted so several completions in one frame log in a stable order (set
         # iteration order is not reproducible across runs)
         for key in sorted(live - self._completions.keys(), key=lambda p: (p[1].name, p[0])):
