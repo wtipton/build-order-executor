@@ -41,4 +41,4 @@
 - {at: {count: {Probe: 22}}, do: gas_workers, count: 5}
 - {at: {count: {Probe: 23}}, do: gas_workers, count: 6}
 # once the natural finishes, transfer workers onto it and rally new probes there
-- {at: {count: {Nexus: 2}}, do: rally_and_transfer_probes, base: 2}  # saturate the natural
+- {at: {count: {Nexus: 2}}, do: rally_and_transfer_probes, where: natural}  # saturate the natural

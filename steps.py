@@ -353,8 +353,8 @@ class StepsMixin:
         # The build says to populate base N, so we do — no check that a Nexus is there
         # yet. The location is what matters; probes sent to its minerals will be mining
         # by the time it finishes.
-        self.populating_base_num = step.base
-        target = self.base_position(step.base)
+        self.populating_base_num = self.BASE_RANK[step.where] + 1
+        target = self.base_position(self.populating_base_num)
         field = self._base_field(target)
         if field is None:
             return True  # no patches there (mined out, or off the map's expansion list)

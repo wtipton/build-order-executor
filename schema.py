@@ -18,18 +18,21 @@ import catalog
 
 _TRIGGER_KEYS = ("supply", "time", "minerals", "vespene", "count")
 
-# Symbolic locations resolved by the bot at runtime (bot._resolve_place):
-#   main..sixth   -> our bases by distance from our start (main, natural, third,
-#                    fourth, fifth, sixth) — the Nth-nearest expansion, clamped to
-#                    what the map provides.
+# Our own bases, in order of distance from our start — the Nth-nearest expansion,
+# clamped to what the map provides. Listed IN ORDER: world.BASE_RANK indexes this
+# tuple to turn a name back into that N, so don't reorder it.
+BasePlace = Literal["main", "natural", "third", "fourth", "fifth", "sixth"]
+
+# Every symbolic location resolved by the bot at runtime (bot._resolve_place) — our
+# bases plus the strategic spots. Nested Literals flatten, so get_args(Place) is the
+# flat tuple of all ten names.
 #   main_ramp     -> the top of our main base's ramp (the choke we defend at, and
 #                    the default combat-unit rally point)
 #   enemy_main    -> the enemy start location (for scouting)
 #   enemy_natural -> the enemy natural expansion
 #   proxy         -> out near the enemy but off their doorstep (their ~4th base) —
 #                    for proxying a pylon/building and warping units in there.
-Place = Literal["main", "natural", "third", "fourth", "fifth", "sixth", "main_ramp",
-                "enemy_main", "enemy_natural", "proxy"]
+Place = Literal[BasePlace, "main_ramp", "enemy_main", "enemy_natural", "proxy"]
 
 
 class Trigger(BaseModel):
@@ -155,7 +158,7 @@ class SetRallyPointStep(_StepBase):
 
 class RallyAndTransferProbesStep(_StepBase):
     do: Literal["rally_and_transfer_probes"]
-    base: int = Field(ge=1)  # which of our bases (1 = main, 2 = natural, 3 = third, ...) to saturate
+    where: BasePlace     # which of our bases to saturate
     # Transfers every other base's excess mineral workers to this base, rallies all
     # Nexuses onto its minerals, and makes it the base returned probes mine at.
 

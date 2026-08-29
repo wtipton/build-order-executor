@@ -39,7 +39,7 @@
 - {at: {count: {CyberneticsCore: 1}}, do: build, what: RoboticsFacility, prewalk: {minerals: 100}}  # Robo Facility
 
 # Transfer to natural once Nexus 2 finishes & take natural gases
-- {at: {count: {Nexus: 2}}, do: rally_and_transfer_probes, base: 2}  # saturate natural
+- {at: {count: {Nexus: 2}}, do: rally_and_transfer_probes, where: natural}  # saturate natural
 - {at: {count: {Nexus: 2}}, do: build, what: Assimilator}  # natural gas 1
 - {at: {count: {Nexus: 2}}, do: build, what: Assimilator}  # natural gas 2
 - {at: {count: {Nexus: 2}}, do: gas_workers, count: 12}  # saturate all 4 gases for DTs & tech
@@ -91,7 +91,7 @@
 
 - {at: {count: {Immortal: 2}}, do: train, what: Immortal}  # Immortal #3
 - {at: {count: {Immortal: 2}}, do: chrono, target: RoboticsFacility}  # chrono Immortal 3
-- {at: {count: {Nexus: 3}}, do: rally_and_transfer_probes, base: 3}  # saturate 3rd base
+- {at: {count: {Nexus: 3}}, do: rally_and_transfer_probes, where: third}  # saturate 3rd base
 
 # Additional production & supply for moveout
 - {at: {count: {Immortal: 1}}, do: build, what: Pylon, where: third}

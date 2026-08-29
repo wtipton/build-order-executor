@@ -10,6 +10,8 @@ live bot via `self`. The building/pylon geometry itself lives in placement.py
 
 from __future__ import annotations
 
+from typing import get_args
+
 from sc2.ids.ability_id import AbilityId
 from sc2.ids.unit_typeid import UnitTypeId as U
 from sc2.position import Point2
@@ -17,7 +19,7 @@ from sc2.unit import Unit
 from sc2.units import Units
 
 from catalog import COMBAT_PRODUCTION, unit_id
-from schema import Step
+from schema import BasePlace, Step
 
 
 class WorldMixin:
@@ -27,7 +29,9 @@ class WorldMixin:
     PROXY_BASE_RANK = 3
 
     # Our bases named by distance-rank from our start (0 = main, 1 = natural, ...).
-    BASE_RANK = {"main": 0, "natural": 1, "third": 2, "fourth": 3, "fifth": 4, "sixth": 5}
+    # Derived from the schema's own BasePlace ordering so the DSL's names and the
+    # ranks they resolve to can't drift apart.
+    BASE_RANK = {name: i for i, name in enumerate(get_args(BasePlace))}
 
     # ============================================================ locations
     def _resolve_place(self, where: str) -> Point2:

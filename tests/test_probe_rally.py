@@ -177,8 +177,9 @@ async def test_rally_and_transfer_probes_does_not_wait_for_the_nexus():
         townhalls=lambda t: FakeUnits([nexus]),
         workers=FakeUnits([]),
         _probes_unavailable_to_automation=lambda: set(),
+        BASE_RANK=BuildOrderBot.BASE_RANK,  # the real name -> rank table, so `where` resolves as it does live
     )
-    assert await BuildOrderBot.do_rally_and_transfer_probes(fake, fake_bot(base=3)) is True
+    assert await BuildOrderBot.do_rally_and_transfer_probes(fake, fake_bot(where="third")) is True
     assert fake.populating_base_num == 3
     nexus.assert_called_once_with(AbilityId.RALLY_WORKERS, field)
 
@@ -200,8 +201,9 @@ async def test_rally_and_transfer_probes_skips_the_target_base_when_transferring
         townhalls=lambda t: FakeUnits([nexus]),
         workers=FakeUnits([]),
         _probes_unavailable_to_automation=lambda: set(),
+        BASE_RANK=BuildOrderBot.BASE_RANK,  # the real name -> rank table, so `where` resolves as it does live
     )
-    assert await BuildOrderBot.do_rally_and_transfer_probes(fake, fake_bot(base=2)) is True
+    assert await BuildOrderBot.do_rally_and_transfer_probes(fake, fake_bot(where="natural")) is True
     # at_target is way over the cap; if it weren't skipped we'd try to drain it
     assert fake.populating_base_num == 2
 
@@ -226,7 +228,8 @@ async def test_transfer_caps_each_base_at_its_remaining_patches_not_a_constant()
         townhalls=lambda t: FakeUnits([fake_unit()]),
         workers=FakeUnits(movers),
         _probes_unavailable_to_automation=lambda: set(),
+        BASE_RANK=BuildOrderBot.BASE_RANK,  # the real name -> rank table, so `where` resolves as it does live
     )
-    assert await BuildOrderBot.do_rally_and_transfer_probes(fake, fake_bot(base=1)) is True
+    assert await BuildOrderBot.do_rally_and_transfer_probes(fake, fake_bot(where="main")) is True
     moved = [w for w in movers if w.gather.called]
     assert len(moved) == 3, f"expected 13-10=3 moved, got {len(moved)}"

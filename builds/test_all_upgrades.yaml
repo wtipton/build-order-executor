@@ -17,7 +17,7 @@
 - {at: {time: 55},  do: build, what: Pylon}
 - {at: {time: 62},  do: build, what: Assimilator}  # main gas 2
 - {at: {count: {Assimilator: 2}}, do: gas_workers, count: 6}
-- {at: {count: {Nexus: 2}}, do: rally_and_transfer_probes, base: 2}
+- {at: {count: {Nexus: 2}}, do: rally_and_transfer_probes, where: natural}
 - {at: {count: {Nexus: 2}}, do: build, what: Assimilator}  # natural gas 1
 - {at: {count: {Nexus: 2}}, do: build, what: Assimilator}  # natural gas 2
 - {at: {count: {Assimilator: 4}}, do: gas_workers, count: 12}
