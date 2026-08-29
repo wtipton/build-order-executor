@@ -17,6 +17,7 @@ from sc2.unit import Unit
 from sc2.units import Units
 
 from catalog import COMBAT_PRODUCTION, unit_id
+from placement import PLACE_OFFSETS
 from schema import BASE_PLACES, Step
 
 
@@ -302,8 +303,20 @@ class WorldMixin:
             return base
 
         if where is not None:
-            return await self.find_placement(unit, near=self._resolve_place(where), max_distance=20,
-                                             random_alternative=False)
+            # Sweep offsets around the named place rather than taking find_placement's
+            # single nearest answer. A lone candidate plus a rejection can only turn a bad
+            # placement into NO placement: anchored on a Nexus the nearest open tile is
+            # usually the gap between it and the minerals, which is exactly the pocket
+            # would_trap refuses, and `where: sixth` stalled a build for 316s on that.
+            anchor = self._resolve_place(where)
+            for dx, dy in PLACE_OFFSETS:
+                pos = await self.find_placement(
+                    unit, near=Point2((anchor.x + dx, anchor.y + dy)), max_distance=20,
+                    random_alternative=False)
+                if pos is not None and not self.placement.would_trap(unit, pos):
+                    return pos
+            self._status = f"nowhere safe to put {step.what} at {where}"
+            return None
         if unit == U.ASSIMILATOR:
             geyser = self._find_free_geyser()
             if geyser is None:

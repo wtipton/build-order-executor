@@ -542,3 +542,37 @@ async def test_warp_tiles_empty_when_everything_is_blocked():
     every = [(float(x), float(y)) for x in range(-reach, reach + 1)
              for y in range(-reach, reach + 1)]
     assert await _tiles(_tiles_bot(occupied=every)) == []
+
+
+async def test_where_anchored_build_sweeps_offsets_for_a_safe_spot():
+    # Covers the `where:` branch end to end. Nothing did, which is how a missing
+    # PLACE_OFFSETS import shipped: the unit suite was green while any `where:` build
+    # raised NameError on its first frame in a real game.
+    trapping, safe = Point2((1.0, 1.0)), Point2((9.0, 9.0))
+    seen = []
+
+    async def find_placement(unit, near, **kw):
+        seen.append((near.x, near.y))
+        return trapping if len(seen) == 1 else safe
+
+    fake = fake_bot(
+        _resolve_place=lambda where: Point2((0.0, 0.0)),
+        find_placement=find_placement,
+        placement=fake_bot(would_trap=lambda unit, pos: pos == trapping),
+        _status="",
+    )
+    step = fake_bot(what="Gateway", where="proxy")
+    assert await BuildOrderBot._find_build_target(fake, step) == safe
+    assert len(seen) > 1, "a rejected candidate must not end the search"
+
+
+async def test_where_anchored_build_says_so_when_every_offset_traps():
+    fake = fake_bot(
+        _resolve_place=lambda where: Point2((0.0, 0.0)),
+        find_placement=AsyncMock(return_value=Point2((1.0, 1.0))),
+        placement=fake_bot(would_trap=lambda unit, pos: True),
+        _status="",
+    )
+    step = fake_bot(what="Gateway", where="proxy")
+    assert await BuildOrderBot._find_build_target(fake, step) is None
+    assert fake._status == "nowhere safe to put Gateway at proxy"

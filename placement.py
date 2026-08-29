@@ -32,8 +32,23 @@ if TYPE_CHECKING:
 # first, then step out in fixed directions. Used to retry when the nearest spot would
 # seal a producer, WITHOUT random_alternative — so placement is a pure function of
 # game state (identical runs reproduce exactly; see run.py GAME_SEED).
-_PACK_OFFSETS = ((0, 0), (2, 0), (0, 2), (-2, 0), (0, -2),
+PLACE_OFFSETS = ((0, 0), (2, 0), (0, 2), (-2, 0), (0, -2),
                  (3, 3), (-3, 3), (3, -3), (-3, -3))
+
+# How far either side of a candidate we look for pockets it would seal off. Traps that
+# catch a worker are local — a probe wedged between a Pylon and the mineral line — so a
+# window is enough, and it keeps the check cheap enough to run on every candidate.
+_TRAP_WINDOW = 12
+
+
+def _tile_span(centre: float, radius: float) -> range:
+    """Tile indices something of `radius` centred at `centre` covers on one axis.
+
+    Tile n covers [n, n+1), so the last covered tile is ceil(centre + radius) - 1. Using
+    int(centre + radius) + 1 as the bound instead counts one tile too many per axis — a
+    2x2 Pylon reads as 3x3 — which makes occupancy fatter than it is and has would_trap
+    reject placements that are actually fine."""
+    return range(math.floor(centre - radius), math.ceil(centre + radius))
 
 
 class Placement:
@@ -47,6 +62,75 @@ class Placement:
         don't drop structures into the mineral line and block mining."""
         mins = self.bot.mineral_field.closer_than(12, near)
         return mins.center if mins else None
+
+    def _blocked_tiles(self, cx: int, cy: int) -> set[tuple[int, int]]:
+        """Tiles in the window that a ground unit can't walk through because something is
+        standing on them.
+
+        Structures and resources have to be collected by hand: `game_info.pathing_grid`
+        is the STATIC terrain from the game's start, so it knows nothing about what we've
+        built, and the mineral line is exactly what a probe gets pinned against."""
+        out: set[tuple[int, int]] = set()
+        for units in (self.bot.structures, self.bot.mineral_field, self.bot.vespene_geyser):
+            for u in units:
+                r = max(u.radius, 0.5)
+                if (abs(u.position.x - cx) > _TRAP_WINDOW + r + 1
+                        or abs(u.position.y - cy) > _TRAP_WINDOW + r + 1):
+                    continue
+                for tx in _tile_span(u.position.x, r):
+                    for ty in _tile_span(u.position.y, r):
+                        out.add((tx, ty))
+        return out
+
+    def _footprint(self, unit: U, pos: Point2) -> set[tuple[int, int]]:
+        """Tiles a `unit` built at `pos` would stand on."""
+        r = self.bot.game_data.units[unit.value].footprint_radius or 1.0
+        return {(tx, ty) for tx in _tile_span(pos.x, r) for ty in _tile_span(pos.y, r)}
+
+    def would_trap(self, unit: U, pos: Point2) -> bool:
+        """Would putting `unit` at `pos` seal off ground a worker could walk into but not
+        out of?
+
+        Asked of every candidate placement. A probe pinned in a pocket can't build, and
+        do_build re-issues to it forever — a live run lost a build order that way, stuck
+        at `dist=7.5` for four minutes while supply-capped. The cost of being wrong is a
+        dead run, and the executor exists to time build orders, so a placement that can
+        trap a worker is not worth taking.
+
+        Compares reachability with and without the candidate rather than just looking for
+        enclosed ground, so a pocket that already existed isn't blamed on this building.
+        Cheap enough to do per candidate because the game only advances when we return
+        (run.py runs non-realtime), so thinking here costs wall-clock, never game time."""
+        cx, cy = int(pos.x), int(pos.y)
+        lo_x, lo_y, hi_x, hi_y = cx - _TRAP_WINDOW, cy - _TRAP_WINDOW, cx + _TRAP_WINDOW, cy + _TRAP_WINDOW
+        blocked = self._blocked_tiles(cx, cy)
+        footprint = self._footprint(unit, pos)
+
+        def walkable(t: tuple[int, int], extra: set[tuple[int, int]]) -> bool:
+            return (t not in blocked and t not in extra
+                    and self.bot.in_pathing_grid(Point2((t[0] + 0.5, t[1] + 0.5))))
+
+        edge = ([(x, lo_y) for x in range(lo_x, hi_x + 1)]
+                + [(x, hi_y) for x in range(lo_x, hi_x + 1)]
+                + [(lo_x, y) for y in range(lo_y, hi_y + 1)]
+                + [(hi_x, y) for y in range(lo_y, hi_y + 1)])
+
+        def reachable(extra: set[tuple[int, int]]) -> set[tuple[int, int]]:
+            stack = [t for t in edge if walkable(t, extra)]
+            seen = set(stack)
+            while stack:
+                x, y = stack.pop()
+                for n in ((x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)):
+                    if (lo_x <= n[0] <= hi_x and lo_y <= n[1] <= hi_y
+                            and n not in seen and walkable(n, extra)):
+                        seen.add(n)
+                        stack.append(n)
+            return seen
+
+        before = reachable(set())
+        if not before:
+            return False  # nothing walkable reaches the window edge; no basis to judge
+        return bool(before - reachable(footprint) - footprint)
 
     # ----------------------------------------------------------------- pylons
     async def pylon_position(self) -> Point2 | None:
@@ -62,7 +146,7 @@ class Placement:
                 anchor = nexus.position.towards(toward, -5)  # 5 tiles AWAY from minerals
                 pos = await bot.find_placement(U.PYLON, near=anchor, max_distance=7,
                                                random_alternative=False)
-                if pos is not None:
+                if pos is not None and not self.would_trap(U.PYLON, pos):
                     return pos
 
         # 2) otherwise spread: pick the buildable ring candidate around the main
@@ -80,7 +164,7 @@ class Placement:
                 if mc is not None and cand.distance_to(mc) < main.distance_to(mc):
                     continue  # on the mineral side of the Nexus — skip
                 pos = await bot.find_placement(U.PYLON, near=cand, max_distance=3, random_alternative=False)
-                if pos is None:
+                if pos is None or self.would_trap(U.PYLON, pos):
                     continue
                 score = min((pos.distance_to(p.position) for p in bot.structures(U.PYLON)), default=99.0)
                 if score > best_score:
@@ -89,10 +173,11 @@ class Placement:
             return best
 
         # 3) fallback: anything near the main toward the map center
-        return await bot.find_placement(
+        pos = await bot.find_placement(
             U.PYLON, near=main.towards(bot.game_info.map_center, 6), max_distance=12,
             random_alternative=False,
         )
+        return None if pos is not None and self.would_trap(U.PYLON, pos) else pos
 
     # -------------------------------------------------------------- buildings
     async def building_position(self, unit: U) -> Point2 | None:
@@ -115,12 +200,13 @@ class Placement:
             # take the LAST exit of a nearby production building. Sweep the fixed anchor
             # offsets (deterministic — no random spread) and return the first buildable
             # spot that keeps every nearby producer's exit open (else the next pylon).
-            for dx, dy in _PACK_OFFSETS:
+            for dx, dy in PLACE_OFFSETS:
                 pos = await bot.find_placement(
                     unit, near=Point2((anchor.x + dx, anchor.y + dy)),
                     max_distance=10, placement_step=1, random_alternative=False,
                 )
-                if pos is not None and not self._would_seal_producer(pos):
+                if (pos is not None and not self._would_seal_producer(pos)
+                        and not self.would_trap(unit, pos)):
                     return pos
         return None
 
