@@ -16,7 +16,7 @@ There are many trade-offs to consider. E.g.:
 
 All actions in the game take some amount of time. Workers take time to mine resources. They also take time to walk places in order to perform various tasks. Buildings take time to build, units take time to train, upgrades take time to complete, etc. And there are various other mechanics that must be accounted for, e.g. resource fields eventually run out.
 
-Additionally, there are many dependencies are baked into the rules of the game and must be accounted for. Units are always produced from buildings, and the buildings must first be built. There is a "tech tree", such that certain buildings are pre-requisites for other buildings, units, or upgrades. Also, both workers and army units require some amount of "supply" (which is provided by pylons and nexuses) to be available before they can be produced. 
+Additionally, there are many dependencies are baked into the rules of the game and must be accounted for. Units are always produced from buildings, and the buildings must first be built. There is a "tech tree", such that certain buildings are pre-requisites for other buildings, units, or upgrades. Also, both workers and army units require some amount of "supply" (which is provided by pylons and nexuses) to be available before they can be produced, so you must construct supply-providing buildings in advance to avoid getting supply-capped.
 
 # Build orders
 
@@ -39,7 +39,7 @@ Various other fields are specific to the type of action. Values, including build
 
 Steps are executed one at a time, i.e. a step's trigger is checked and its action taken only after the previous step is complete. (There is a single exception to this, the prewalk system for builders, described below, which involves some limit lookahead past the current step.) For each step, we wait until the triggering condition becomes true, and then execute it.
 
-So, if one step's triggering condition never becomes true, we never move past the step, and the whole build stalls. Deadlocks like this can definitely happen in pratice -- e.g. suppose a step's trigger criterion is for a unit to appear, but we are currently supply-capped, so that no units can be produced.
+So, if one step's triggering condition never becomes true, we never move past the step, and the whole build stalls. Deadlocks like this can definitely happen in pratice -- e.g. suppose a step's trigger criterion is for a unit to appear, but we are currently supply-capped, so that no units can be produced. Ensure you build enough pylons in advance so the game does not stall!
 
 See `schema.py` for details of the syntax. However, a build order `example.yaml` might begin:
 
