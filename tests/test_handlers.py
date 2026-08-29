@@ -165,7 +165,6 @@ async def test_morph_done_when_the_committed_sources_are_consumed():
     step = fake_bot(to="archon", count=1)
     fake = _morph_bot([], dest_units=[fake_unit()])  # the pair merged; 1 archon now exists
     fake._morph_sources = lambda spec: FakeUnits([])
-    fake.step_state.morph.dest_wanted = 1
     fake.step_state.morph.committed = {1, 2}
     assert await BuildOrderBot.do_morph(fake, step) is True
 
@@ -367,24 +366,14 @@ async def test_morph_skips_a_source_the_scheduler_just_gave_work():
     free.assert_called_once_with(catalog.MORPH["warpgate"].ability)
 
 
-async def test_morph_without_count_fixes_the_target_on_the_first_frame():
-    # `morph to: warpgate` with no count means "every Gateway we have NOW" — and a
-    # shipped build uses it (proxy_warp_zealot). Recomputing the target each frame shrinks
-    # it as sources convert and leave the source list, so the step converts fewer than
-    # asked and can finish having done almost none of them.
+async def test_morph_without_count_makes_exactly_one():
+    # `count` defaults to 1 for morph, same as build/train/warp — not "all the sources we
+    # happen to have", which used to make the target depend on game state.
     gws = [fake_unit(tag=i, orders=[], is_idle=True) for i in range(1, 4)]
     fake = _morph_bot(gws, dest_units=[])
     fake._morph_sources = lambda spec: FakeUnits(gws)
-    step = fake_bot(to="warpgate", count=None)
-
-    assert await BuildOrderBot.do_morph(fake, step) is False
-    assert fake.step_state.morph.dest_wanted == 3
-
-    # one finished converting, so it is a WarpGate now and no longer a source
-    fake.scheduler.new_frame()
-    fake._morph_sources = lambda spec: FakeUnits(gws[1:])
-    await BuildOrderBot.do_morph(fake, step)
-    assert fake.step_state.morph.dest_wanted == 3, "target must not shrink as sources convert"
+    assert await BuildOrderBot.do_morph(fake, fake_bot(to="warpgate", count=None)) is False
+    assert fake.step_state.morph.committed == {1}, "one source for one WarpGate"
 
 
 async def test_morph_finishes_the_stragglers_when_the_game_pairs_across_our_intent():

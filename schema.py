@@ -169,7 +169,7 @@ class WarpStep(_StepBase):
 class MorphStep(_StepBase):
     do: _Do("morph")
     to: str              # warpgate | gateway (convert 1:1) | archon (combine 2 HT/DT). ->warpgate needs Warpgate research.
-    count: Count = None  # how many to make; omit = as many as possible (all sources / all pairs)
+    count: Count = None  # how many to make; omit = 1
 
     _check = field_validator("to")(staticmethod(catalog.require_morph))
 

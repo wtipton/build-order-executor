@@ -63,16 +63,8 @@ class TrainState:
 
 @dataclass
 class MorphState:
-    """How many `dest` to make, and which sources have been told to make them.
-
-    `dest_wanted` is fixed on the step's first frame — None until then, which is what marks
-    that frame.
-
-    `committed` is a flat set of source tags. Note that we don't need to e.g. group into
-    pairs when morphing archons. The game game pairs the tags itself on groups of units
-    given the morph order."""
-    dest_wanted: int | None = None   # how many `dest` to produce; None before the first frame
-    committed: set[int] = field(default_factory=set)  # source tags told to morph
+    """The source tags this step has told to morph."""
+    committed: set[int] = field(default_factory=set)
 
 
 @dataclass

@@ -335,16 +335,11 @@ class StepsMixin:
         a Gateway that's producing a unit."""
         spec = MORPH[step.to]
         ms = self.step_state.morph
-        if ms.dest_wanted is None:
-            # First frame: how many `dest` to make — every ready source for a 1:1 convert
-            # (gateway<->warpgate), or as many pairs as we have for a 2:1 combine
-            # (2 HT/DT -> 1 Archon). Fixed here and never recomputed; see MorphState.
-            ready = self._morph_sources(spec).ready.amount
-            ms.dest_wanted = step.count if step.count is not None else ready // spec.consumes
+        want = step.count or 1
 
         sources = self._morph_sources(spec)
         by_tag = {s.tag: s for s in sources}
-        wanted_sources = ms.dest_wanted * spec.consumes
+        wanted_sources = want * spec.consumes
 
         # A committed source is settled once it's gone from the source list (consumed by a
         # merge, or converted and so no longer that type) or is carrying the morph ability.
@@ -370,7 +365,7 @@ class StepsMixin:
             ms.committed.update(s.tag for s in spare[:take])
 
         done = sum(settled(t) for t in ms.committed) // spec.consumes
-        self._status = f"morphing to {step.to} ({ms.dest_wanted - done} left)"
+        self._status = f"morphing to {step.to} ({want - done} left)"
         return False
 
     def _order_morph(self, spec: MorphSpec, group: list[Unit]) -> None:
