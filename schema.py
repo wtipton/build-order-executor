@@ -9,14 +9,12 @@ by bot.py / run.py; there are no decorative fields.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Annotated, Literal, Union
+from typing import Annotated, Literal
 
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, field_validator, model_validator
 
 import catalog
-
-_TRIGGER_KEYS = ("supply", "time", "minerals", "vespene", "count")
 
 # Our own bases, in order of distance from our start — the Nth-nearest expansion,
 # clamped to what the map provides. Listed IN ORDER: world.BASE_RANK indexes this
@@ -60,7 +58,7 @@ class Trigger(BaseModel):
         for key in _TRIGGER_KEYS:
             want = getattr(self, key)
             if want is not None:
-                return f"{key}>={want:.0f}"
+                return f"{key}>={want:g}"  # :g not :.0f — a fractional `time` must not read as a whole second
         return "?"
 
     @model_validator(mode="after")
@@ -73,6 +71,9 @@ class Trigger(BaseModel):
                 raise ValueError("count trigger must be a single {UnitType: N>=1}, e.g. {Probe: 18}")
             catalog.require_countable(next(iter(self.count)))  # reject typo'd/unknown names at load
         return self
+
+
+_TRIGGER_KEYS = tuple(Trigger.model_fields)
 
 
 class _StepBase(BaseModel):
@@ -182,11 +183,9 @@ class ResumeProbesStep(_StepBase):
 
 
 Step = Annotated[
-    Union[
-        BuildStep, TrainStep, WarpStep, MorphStep, ResearchStep, HallucinateStep,
-        ChronoStep, SendProbeStep, ReturnProbeStep, SetRallyPointStep, RallyAndTransferProbesStep,
-        SetGasProbesStep, CutProbesStep, ResumeProbesStep, WaitStep,
-    ],
+    BuildStep | TrainStep | WarpStep | MorphStep | ResearchStep | HallucinateStep
+    | ChronoStep | SendProbeStep | ReturnProbeStep | SetRallyPointStep | RallyAndTransferProbesStep
+    | SetGasProbesStep | CutProbesStep | ResumeProbesStep | WaitStep,
     Field(discriminator="do"),
 ]
 
@@ -195,6 +194,27 @@ class BuildConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
     name: str = "build"
     steps: list[Step]
+
+    @model_validator(mode="after")
+    def _who_is_held_when_used(self) -> "BuildConfig":
+        """Every `who:` must name a probe that an EARLIER send_probe bound and that no
+        return_probe has since handed back."""
+        held: set[str] = set()
+        for i, step in enumerate(self.steps):
+            who = getattr(step, "who", None)
+            if isinstance(step, SendProbeStep):
+                held.add(step.who)
+            elif who is not None:
+                if who not in held:
+                    have = ", ".join(sorted(held)) or "none"
+                    raise ValueError(
+                        f"step {i} ({step.do} who: {who!r}): no probe named {who!r} is held here. "
+                        f"An earlier send_probe must name it, with no return_probe since. "
+                        f"Held at this point: {have}"
+                    )
+                if isinstance(step, ReturnProbeStep):
+                    held.discard(who)
+        return self
 
 
 def load_build(path: str | Path) -> BuildConfig:

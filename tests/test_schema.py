@@ -69,6 +69,39 @@ def test_count_trigger_accepts_ownable_types(name):
     TypeAdapter(Step).validate_python({"at": {"count": {name: 1}}, "do": "hallucinate"})
 
 
+def _config(*steps):
+    return BuildConfig(steps=TypeAdapter(list[Step]).validate_python(list(steps)))
+
+
+_SEND = {"at": {"time": 1}, "do": "send_probe", "where": "proxy", "who": "scout"}
+_RETURN = {"at": {"time": 2}, "do": "return_probe", "who": "scout"}
+_BUILD_WITH = {"at": {"time": 3}, "do": "build", "what": "Pylon", "who": "scout"}
+
+
+# A `who:` that names no held probe has NO runtime symptom — return_probe no-ops and a
+# `build who:` falls back to the mining pool — so the build completes while quietly not
+# doing what it says. These must all fail at load instead.
+BAD_WHO = [
+    ("typo", [_SEND, {**_BUILD_WITH, "who": "scot"}]),
+    ("never sent", [_BUILD_WITH]),
+    ("returned before use", [_SEND, _RETURN, _BUILD_WITH]),
+    ("returned twice", [_SEND, _RETURN, {**_RETURN, "at": {"time": 3}}]),
+]
+
+
+@pytest.mark.parametrize("case,steps", BAD_WHO, ids=[c for c, _ in BAD_WHO])
+def test_unheld_who_rejected(case, steps):
+    with pytest.raises(Exception) as ei:
+        _config(*steps)
+    assert "is held here" in str(ei.value)
+
+
+def test_a_name_can_be_re_sent_after_being_returned():
+    # the binding is per-send, not permanent: returning scout and sending it again is a
+    # legitimate second tour, and must not be confused with using a returned name
+    _config(_SEND, _RETURN, {**_SEND, "at": {"time": 3}}, _BUILD_WITH)
+
+
 def test_non_list_yaml_rejected(tmp_path):
     dict_file = tmp_path / "dict_build.yaml"
     dict_file.write_text("steps:\n  - {at: {time: 1}, do: hallucinate}\n")
