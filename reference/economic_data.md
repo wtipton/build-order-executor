@@ -2,9 +2,8 @@
 
 Mining rates, engine constants, and economic formulas for build-order planning.
 
-Every number here was measured in a live game using `economy_measure.py`. They were
-measured in the 4.10 headless client on the map CatalystLE. All times are in seconds
-and all rates are per-second.
+Every number here was measured in a live game. They were measured in the 4.10 headless client
+on the map CatalystLE. All times are in seconds and all rates are per-second.
 
 ---
 

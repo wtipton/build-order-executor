@@ -4,12 +4,6 @@ Costs and **base** build times are dumped from the running game client — autho
 for the installed patch (currently **5.0.16b**). Times are in **game-seconds** (the
 in-game clock the bot's `self.time` uses): `build_frames / 22.4`.
 
-Regenerate after a patch:
-```bash
-.venv/bin/python run.py --build builds/pvz_opening_8worker.yaml --dump-data --fullscreen --time-limit 5 2>&1 | grep -E "^DATA|^ABIL|^UPG"
-```
-(`gamedata_dump.py`; `bot.on_start` calls it when `--dump-data` is passed.)
-
 ## ⚠ Runtime modifiers NOT captured by the static `build_time` above
 
 - **Warp Gate research halves gateway training.** Once `WARPGATERESEARCH` completes,
@@ -100,5 +94,5 @@ Regenerate after a patch:
 
 ## Open items / to verify
 - ~~**Mining rates**~~ — done: measured in-engine, see `economic_data.md`
-  (`economy_measure.py` regenerates them). Headline: **0.95 min/s per worker** up to 16
+  (`scripts/economy_measure.py` regenerates them). Headline: **0.95 min/s per worker** up to 16
   on a base, **0.45** for workers 17–24, **2.73 gas/s** for a saturated geyser.

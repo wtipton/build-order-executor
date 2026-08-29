@@ -2,7 +2,7 @@
 """Measure mining rates in a live game, empirically, for reference/economic_data.md.
 
 Mining rates are NOT in the game data tables (unlike costs/build times, see
-gamedata_dump.py) -- they fall out of harvest durations, patch geometry and worker
+scripts/gamedata_dump.py) -- they fall out of harvest durations, patch geometry and worker
 pathing, so the only authoritative source is the running engine. This script drives
 one game through a series of PHASES; each phase spawns an exact worker/patch
 configuration with debug commands, lets it reach steady state, then measures for a
@@ -23,7 +23,7 @@ patches. Usage (headless Docker image; drop --target for the retail patch under 
 
     for s in 0:10 10:18 18:24 24:31 31:36; do
       docker run --rm -v "$PWD":/app build-order-executor-headless \
-        python economy_measure.py --target linux --slice $s 2>&1 | grep -E '^\\[econ\\]'
+        python -m scripts.economy_measure --target linux --slice $s 2>&1 | grep -E '^\\[econ\\]'
     done
 
 Output: one tab-separated `[econ]` row per phase, plus a final `[econ-json]` blob.

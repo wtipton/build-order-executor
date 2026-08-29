@@ -50,4 +50,4 @@ Legend: `[ ]` todo · 🎨 = needs genuine design work.
 ## Phase 6 — Docs pass
 
 - [ ] Reconcile README, `schema.py` docstrings, and `SKILL.md` with the final
-      shape; regenerate `reference/protoss_data.md` if anything changed.
+      shape; regenerate `reference/protoss_data_live.md` if anything changed.

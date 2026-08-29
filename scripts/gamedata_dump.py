@@ -3,26 +3,36 @@
 Costs and BASE build times come straight from the running SC2 client, so they're correct
 for the installed patch (unlike Liquipedia, which lags balance changes). Build times are
 in game-seconds (frames / 22.4). Runtime modifiers (e.g. the Warp Gate research gateway
-train-time reduction) are NOT reflected in these static values — see reference/protoss_data.md.
+train-time reduction) are NOT reflected in these static values — see
+reference/protoss_data_live.md.
 
-Usage (needs a live game, hence run through the bot):
-    .venv/bin/python run.py --build builds/pvz_opening_8worker.yaml \
-        --dump-data --fullscreen --time-limit 5 2>&1 | grep -E "^DATA|^ABIL|^UPG"
+The values only exist on a running client, so this launches its own throwaway game,
+dumps, and quits. It deliberately does NOT go through the bot: nothing outside scripts/
+may depend on this package, so that scripts/ can be left out of the Docker image (see
+scripts/__init__.py).
 
-bot.on_start calls dump(self) when --dump-data is passed.
+    python -m scripts.gamedata_dump --target linux 2>&1 | grep -E "^DATA|^ABIL|^UPG"
 """
 
 from __future__ import annotations
 
+import argparse
+import sys
 from typing import TYPE_CHECKING
 
+import run  # noqa: F401  (sets SC2PF/SC2PATH before sc2 is imported; must come first)
+
+from sc2.bot_ai import BotAI
+from sc2.data import Race, Result
 from sc2.game_data import Cost
+from sc2.main import run_game
+from sc2.player import Bot
 from sc2.ids.ability_id import AbilityId
 from sc2.ids.unit_typeid import UnitTypeId as U
 from sc2.ids.upgrade_id import UpgradeId
 
 if TYPE_CHECKING:
-    from bot import BuildOrderBot
+    from sc2.bot_ai import BotAI as _Bot
 
 STRUCTURES = ["NEXUS", "PYLON", "ASSIMILATOR", "GATEWAY", "WARPGATE", "CYBERNETICSCORE",
               "FORGE", "TWILIGHTCOUNCIL", "ROBOTICSFACILITY", "STARGATE", "TEMPLARARCHIVE",
@@ -43,7 +53,7 @@ def _secs(cost: Cost) -> float:
     return (cost.time or 0) / _FRAMES_PER_SEC
 
 
-def dump(bot: BuildOrderBot) -> None:
+def dump(bot: _Bot) -> None:
     """Print the data tables (tab-separated) using the bot's live game_data."""
     gd = bot.game_data
     print("DATA\tNAME\tmin\tgas\tbuild_s\tfood_req\tfood_prov\tmorph(min/gas/s)", flush=True)
@@ -93,3 +103,41 @@ def dump(bot: BuildOrderBot) -> None:
         else:
             status = "ok"
         print(f"RESEARCHABLE\t{name}\t{status}", flush=True)
+
+
+class _DumpBot(BotAI):
+    """Exists only to hold a live `game_data`, dump it, and concede."""
+
+    async def on_start(self) -> None:
+        dump(self)
+
+    async def on_step(self, iteration: int) -> None:
+        await self.client.leave()
+
+    async def on_end(self, result: Result) -> None:
+        pass
+
+
+def main() -> None:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--target", default=None, help="see run.py (wine | linux)")
+    ap.add_argument("--map", default=None)
+    ap.add_argument("--fullscreen", action="store_true")
+    args = ap.parse_args()
+
+    from loguru import logger as _loguru
+    _loguru.remove()
+    _loguru.add(sys.stderr, level="WARNING")
+
+    map_name = args.map or ("CatalystLE" if run._TARGET == "linux" else "LockdownLE")
+    run_game(
+        run.resolve_map(map_name),
+        [Bot(Race.Protoss, _DumpBot(), name="Dump", fullscreen=args.fullscreen),
+         Bot(Race.Terran, run.PassiveBot(), name="Passive")],
+        realtime=False,
+        random_seed=run.GAME_SEED,
+    )
+
+
+if __name__ == "__main__":
+    main()

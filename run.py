@@ -136,7 +136,6 @@ def main() -> None:
     ap.add_argument("--fullscreen", action="store_true", help="launch SC2 fullscreen (-displayMode 1)")
     ap.add_argument("--replay", default=None, help="replay output path (default: in-game Replays dir)")
     ap.add_argument("--time-limit", type=int, default=300, help="end game after N game-seconds (0 = no limit)")
-    ap.add_argument("--dump-data", action="store_true", help="dump game unit/upgrade data on start (see gamedata_dump.py)")
     args = ap.parse_args()
 
     # Quiet python-sc2's own (loguru) INFO/boot chatter so our tagged lines are the
@@ -168,7 +167,7 @@ def main() -> None:
         game_map,
         [
             Bot(Race.Protoss,
-                BuildOrderBot(build, dump_data=args.dump_data),
+                BuildOrderBot(build),
                 name="BuildOrderBot", fullscreen=args.fullscreen),
             Bot(Race.Terran, PassiveBot(), name="PassiveBot"),
         ],

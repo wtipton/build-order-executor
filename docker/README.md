@@ -61,4 +61,4 @@ Notes:
   map works (`AutomatonLE`, `AbyssalReefLE`, …), but modern ladder maps won't load.
 - v4.10 costs/timings differ from current retail, but the bot reads them live from
   the running client, so it stays correct for whatever version is installed.
-- `Dockerfile.dockerignore` keeps `.venv`, caches, logs, and replays out of the image.
+- `.dockerignore` (repo root) keeps `.venv`, caches, logs, and replays out of the image.

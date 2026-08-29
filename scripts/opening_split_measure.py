@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Measure what an opening worker split is worth, from a REAL game start.
 
-This is deliberately not part of economy_measure.py's phase machinery: that harness
+This is deliberately not part of scripts/economy_measure.py's phase machinery: that harness
 debug-spawns workers at an already-running base, which is exactly what an opening split
 is not. The thing being measured here is the transient in the first seconds of a game --
 12 probes stacked on the Nexus, all issued a gather order at once -- so it has to run
@@ -20,7 +20,7 @@ Nothing is built or trained, so the mineral count is pure income.
 
     for m in default split; do
       docker run --rm -v "$PWD":/app build-order-executor-headless \
-        python opening_split_measure.py --target linux --mode $m 2>&1 | grep '^\\[open\\]'
+        python -m scripts.opening_split_measure --target linux --mode $m 2>&1 | grep '^\\[open\\]'
     done
 """
 

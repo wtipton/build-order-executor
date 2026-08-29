@@ -51,10 +51,9 @@ CONCEDE_GRACE = 10.0
 
 
 class BuildOrderBot(StepsMixin, EconomyMixin, WorldMixin, ObserveMixin, BotAI):
-    def __init__(self, cfg: BuildConfig, dump_data: bool = False) -> None:
+    def __init__(self, cfg: BuildConfig) -> None:
         super().__init__()
         self.cfg = cfg
-        self.dump_data = dump_data
 
         # State related to build progress
         self.steps_done: int = 0  # Steps run in strict order, so progress is just a count.
@@ -117,9 +116,6 @@ class BuildOrderBot(StepsMixin, EconomyMixin, WorldMixin, ObserveMixin, BotAI):
         self.client.game_step = 4
         # Combat units hold our main ramp until a `set_rally_point` step says otherwise.
         self.rally_point = self._resolve_place("main_ramp")
-        if self.dump_data:
-            import gamedata_dump
-            gamedata_dump.dump(self)
 
     async def on_end(self, result: Result) -> None:
         print(f"[end] t={self.time:.1f}s result={result} supply={self.supply_used} "

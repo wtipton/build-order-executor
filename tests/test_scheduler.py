@@ -17,7 +17,7 @@ from fakes import FakeUnits, fake_unit
 from scheduler import Scheduler
 
 # Build times in frames, as game data reports them (cost.time). Real values from
-# reference/protoss_data.md: Zealot 27.1s, Observer 17.9s, Colossus 53.6s.
+# reference/protoss_data_live.md: Zealot 27.1s, Observer 17.9s, Colossus 53.6s.
 FRAMES = {U.ZEALOT: 607.0, U.OBSERVER: 401.0, U.COLOSSUS: 1200.0, U.PROBE: 272.0}
 
 

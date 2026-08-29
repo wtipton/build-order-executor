@@ -1,0 +1,44 @@
+# Virtualenvs and package caches
+.venv/
+__pycache__/
+**/__pycache__/
+*.py[cod]
+
+# VCS metadata
+.jj/
+.git/
+
+# Agent skills, eval notes, and project planning (prevents eval contamination)
+.claude/
+TODOs.md
+
+# Measurement tools. Nothing the bot runs imports them (tests/test_layout.py enforces
+# that), and they are run against a bind-mounted repo, so the image does not need them.
+# Uncomment to slim the image / keep them out of an eval build:
+#scripts/
+
+# Docs the bot doesn't read. README.md carries the regeneration commands (and so names
+# the tools above); protoss_data_live.md is the cost/build-time table for the retail
+# patch. Both are ROOT-anchored, so docker/README.md and the other reference/*.md stay.
+README.md
+reference/protoss_data_live.md
+
+# Logs, replays, and game dumps
+*.log
+run.log
+replays/
+*.SC2Replay
+*.SC2Save
+
+# Test & benchmark caches
+.pytest_cache/
+.benchmarks/
+.coverage
+htmlcov/
+
+# Editor & OS files
+.vscode/
+.idea/
+*.swp
+*~
+.DS_Store

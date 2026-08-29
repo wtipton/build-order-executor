@@ -55,14 +55,28 @@ The map defaults automatically by target (`CatalystLE` for `linux` / Docker, `Lo
 and can be overridden with `--map` or `SC2_TEST_MAP`/`SC2_MAP`. A couple of upgrades don't exist in
 4.10, so the one suite covers only what's valid in both — see the build/test headers.
 
-### Economic data
+## Reference data
+
+`reference/*.md` are dumped from a live client rather than copied from a wiki, so they are
+correct for whatever patch is installed. Regenerate them after a patch.
+
+### Unit, structure and upgrade costs (`reference/protoss_data_live.md`)
+
+Costs and *base* build times, straight from the running game client:
+```bash
+.venv/bin/python -m scripts.gamedata_dump --fullscreen 2>&1 | grep -E "^DATA|^ABIL|^UPG"
+```
+It launches its own throwaway game. Add `--target linux` to read the 4.10 client instead,
+which is where `reference/protoss_data_4.10.md` comes from.
+
+### Mining rates (`reference/economic_data.md`)
 
 Regenerate (the engine calls the game a Tie at ~1320 game-seconds, so it runs in chunks;
 the slices are positional indices into `phases()`, so re-derive them if you edit it):
 ```bash
 for s in 0:12 12:24 24:32 32:40 40:46 46:54 54:58; do
   docker run --rm -v "$PWD":/app build-order-executor-headless \
-    python economy_measure.py --target linux --slice $s 2>&1 | grep -E '^\[econ\]'
+    python -m scripts.economy_measure --target linux --slice $s 2>&1 | grep -E '^\[econ\]'
 done
 ```
 
