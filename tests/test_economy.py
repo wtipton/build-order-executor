@@ -277,7 +277,7 @@ async def test_gas_fill_stops_when_we_run_out_of_workers():
 
 
 async def test_gas_fill_stops_when_we_own_no_geyser():
-    """`gas_workers count: 3` before the Assimilator exists — the loop must notice there
+    """`set_gas_probes count: 3` before the Assimilator exists — the loop must notice there
     is nowhere to send anyone rather than spinning."""
     miners = [_worker(i, i * 10) for i in (1, 2)]
     await BuildOrderBot.manage_economy(
@@ -502,7 +502,7 @@ async def test_opening_split_assignment_preserves_the_slot_distribution():
 
 
 async def test_opening_split_leaves_gas_probes_alone():
-    """A probe a gas_workers step has moved onto a geyser must not be dragged back."""
+    """A probe a set_gas_probes step has moved onto a geyser must not be dragged back."""
     patches = [_field(tag=10 + i, x=i) for i in range(4)]
     geyser = _geyser(50, x=0)
     on_gas = _gathering(1, x=0, from_gas=50)

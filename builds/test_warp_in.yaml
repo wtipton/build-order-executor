@@ -12,13 +12,13 @@
 - {at: {supply: 13}, do: build, what: Pylon}
 - {at: {count: {Pylon: 1}}, do: build, what: Gateway}
 - {at: {time: 45}, do: build, what: Assimilator}
-- {at: {count: {Assimilator: 1}}, do: gas_workers, count: 3}
+- {at: {count: {Assimilator: 1}}, do: set_gas_probes, count: 3}
 - {at: {count: {Gateway: 1}}, do: build, what: CyberneticsCore}
 - {at: {count: {CyberneticsCore: 1}}, do: research, what: Warpgate}
 - {at: {count: {CyberneticsCore: 1}}, do: chrono, target: CyberneticsCore}
 # Stop probes (so they don't keep refilling the cap) and add a second Pylon, so there's
 # supply headroom for the Zealot we warp in.
-- {at: {count: {CyberneticsCore: 1}}, do: workers, state: stop}
+- {at: {count: {CyberneticsCore: 1}}, do: cut_probes}
 - {at: {count: {CyberneticsCore: 1}}, do: build, what: Pylon}
 # Started while Warpgate research is still in flight (baseline: 0 Warpgates), so it
 # completes via our manual morph (modern) OR the research-complete auto-morph (4.10).

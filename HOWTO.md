@@ -81,21 +81,21 @@ These locations can be used with the `where` parameter in various steps, e.g. se
 
 ### Economy 
 
-By default, workers are produced continuously from all ready nexuses. You can pause and resume with the `workers` step, e.g.:
+By default, probes are produced continuously from all ready nexuses. You can pause and resume that with the `cut_probes` and `resume_probes` steps, e.g.:
 
 ```
-- {at: {time: 10},  do: workers, state: stop}
-- {at: {time: 20},  do: workers, state: start}
+- {at: {time: 10},  do: cut_probes}
+- {at: {time: 20},  do: resume_probes}
 ```
 
-More workers mine more minerals, allowing production of more workers, etc. Exponential growth of the economy is important, so generally we won't want to pause workers early unless there's a pretty good reason for it. It's more common to cut worker production later to divert resources to army production during the build-up to an attack.
+More probes mine more minerals, allowing production of more probes, etc. Exponential growth of the economy is important, so generally we won't want to cut probes early unless there's a pretty good reason for it. It's more common to cut later to divert resources to army production during the build-up to an attack.
 
 Nexuses are always constructed adjacent at a base adjacent to resources. A base will always have 8 mineral patches and 2 gas geysers. When a nexus is first produced, probes will be rallied to the adjacent minerals, and that workers will automatically begin collecting these minerals.
 
-The `gas_workers` step allows specific number of workers to be allocated to mine gas. When the number of gas workers changes, workers are pulled to/from minerals to mine gas. Gas workers will be constantly balanced between available assimilators. E.g.:
+The `set_gas_probes` step allows specific number of probes to be allocated to mine gas. When that number changes, probes are pulled to/from minerals to mine gas. Gas probes will be constantly balanced between available assimilators. E.g.:
 
 ```
-- {at: {supply: 18},  do: gas_workers, count: 6}  # fully saturate two assimilators
+- {at: {supply: 18},  do: set_gas_probes, count: 6}  # fully saturate two assimilators
 ```
 
 The `rally_and_transfer_probes` command takes a particular base location as input and does two things:

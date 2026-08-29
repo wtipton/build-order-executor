@@ -20,25 +20,25 @@
 - {at: {supply: 14},  do: build,  what: Gateway, prewalk: {minerals: 100}}  # Gateway=150
 - {at: {supply: 14},  do: chrono, target: Nexus}  # 2nd chrono the moment Nexus hits 50 energy
 - {at: {supply: 15},  do: build,  what: Assimilator}
-- {at: {count: {Assimilator: 1}}, do: gas_workers,  count: 1}  # pull one one gas1
-- {at: {count: {Probe: 17}}, do: gas_workers, count: 2}  # 17th probe -> gas
+- {at: {count: {Assimilator: 1}}, do: set_gas_probes,  count: 1}  # pull one one gas1
+- {at: {count: {Probe: 17}}, do: set_gas_probes, count: 2}  # 17th probe -> gas
 # cut probe production to bank Nexus (400) + Core (150), resume after Core.
-- {at: {supply: 19},  do: workers, state: stop}  # cut probes for Nexus + Core
+- {at: {supply: 19},  do: cut_probes}  # for Nexus + Core
 - {at: {supply: 19},  do: return_probe, who: scout}  # scout home to mining
-- {at: {count: {Probe: 19}}, do: gas_workers, count: 3}  # 19th probe -> gas
+- {at: {count: {Probe: 19}}, do: set_gas_probes, count: 3}  # 19th probe -> gas
 # long walk to the natural, so give it a big lead: walk at 300 (Nexus=400).
 - {at: {supply: 19},  do: build,  what: Nexus,   prewalk: {minerals: 300}}  # natural expansion (Nexus=400)
 - {at: {supply: 19},  do: build,  what: CyberneticsCore}
-- {at: {supply: 19},  do: workers, state: start}  # just one probe then small cut for pylon
-- {at: {supply: 20},  do: workers, state: stop}
+- {at: {supply: 19},  do: resume_probes}  # just one probe then small cut for pylon
+- {at: {supply: 20},  do: cut_probes}
 - {at: {supply: 20},  do: set_rally_point,  where: natural}
 - {at: {supply: 20},  do: build,  what: Assimilator}
 - {at: {supply: 20},  do: build,  what: Pylon}
-- {at: {supply: 20},  do: workers, state: start}  # resume
-- {at: {count: {Probe: 21}}, do: gas_workers, count: 4}
+- {at: {supply: 20},  do: resume_probes}
+- {at: {count: {Probe: 21}}, do: set_gas_probes, count: 4}
 - {at: {count: {CyberneticsCore: 1}}, do: train,  what: Adept}  # out by ~2:57
 - {at: {count: {CyberneticsCore: 1}}, do: chrono, target: Gateway}  # chrono the Adept
-- {at: {count: {Probe: 22}}, do: gas_workers, count: 5}
-- {at: {count: {Probe: 23}}, do: gas_workers, count: 6}
+- {at: {count: {Probe: 22}}, do: set_gas_probes, count: 5}
+- {at: {count: {Probe: 23}}, do: set_gas_probes, count: 6}
 # once the natural finishes, transfer workers onto it and rally new probes there
 - {at: {count: {Nexus: 2}}, do: rally_and_transfer_probes, where: natural}  # saturate the natural

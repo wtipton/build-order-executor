@@ -16,12 +16,12 @@
 - {at: {supply: 14},  do: chrono, target: Nexus}  # 2nd chrono the moment Nexus hits 50 energy
 # cut probes at 18 to bank Nexus (400) + Gas (75) + Core (150) so all three land
 # on 18; resume after the Core, then 2nd Gas (19) and Pylon (20) follow naturally.
-- {at: {supply: 18},  do: workers, state: stop}  # cut for Nexus + Gas + Core
+- {at: {supply: 18},  do: cut_probes}  # for Nexus + Gas + Core
 - {at: {supply: 18},  do: build,  what: Nexus,   prewalk: {minerals: 300}}  # natural expansion (Nexus=400)
 - {at: {supply: 18},  do: build,  what: Assimilator}  # 1st gas
-- {at: {supply: 18},  do: gas_workers, count: 6}  # fully saturate both gases (3 each) as they finish
+- {at: {supply: 18},  do: set_gas_probes, count: 6}  # fully saturate both gases (3 each) as they finish
 - {at: {supply: 18},  do: build,  what: CyberneticsCore, prewalk: {minerals: 100}}  # Core=150
-- {at: {supply: 18},  do: workers, state: start}  # resume probes
+- {at: {supply: 18},  do: resume_probes}
 - {at: {supply: 18},  do: return_probe, who: scout}  # scout home to mining
 - {at: {supply: 19},  do: build,  what: Assimilator}  # 2nd gas
 - {at: {supply: 20},  do: build,  what: Pylon,   prewalk: {minerals: 75}}

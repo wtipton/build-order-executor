@@ -23,7 +23,7 @@
 - {at: {supply: 12},  do: send_probe, where: enemy_main, who: scout}  # scout the enemy with a named probe
 - {at: {supply: 13},  do: build,  what: Gateway, prewalk: {minerals: 100}}  # Gateway=150
 - {at: {supply: 14},  do: build,  what: Assimilator}  # gas for Warpgate research
-- {at: {count: {Assimilator: 1}}, do: gas_workers, count: 3}  # saturate the gas
+- {at: {count: {Assimilator: 1}}, do: set_gas_probes, count: 3}  # saturate the gas
 - {at: {supply: 15},  do: build,  what: Gateway, prewalk: {minerals: 100}}  # 2nd Gateway
 # Send the scout out to the proxy EARLY, reusing the same probe that scouted the
 # enemy main — a real cross-map send is its own build-order step, so it's in
@@ -33,7 +33,7 @@
 - {at: {count: {CyberneticsCore: 1}}, do: research, what: Warpgate}
 - {at: {count: {CyberneticsCore: 1}}, do: chrono,   target: CyberneticsCore}  # chrono Warpgate research
 # Cap probes so the proxy Pylon's supply goes to the Zealot wave, not more probes.
-- {at: {supply: 18},  do: workers, state: stop}  # hold probes for the all-in
+- {at: {supply: 18},  do: cut_probes}  # all-in
 # The scout is already forward, so the Pylon goes up without a cross-map walk.
 - {at: {supply: 18},  do: build, what: Pylon, where: proxy, who: scout}  # scout builds the proxy Pylon
 - {at: {supply: 18},  do: return_probe, who: scout}  # scout back to mining (or drop this to leave it hidden out there)

@@ -380,13 +380,17 @@ class StepsMixin:
                 excess -= 1
         return True
 
-    async def do_gas_workers(self, step: Step) -> bool:
+    async def do_set_gas_probes(self, step: Step) -> bool:
         self.gas_target = step.count
         return True
 
     async def do_wait(self, step: Step) -> bool:
         return True  # a pure trigger; holds the line until `at` fires, then completes
 
-    async def do_workers(self, step: Step) -> bool:
-        self.continuously_build_workers = step.state == "start"
+    async def do_cut_probes(self, step: Step) -> bool:
+        self.continuously_build_workers = False
+        return True
+
+    async def do_resume_probes(self, step: Step) -> bool:
+        self.continuously_build_workers = True
         return True

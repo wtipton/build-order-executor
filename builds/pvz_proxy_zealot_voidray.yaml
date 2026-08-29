@@ -31,27 +31,27 @@
 - {at: {supply: 14},  do: build,  what: Gateway, prewalk: {minerals: 100}}  # Gateway=150
 - {at: {supply: 14},  do: chrono, target: Nexus}  # 2nd chrono the moment Nexus hits 50 energy
 - {at: {supply: 15},  do: build,  what: Assimilator}
-- {at: {count: {Assimilator: 1}}, do: gas_workers,  count: 1}  # pull one onto gas1
-- {at: {count: {Probe: 17}}, do: gas_workers, count: 2}  # 17th probe -> gas
-- {at: {supply: 19},  do: workers, state: stop}  # cut probes for Nexus + Core
+- {at: {count: {Assimilator: 1}}, do: set_gas_probes,  count: 1}  # pull one onto gas1
+- {at: {count: {Probe: 17}}, do: set_gas_probes, count: 2}  # 17th probe -> gas
+- {at: {supply: 19},  do: cut_probes}  # for Nexus + Core
 - {at: {supply: 19},  do: return_probe, who: scout}  # scout home to mining
-- {at: {count: {Probe: 19}}, do: gas_workers, count: 3}  # 19th probe -> gas
+- {at: {count: {Probe: 19}}, do: set_gas_probes, count: 3}  # 19th probe -> gas
 - {at: {supply: 19},  do: build,  what: Nexus,   prewalk: {minerals: 300}}  # natural expansion (Nexus=400)
 - {at: {supply: 19},  do: build,  what: CyberneticsCore}
-- {at: {supply: 19},  do: workers, state: start}  # just one probe then small cut for pylon
-- {at: {supply: 20},  do: workers, state: stop}
+- {at: {supply: 19},  do: resume_probes}  # just one probe then small cut for pylon
+- {at: {supply: 20},  do: cut_probes}
 - {at: {supply: 20},  do: set_rally_point,  where: natural}
 - {at: {supply: 20},  do: build,  what: Assimilator}
 - {at: {supply: 20},  do: build,  what: Pylon}
-- {at: {supply: 20},  do: workers, state: start}  # resume
-- {at: {count: {Probe: 21}}, do: gas_workers, count: 4}
+- {at: {supply: 20},  do: resume_probes}
+- {at: {count: {Probe: 21}}, do: set_gas_probes, count: 4}
 - {at: {count: {CyberneticsCore: 1}}, do: train,  what: Adept}  # 1st Adept, out ~2:57
 - {at: {count: {CyberneticsCore: 1}}, do: chrono, target: Gateway}  # chrono the Adept
 
 # ===================== diverge: tech, ordered by the binding resource =========
 # Core done ~2:42. Both minerals AND gas are tight here; the trap is to over-pull
 # gas (mineral-starving the 250-min Void Ray). Keep gas at 5.
-- {at: {count: {CyberneticsCore: 1}}, do: gas_workers, count: 6}  # full gas — GAS is the limiter (Twilight/Charge/Warpgate/morphs all need it)
+- {at: {count: {CyberneticsCore: 1}}, do: set_gas_probes, count: 6}  # full gas — GAS is the limiter (Twilight/Charge/Warpgate/morphs all need it)
 
 # 1) Stargate first — the Void Ray (4:15) is the tightest deadline (150/150).
 - {at: {count: {CyberneticsCore: 1}}, do: build, what: Stargate, prewalk: {minerals: 130}}  # for the Void Ray
@@ -78,7 +78,7 @@
 - {at: {count: {Stargate: 1}}, do: chrono, target: Stargate}  # chrono the Void Ray x2 -> ~4:10 (a 3rd chrono steals energy from Charge, so stop at 2)
 
 # cut probes now (~3:50) to rush minerals into Twilight + the Gateways.
-- {at: {time: 215}, do: workers, state: stop}  # cut probes to rush the army buildings
+- {at: {time: 215}, do: cut_probes}  # to rush the army buildings
 
 # 4) Twilight right after the Void Ray, BEFORE the Gateways — Charge (5:45) needs it
 #    ready ASAP. Built ~3:55 -> ready ~4:30.
@@ -123,7 +123,7 @@
 
 # tech gas is all paid now (Twilight/Charge/Warpgate); the morph only needs 100 more
 # (banked). Pull gas to minerals so the 100-min warp-ins are well funded.
-- {at: {time: 275}, do: gas_workers, count: 1}  # gas -> minerals for the warp-ins
+- {at: {time: 275}, do: set_gas_probes, count: 1}  # gas -> minerals for the warp-ins
 
 # Charge chronos #2/#3 — time-gated to spread them across the research (the buff wears
 # off, so re-cast). These land in the morph's dead time (it waits for the Gateways

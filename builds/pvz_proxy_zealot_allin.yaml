@@ -19,27 +19,27 @@
 - {at: {supply: 14},  do: build,  what: Gateway, prewalk: {minerals: 100}}  # Gateway=150
 - {at: {supply: 14},  do: chrono, target: Nexus}  # 2nd chrono the moment Nexus hits 50 energy
 - {at: {supply: 15},  do: build,  what: Assimilator}
-- {at: {count: {Assimilator: 1}}, do: gas_workers,  count: 1}  # pull one onto gas1
-- {at: {count: {Probe: 17}}, do: gas_workers, count: 2}  # 17th probe -> gas
-- {at: {supply: 19},  do: workers, state: stop}  # cut probes for Nexus + Core
+- {at: {count: {Assimilator: 1}}, do: set_gas_probes,  count: 1}  # pull one onto gas1
+- {at: {count: {Probe: 17}}, do: set_gas_probes, count: 2}  # 17th probe -> gas
+- {at: {supply: 19},  do: cut_probes}  # for Nexus + Core
 - {at: {supply: 19},  do: return_probe, who: scout}  # scout home to mining
-- {at: {count: {Probe: 19}}, do: gas_workers, count: 3}  # 19th probe -> gas
+- {at: {count: {Probe: 19}}, do: set_gas_probes, count: 3}  # 19th probe -> gas
 - {at: {supply: 19},  do: build,  what: Nexus,   prewalk: {minerals: 300}}  # natural expansion (Nexus=400)
 - {at: {supply: 19},  do: build,  what: CyberneticsCore}
-- {at: {supply: 19},  do: workers, state: start}  # resume probes
-- {at: {supply: 20},  do: workers, state: stop}
+- {at: {supply: 19},  do: resume_probes}
+- {at: {supply: 20},  do: cut_probes}
 - {at: {supply: 20},  do: set_rally_point,  where: natural}
 - {at: {supply: 20},  do: build,  what: Assimilator}
 - {at: {supply: 20},  do: build,  what: Pylon}
-- {at: {supply: 20},  do: workers, state: start}  # resume
-- {at: {count: {Probe: 21}}, do: gas_workers, count: 4}
+- {at: {supply: 20},  do: resume_probes}
+- {at: {count: {Probe: 21}}, do: set_gas_probes, count: 4}
 - {at: {count: {CyberneticsCore: 1}}, do: train,  what: Adept}  # first Adept (out ~2:57)
 - {at: {count: {CyberneticsCore: 1}}, do: chrono, target: Gateway}  # chrono the Adept
 
 # ===================== diverge: gateway Zealots + late warp finish ==========
 # research Warp Gate immediately (chrono'd); it speeds gateway training a lot
 - {at: {count: {CyberneticsCore: 1}}, do: research, what: Warpgate}
-- {at: {count: {CyberneticsCore: 1}}, do: gas_workers, count: 1}  # 3 probes to minerals; keep 1 on gas for the 3x25 morph gas
+- {at: {count: {CyberneticsCore: 1}}, do: set_gas_probes, count: 1}  # 3 probes to minerals; keep 1 on gas for the 3x25 morph gas
 - {at: {count: {CyberneticsCore: 1}}, do: chrono,   target: CyberneticsCore}  # chrono warpgate research
 - {at: {count: {CyberneticsCore: 1}}, do: send_probe, where: proxy, who: scout}  # scout to proxy
 - {at: {count: {CyberneticsCore: 1}}, do: set_rally_point, where: proxy}  # gateway zealots gather at the proxy
@@ -57,7 +57,7 @@
 - {at: {time: 205}, do: chrono, target: CyberneticsCore}  # chrono research again
 
 # cut probes once the natural is saturated, then supply + Zealots
-- {at: {time: 215}, do: workers, state: stop}  # stop probes (all-in)
+- {at: {time: 215}, do: cut_probes}  # all-in
 - {at: {count: {Gateway: 3}}, do: build, what: Pylon, where: main}
 - {at: {count: {Gateway: 3}}, do: build, what: Pylon, where: natural}
 - {at: {count: {Gateway: 3}}, do: build, what: Pylon, where: main}

@@ -148,7 +148,7 @@ class EconomyMixin:
         if not patches:
             return
         econ = self.workers.tags_not_in(self._probes_unavailable_to_automation() or [])
-        # A probe a `gas_workers` step has put on a geyser is not ours to move back. With
+        # A probe a `set_gas_probes` step has put on a geyser is not ours to move back. With
         # the window as short as it is no Assimilator can exist yet, so this is currently
         # unreachable -- it is here so that raising OPENING_SPLIT_UNTIL stays safe.
         gas_tags = {g.tag for g in self.gas_buildings}

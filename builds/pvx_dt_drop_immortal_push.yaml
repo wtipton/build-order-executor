@@ -18,15 +18,15 @@
 - {at: {supply: 14},  do: build,  what: Gateway, prewalk: {minerals: 100}}  # 1st Gateway
 - {at: {supply: 14},  do: chrono, target: Nexus}  # 2nd chrono at 50 energy
 - {at: {supply: 15},  do: build,  what: Assimilator}  # main gas 1
-- {at: {count: {Assimilator: 1}}, do: gas_workers, count: 1}
-- {at: {count: {Probe: 17}}, do: gas_workers, count: 2}
-- {at: {supply: 18},  do: workers, state: stop}  # cut probes for Nexus + Core + Gas 2
+- {at: {count: {Assimilator: 1}}, do: set_gas_probes, count: 1}
+- {at: {count: {Probe: 17}}, do: set_gas_probes, count: 2}
+- {at: {supply: 18},  do: cut_probes}  # for Nexus + Core + Gas 2
 - {at: {supply: 18},  do: return_probe, who: scout}
 - {at: {supply: 18},  do: build,  what: Nexus,   prewalk: {minerals: 300}}  # natural expansion (Nexus=400)
 - {at: {supply: 18},  do: build,  what: Assimilator}  # main gas 2
 - {at: {supply: 18},  do: build,  what: CyberneticsCore, prewalk: {minerals: 100}}
-- {at: {supply: 18},  do: workers, state: start}  # resume probes
-- {at: {supply: 19},  do: gas_workers, count: 6}  # saturate both main gases
+- {at: {supply: 18},  do: resume_probes}
+- {at: {supply: 19},  do: set_gas_probes, count: 6}  # saturate both main gases
 - {at: {supply: 20},  do: build,  what: Pylon, prewalk: {minerals: 75}}
 
 # ===================== 2. Tech: Adept, Stalker, Warpgate, Twilight, Robo =====================
@@ -42,7 +42,7 @@
 - {at: {count: {Nexus: 2}}, do: rally_and_transfer_probes, where: natural}  # saturate natural
 - {at: {count: {Nexus: 2}}, do: build, what: Assimilator}  # natural gas 1
 - {at: {count: {Nexus: 2}}, do: build, what: Assimilator}  # natural gas 2
-- {at: {count: {Nexus: 2}}, do: gas_workers, count: 12}  # saturate all 4 gases for DTs & tech
+- {at: {count: {Nexus: 2}}, do: set_gas_probes, count: 12}  # saturate all 4 gases for DTs & tech
 
 # ===================== 3. Dark Shrine, Gateways 2-4, Pylons =====================
 - {at: {count: {TwilightCouncil: 1}}, do: build, what: DarkShrine, prewalk: {minerals: 100}}  # Dark Shrine
@@ -54,7 +54,7 @@
 - {at: {count: {TwilightCouncil: 1}}, do: build, what: Pylon, where: natural}  # supply pylon
 
 # Cap probes at ~42 (2 saturated bases) for DT warpin & push tech
-- {at: {count: {Probe: 42}}, do: workers, state: stop}  # cap probes at 42
+- {at: {count: {Probe: 42}}, do: cut_probes}  # cap probes at 42
 
 # ===================== 4. Warp Prism + Morph 4 Warpgates =====================
 - {at: {count: {RoboticsFacility: 1}}, do: train, what: WarpPrism}  # Warp Prism for DT drop

@@ -212,9 +212,9 @@ async def test_chrono_boosts_a_producing_structure():
 
 
 # ------------------------------------------------------------------ state setters
-async def test_gas_workers_sets_target():
+async def test_set_gas_probes_sets_target():
     fake = fake_bot(gas_target=0)
-    assert await BuildOrderBot.do_gas_workers(fake, fake_bot(count=6)) is True
+    assert await BuildOrderBot.do_set_gas_probes(fake, fake_bot(count=6)) is True
     assert fake.gas_target == 6
 
 
@@ -226,9 +226,9 @@ async def test_wait_completes_immediately():
     assert vars(fake) == {}, "do_wait must not touch bot state"
 
 
-async def test_workers_toggle_start_stop():
+async def test_cut_and_resume_probes_toggle_production():
     fake = fake_bot(continuously_build_workers=True)
-    assert await BuildOrderBot.do_workers(fake, fake_bot(state="stop")) is True
+    assert await BuildOrderBot.do_cut_probes(fake, fake_bot()) is True
     assert fake.continuously_build_workers is False
-    assert await BuildOrderBot.do_workers(fake, fake_bot(state="start")) is True
+    assert await BuildOrderBot.do_resume_probes(fake, fake_bot()) is True
     assert fake.continuously_build_workers is True

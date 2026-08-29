@@ -163,9 +163,9 @@ class RallyAndTransferProbesStep(_StepBase):
     # Nexuses onto its minerals, and makes it the base returned probes mine at.
 
 
-class GasWorkersStep(_StepBase):
-    do: Literal["gas_workers"]
-    count: int           # desired total workers in gas
+class SetGasProbesStep(_StepBase):
+    do: Literal["set_gas_probes"]
+    count: int           # desired total probes in gas
 
 
 class WaitStep(_StepBase):
@@ -173,16 +173,19 @@ class WaitStep(_StepBase):
     # Does nothing; completes as soon as its trigger fires.
 
 
-class WorkersStep(_StepBase):
-    do: Literal["workers"]
-    state: Literal["stop", "start"]  # toggle continuous probe production
+class CutProbesStep(_StepBase):
+    do: Literal["cut_probes"]
+
+
+class ResumeProbesStep(_StepBase):
+    do: Literal["resume_probes"]
 
 
 Step = Annotated[
     Union[
         BuildStep, TrainStep, WarpStep, MorphStep, ResearchStep, HallucinateStep,
         ChronoStep, SendProbeStep, ReturnProbeStep, SetRallyPointStep, RallyAndTransferProbesStep,
-        GasWorkersStep, WorkersStep, WaitStep,
+        SetGasProbesStep, CutProbesStep, ResumeProbesStep, WaitStep,
     ],
     Field(discriminator="do"),
 ]
