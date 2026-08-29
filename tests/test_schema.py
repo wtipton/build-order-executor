@@ -69,6 +69,70 @@ def test_count_trigger_accepts_ownable_types(name):
     TypeAdapter(Step).validate_python({"at": {"count": {name: 1}}, "do": "hallucinate"})
 
 
+# ------------------------------------------------------ case-insensitive values
+# Every VALUE is accepted in any case and normalized to its canonical spelling on the
+# way in, so nothing downstream (runtime dict lookups, logs, the held-probe check) has
+# to think about case. Each case: a step as written, and the canonical `str(step)`.
+MIXED_CASE = [
+    (dict(do="BUILD", what="Pylon", where="NATURAL"), "build what=Pylon where=natural"),
+    (dict(do="Set_Rally_Point", where="Main_Ramp"), "set_rally_point where=main_ramp"),
+    (dict(do="rally_and_transfer_probes", where="Third"), "rally_and_transfer_probes where=third"),
+    (dict(do="research", what="BLINK"), "research what=Blink"),      # -> the RESEARCH key
+    (dict(do="MORPH", to="Archon"), "morph to=archon"),              # -> the MORPH key
+    (dict(do="send_probe", where="Proxy", who="Scout"), "send_probe where=proxy who=scout"),
+]
+
+
+@pytest.mark.parametrize("step,canonical", MIXED_CASE, ids=[s["do"] for s, _ in MIXED_CASE])
+def test_values_are_case_insensitive_and_canonicalized(step, canonical):
+    assert str(TypeAdapter(Step).validate_python(_one_step(**step))) == canonical
+
+
+def test_research_and_morph_canonicalize_because_the_bot_indexes_by_the_stored_value():
+    # do_research/do_morph do RESEARCH[step.what] / MORPH[step.to] at RUNTIME, so merely
+    # accepting the odd casing would swap a load error for a mid-game KeyError.
+    import catalog
+    assert catalog.RESEARCH[TypeAdapter(Step).validate_python(_one_step(do="research", what="blInK")).what]
+    assert catalog.MORPH[TypeAdapter(Step).validate_python(_one_step(do="morph", to="ARCHON")).to]
+
+
+def test_unit_names_are_accepted_in_any_case_but_kept_as_written():
+    # The one value that isn't rewritten: unit_id resolves it case-insensitively and every
+    # consumer re-resolves through it, and the game's display capitalization isn't
+    # available without a live game — so we echo the author rather than shout PYLON.
+    assert TypeAdapter(Step).validate_python(_one_step(do="build", what="pYlOn")).what == "pYlOn"
+
+
+def test_field_names_are_still_case_sensitive():
+    # Field names are the DSL's syntax, not its data. extra="forbid" makes a mis-cased
+    # key fail loudly, which is the point — it can never be silently ignored.
+    with pytest.raises(Exception) as ei:
+        TypeAdapter(Step).validate_python({"at": {"time": 1}, "do": "build", "What": "Pylon"})
+    assert "Field required" in str(ei.value)
+
+
+def test_case_insensitivity_does_not_let_bad_values_through(tmp_path):
+    for step in (dict(do="bulid"), dict(do="research", what="blimk"),
+                 dict(do="set_rally_point", where="middle")):
+        with pytest.raises(Exception):
+            TypeAdapter(Step).validate_python(_one_step(**step))
+
+
+def test_load_build_accepts_a_mixed_case_file(tmp_path):
+    f = tmp_path / "SHOUTY.yaml"
+    f.write_text(
+        "- {at: {time: 1}, do: SEND_PROBE, where: Enemy_Main, who: Scout}\n"
+        "- {at: {count: {CYBERNETICSCORE: 1}}, do: Build, what: pylon, who: SCOUT}\n"
+        "- {at: {time: 9}, do: Return_Probe, who: scout}\n"
+    )
+    cfg = load_build(f)
+    assert [str(s) for s in cfg.steps] == [
+        "send_probe where=enemy_main who=scout",
+        "build what=pylon who=scout",   # `who` matched across three spellings
+        "return_probe who=scout",
+    ]
+
+
 def _config(*steps):
     return BuildConfig(steps=TypeAdapter(list[Step]).validate_python(list(steps)))
 

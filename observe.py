@@ -9,7 +9,6 @@ and other mixins' helpers directly.
 from __future__ import annotations
 
 from collections import Counter
-from typing import get_args
 
 from sc2.data import Result
 from sc2.ids.unit_typeid import UnitTypeId as U
@@ -23,7 +22,7 @@ from catalog import (
     RESEARCH,
     unit_id,
 )
-from schema import Place, Step, Trigger
+from schema import PLACES, Step, Trigger
 
 # How often the periodic [status] block prints (game-seconds).
 STATUS_INTERVAL = 10.0
@@ -88,7 +87,7 @@ class ObserveMixin:
         `enemy_main`/`proxy`/etc. can be verified to have put one at each distinct
         spot (not all clustered in one place)."""
         out = {}
-        for place in get_args(Place):
+        for place in PLACES:
             n = self.structures(U.PYLON).closer_than(12, self._resolve_place(place)).amount
             if n:
                 out[place] = n

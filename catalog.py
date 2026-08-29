@@ -202,8 +202,15 @@ MORPH: dict[str, MorphSpec] = {
 
 
 # ============================================================ validators (load-time)
-# Each returns the value unchanged when valid, else raises ValueError listing the
-# valid options — schema.py wires these into pydantic field validators.
+# Each returns the CANONICAL spelling of a valid value, else raises ValueError listing
+# the valid options — schema.py wires these into pydantic field validators.
+#
+# Every value the DSL accepts is case-insensitive, and each of these normalizes as it
+# validates, so nothing downstream has to think about case. Unit/structure names are the
+# one exception to normalizing: `unit_id` resolves them case-insensitively and every
+# consumer re-resolves through it, and the game's own display capitalization isn't
+# available without a live game (see observe._unit_name) — so the author's spelling is
+# passed through rather than mangled into CYBERNETICSCORE.
 def _require_in(name: str, allowed: frozenset[U], kind: str) -> str:
     u = unit_id(name)  # raises for a non-unit name first
     if u not in allowed:
@@ -233,9 +240,15 @@ def require_countable(name: str) -> str:
 
 
 def _require_key(name: str, mapping: dict[str, object], kind: str) -> str:
-    if name not in mapping:
+    """Look `name` up case-insensitively and return the mapping's OWN spelling of it.
+
+    Canonicalizing here isn't cosmetic: `do_research` and `do_morph` index RESEARCH/MORPH
+    with the stored value at runtime, so accepting `blink` without normalizing it to
+    `Blink` would trade a clean load-time error for a mid-game KeyError."""
+    canonical = {k.lower(): k for k in mapping}.get(name.lower()) if isinstance(name, str) else None
+    if canonical is None:
         raise ValueError(f"unknown {kind} {name!r}; valid: {', '.join(mapping)}")
-    return name
+    return canonical
 
 
 def require_research(name: str) -> str:

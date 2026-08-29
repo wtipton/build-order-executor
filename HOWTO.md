@@ -35,7 +35,7 @@ The build order config is a list of steps. Each step has:
 - an `at` field which specifies a triggering criterion (exactly one of supply, time, minerals, vespene, or count). Count is (e.g., {Pylon: 2}, {CyberneticsCore: 1})
 - and a `do` field which specifies the action to takke in the build
 
-Various other fields are specific to the type of action.
+Various other fields are specific to the type of action. Values, including building and unit names, are case-insensitive, but field names are not.
 
 Steps are executed one at a time, i.e. a step's trigger is checked and its action taken only after the previous step is complete. (There is a single exception to this, the prewalk system for builders, described below, which involves some limit lookahead past the current step.) For each step, we wait until the triggering condition becomes true, and then execute it.
 
