@@ -47,7 +47,7 @@ See `schema.py` for details of the syntax. However, a build order `example.yaml`
 - {at: {supply: 14},  do: build,  what: Pylon,   prewalk: {minerals: 75}}
 - {at: {count: {Pylon: 1}}, do: chrono, target: Nexus}
 - {at: {supply: 16},  do: build,  what: Gateway, prewalk: {minerals: 100}}
-- {at: {supply: 16},  do: send_probe, where: enemy_main, label: scout}
+- {at: {supply: 16},  do: send_probe, where: enemy_main, who: scout}
 - {at: {supply: 17},  do: build,  what: Assimilator}
 ```
 
@@ -131,26 +131,28 @@ A couple important notes about prewalk:
 - Effectively, this means that we partition steps into minimal groups ending with a resource-spending step. If that last step is a build step with a prewalk, then we check the prewalk criterion whenever any steps in the partition are active.
 - A consequecne of this is that only one prewalking probe can be active at a time. I.e. we'll have at most one builder probe off of mining due to this system.
 
-A final detail about probe walking: in case the build step has a `supply` trigger which is higher than our current supply, we need to build probes (at a cost of 50 minerals apiece) before we can build the building. We deduct these probe costs from our current mineral count before checking the probe-sending criterion, whether it's explicit via `prewalk: {minerals: ...}` or implicit via the default building cost check.
+A final detail about probe walking: in case the build step has a `supply` trigger which is higher than our current supply, we need to build probes (at a cost of 50 minerals apiece) before we can build the building. We deduct these probe costs from our current mineral count before checking the probe-sending criterion, whether it's explicit via `prewalk: {minerals: ...}` or implicit via the default building cost check. A `count: {Probe: N}` trigger reserves the same way as well.
 
 ### Named workers
 
 A `send_probe` step can be used to send a worker to a particular `where` on the map:
 
 ```
-- {at: {supply: 15},  do: send_probe, where: proxy, label: scout}
+- {at: {supply: 15},  do: send_probe, where: proxy, who: scout}
 ```
 
-This removes the worker from the rest of the worker management system so that you can otherwise use it without interference from the automation. The value of the label field here can be used to refer to the probe later, e.g. to use it to build a particular building, rather than pulling a probe from mining: 
+This removes the worker from the rest of the worker management system so that you can otherwise use it without interference from the automation. The name you give it in `who` is how you refer to that same probe later, e.g. to use it to build a particular building, rather than pulling a probe from mining: 
 
 ```
-- {at: {supply: 18},  do: build, what: Pylon, where: proxy, label: scout}  # scout builds the proxy Pylon
+- {at: {supply: 18},  do: build, what: Pylon, where: proxy, who: scout}  # scout builds the proxy Pylon
 ```
+
+A name is select-or-create, and which one you get depends only on whether that name is already in use. A `send_probe` with a new name pulls a fresh probe off the line and binds it to that name; a `send_probe` with a name that's already in use moves the probe already bound to it.
 
 Once it's done its job, we can release the probe back to mining via `return_probe`:
 
 ```
-- {at: {supply: 18},  do: return_probe, label: scout}
+- {at: {supply: 18},  do: return_probe, who: scout}
 ```
 
 ## Observability

@@ -87,7 +87,7 @@ class BuildStep(_StepBase):
     do: Literal["build"]
     what: str            # structure / expansion (UnitTypeId name, e.g. Pylon, Nexus)
     where: Place | None = None      # where to place it; None = auto (at home). "proxy" builds it near the enemy.
-    label: str | None = None        # build with a specific sent probe (see send_probe) instead of auto-selecting
+    who: str | None = None          # build with the named probe (see send_probe) instead of auto-selecting one
     # When to pull a probe off the line and walk it to the spot. Default: as soon as we
     # can afford the building. Set this to send it EARLIER, e.g. {minerals: 300} on a
     # 400 Nexus so the walk overlaps the saving. Independent of `at`.
@@ -140,12 +140,12 @@ class ChronoStep(_StepBase):
 class SendProbeStep(_StepBase):
     do: Literal["send_probe"]
     where: Place         # where to send it
-    label: str           # label this probe so later steps can move it again, build with it, or return it
+    who: str             # name this probe, so later steps can move it again, build with it, or return it
 
 
 class ReturnProbeStep(_StepBase):
     do: Literal["return_probe"]
-    label: str           # a probe previously sent via send_probe — hand it back to the mining/build pool
+    who: str             # a probe named by send_probe — hand it back to the mining/build pool
 
 
 class SetRallyPointStep(_StepBase):

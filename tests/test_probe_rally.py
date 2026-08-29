@@ -75,40 +75,40 @@ def test_no_probe_rather_than_a_bad_one():
 # ------------------------------------------------------------------ send_probe
 async def test_send_probe_reuses_named_probe():
     existing = fake_unit(tag=1)
-    fake = fake_bot(_resolve_place=lambda w: DEST, labelled_probes={"scout": 1}, home_base_by_builder={},
-                    _worker_by_label=lambda label: existing, _free_probe_near=lambda p: None)
-    assert await BuildOrderBot.do_send_probe(fake, fake_bot(where="proxy", label="scout")) is True
+    fake = fake_bot(_resolve_place=lambda w: DEST, named_probes={"scout": 1}, home_base_by_builder={},
+                    _worker_by_name=lambda name: existing, _free_probe_near=lambda p: None)
+    assert await BuildOrderBot.do_send_probe(fake, fake_bot(where="proxy", who="scout")) is True
     existing.move.assert_called_once_with(DEST)
-    assert fake.labelled_probes == {"scout": 1}  # unchanged — same probe reused
+    assert fake.named_probes == {"scout": 1}  # unchanged — same probe reused
 
 
 async def test_send_probe_pulls_and_registers_fresh_probe():
     fresh = fake_unit(tag=7)
-    fake = fake_bot(_resolve_place=lambda w: DEST, labelled_probes={}, home_base_by_builder={},
-                    _worker_by_label=lambda label: None, _free_probe_near=lambda p: fresh)
-    assert await BuildOrderBot.do_send_probe(fake, fake_bot(where="proxy", label="scout")) is True
-    assert fake.labelled_probes == {"scout": 7}  # registered so it's held out of automation
+    fake = fake_bot(_resolve_place=lambda w: DEST, named_probes={}, home_base_by_builder={},
+                    _worker_by_name=lambda name: None, _free_probe_near=lambda p: fresh)
+    assert await BuildOrderBot.do_send_probe(fake, fake_bot(where="proxy", who="scout")) is True
+    assert fake.named_probes == {"scout": 7}  # registered so it's held out of automation
     fresh.move.assert_called_once_with(DEST)
 
 
 async def test_send_probe_holds_when_no_probe_available():
-    fake = fake_bot(_resolve_place=lambda w: DEST, labelled_probes={}, home_base_by_builder={},
-                    _worker_by_label=lambda label: None, _free_probe_near=lambda p: None)
-    assert await BuildOrderBot.do_send_probe(fake, fake_bot(where="proxy", label="scout")) is False
+    fake = fake_bot(_resolve_place=lambda w: DEST, named_probes={}, home_base_by_builder={},
+                    _worker_by_name=lambda name: None, _free_probe_near=lambda p: None)
+    assert await BuildOrderBot.do_send_probe(fake, fake_bot(where="proxy", who="scout")) is False
 
 
 def _named_probe_bot(pool):
-    """Fake bot that drives the REAL _worker_by_label / _worker_by_tag lookups (rather
-    than stubbing them), so the label -> live-probe reuse path is genuinely exercised."""
-    fake = fake_bot(_resolve_place=lambda w: DEST, labelled_probes={}, home_base_by_builder={}, workers=FakeUnits(pool))
+    """Fake bot that drives the REAL _worker_by_name / _worker_by_tag lookups (rather
+    than stubbing them), so the name -> live-probe reuse path is genuinely exercised."""
+    fake = fake_bot(_resolve_place=lambda w: DEST, named_probes={}, home_base_by_builder={}, workers=FakeUnits(pool))
     fake._worker_by_tag = lambda tag: BuildOrderBot._worker_by_tag(fake, tag)
-    fake._worker_by_label = lambda label: BuildOrderBot._worker_by_label(fake, label)
+    fake._worker_by_name = lambda name: BuildOrderBot._worker_by_name(fake, name)
     return fake
 
 
-async def test_resending_a_label_moves_the_same_probe():
-    """The tour case (test_probe_labelling.yaml re-sends `scout1` eight times): every
-    re-send must MOVE the probe already bound to the label. Silently pulling a fresh
+async def test_resending_a_name_moves_the_same_probe():
+    """The tour case (test_probe_naming.yaml re-sends `scout1` eight times): every
+    re-send must MOVE the probe already bound to the name. Silently pulling a fresh
     one each time still looks correct from outside — the probe tours, the build
     finishes — while stripping workers off minerals one leg at a time."""
     scout, spare = fake_unit(tag=1), fake_unit(tag=2)
@@ -116,12 +116,12 @@ async def test_resending_a_label_moves_the_same_probe():
     fake = _named_probe_bot([scout, spare])
     fake._free_probe_near = lambda pos: (pulls.append(pos), scout)[1]
 
-    step = fake_bot(where="proxy", label="scout")
+    step = fake_bot(where="proxy", who="scout")
     for _ in range(3):
         assert await BuildOrderBot.do_send_probe(fake, step) is True
 
     assert len(pulls) == 1, f"re-send pulled a fresh probe instead of reusing: {len(pulls)} pulls"
-    assert fake.labelled_probes == {"scout": 1}
+    assert fake.named_probes == {"scout": 1}
     assert scout.move.call_count == 3
     spare.move.assert_not_called()
 
@@ -130,10 +130,10 @@ async def test_resend_rebinds_when_the_named_probe_died():
     # tag 1 is bound but no longer among our workers -> fall back to a fresh probe
     replacement = fake_unit(tag=2)
     fake = _named_probe_bot([replacement])
-    fake.labelled_probes = {"scout": 1}
+    fake.named_probes = {"scout": 1}
     fake._free_probe_near = lambda pos: replacement
-    assert await BuildOrderBot.do_send_probe(fake, fake_bot(where="proxy", label="scout")) is True
-    assert fake.labelled_probes == {"scout": 2}
+    assert await BuildOrderBot.do_send_probe(fake, fake_bot(where="proxy", who="scout")) is True
+    assert fake.named_probes == {"scout": 2}
     replacement.move.assert_called_once_with(DEST)
 
 
@@ -141,17 +141,17 @@ async def test_resend_rebinds_when_the_named_probe_died():
 async def test_return_probe_sends_it_back_to_mining():
     field = object()
     worker = fake_unit()
-    fake = fake_bot(labelled_probes={"scout": 7},
+    fake = fake_bot(named_probes={"scout": 7},
                     _worker_by_tag=lambda t: worker if t == 7 else None,
                     _populating_field=lambda: field)
-    assert await BuildOrderBot.do_return_probe(fake, fake_bot(label="scout")) is True
-    assert "scout" not in fake.labelled_probes  # handed back to automation
+    assert await BuildOrderBot.do_return_probe(fake, fake_bot(who="scout")) is True
+    assert "scout" not in fake.named_probes  # handed back to automation
     worker.gather.assert_called_once_with(field)
 
 
-async def test_return_probe_noop_for_unknown_label():
-    fake = fake_bot(labelled_probes={}, _worker_by_tag=lambda t: None, _populating_field=lambda: None)
-    assert await BuildOrderBot.do_return_probe(fake, fake_bot(label="ghost")) is True
+async def test_return_probe_noop_for_unknown_name():
+    fake = fake_bot(named_probes={}, _worker_by_tag=lambda t: None, _populating_field=lambda: None)
+    assert await BuildOrderBot.do_return_probe(fake, fake_bot(who="ghost")) is True
 
 
 # ------------------------------------------------------------------ rally

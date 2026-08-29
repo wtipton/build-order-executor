@@ -314,18 +314,18 @@ class StepsMixin:
         return True
 
     async def do_send_probe(self, step: Step) -> bool:
-        # Reuse the probe already under this label if it's still alive (e.g. move
+        # Reuse the probe already under this name if it's still alive (e.g. move
         # the "scout" from the enemy main out to the proxy), else pull a fresh one.
         # A sent probe is held out of automation until a return_probe (see
         # _probes_unavailable_to_automation), so it stays put/on-task rather than drifting back to mine.
         dest = self._resolve_place(step.where)
-        worker = self._worker_by_label(step.label)
+        worker = self._worker_by_name(step.who)
         if worker is None:
             worker = self._free_probe_near(dest)
             if worker is None:
                 self._status = "no free probe to send"
                 return False  # no probe available yet — stall the line
-            self.labelled_probes[step.label] = worker.tag
+            self.named_probes[step.who] = worker.tag
             # No "home base" for a sent prober: a sent probe is gone for a long time, so
             # it rejoins at the populating base (via return_probe), not wherever it
             # happened to be mining.
@@ -334,7 +334,7 @@ class StepsMixin:
         return True
 
     async def do_return_probe(self, step: Step) -> bool:
-        tag = self.labelled_probes.pop(step.label, None)
+        tag = self.named_probes.pop(step.who, None)
         worker = self._worker_by_tag(tag) if tag is not None else None
         if worker is not None:
             field = self._populating_field()  # our currently-populating base, never enemy minerals

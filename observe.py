@@ -78,7 +78,7 @@ class ObserveMixin:
             "pylons_by_place": self._pylons_by_place(),
             "nexus_by_place": {p: 1 for p in self.BASE_RANK
                                if self.townhalls.closer_than(6, self._resolve_place(p)).exists},
-            "labelled_probes_held": sorted(self.labelled_probes),
+            "named_probes_held": sorted(self.named_probes),
             "workers": int(self.supply_workers),
             "supply_used": self.supply_used,
         }

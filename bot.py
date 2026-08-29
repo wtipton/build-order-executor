@@ -87,10 +87,10 @@ class BuildOrderBot(StepsMixin, EconomyMixin, WorldMixin, ObserveMixin, BotAI):
         self.rally_point: Point2 | None = None
         self._rallied: set[int] = set()
 
-        # label -> probe tag for probes sent out via `send_probe`. These are held
+        # `who:` name -> probe tag, for probes sent out via `send_probe`. These are held
         # OUT of all worker automation (mining, and being pulled to build) until a
         # `return_probe` step hands them back.
-        self.labelled_probes: dict[str, int] = {}
+        self.named_probes: dict[str, int] = {}
 
         # Probe tag -> the base it was mining at when we pulled it off to build. A builder
         # is only away briefly, so it goes back where it came from; dumping it on the

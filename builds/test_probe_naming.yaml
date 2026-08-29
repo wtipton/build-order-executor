@@ -1,0 +1,32 @@
+# Regression fixture: exercise the named-probe system (send_probe / return_probe
+# and build, all naming their probe with who:). Two scout probes tour bases
+# (re-sent by name — each re-send must MOVE THE SAME probe, not pull a new one),
+# and one `builder` probe runs a small home build order via named builds. All are
+# then returned to mining. Asserted via [summary] named_probes_held
+# / census in tests/test_integration.py.
+
+# create the three named probes
+- {at: {time: 3},  do: send_probe, where: main,       who: scout1}
+- {at: {time: 3},  do: send_probe, where: enemy_main, who: scout2}
+- {at: {time: 3},  do: send_probe, where: main,       who: builder}
+
+# tour: scout1 walks our bases, scout2 the enemy side — re-sent by name, spaced
+# in time so it's a real tour (each leg moves the SAME probe)
+- {at: {time: 15}, do: send_probe, where: natural, who: scout1}
+- {at: {time: 25}, do: send_probe, where: enemy_natural, who: scout2}
+- {at: {time: 35}, do: send_probe, where: third,   who: scout1}
+- {at: {time: 45}, do: send_probe, where: proxy,   who: scout2}
+- {at: {time: 55}, do: send_probe, where: fourth,  who: scout1}
+- {at: {time: 70}, do: send_probe, where: fifth,   who: scout1}
+- {at: {time: 80}, do: send_probe, where: main,    who: scout2}
+- {at: {time: 90}, do: send_probe, where: sixth,   who: scout1}
+
+# the builder probe runs a small home build order (`who:` builds use it)
+- {at: {time: 95}, do: build, what: Pylon, who: builder}
+- {at: {count: {Pylon: 1}}, do: build, what: Gateway, who: builder}
+- {at: {count: {Gateway: 1}}, do: build, what: CyberneticsCore, who: builder}
+
+# hand every named probe back to mining
+- {at: {count: {CyberneticsCore: 1}}, do: return_probe, who: scout1}
+- {at: {count: {CyberneticsCore: 1}}, do: return_probe, who: scout2}
+- {at: {count: {CyberneticsCore: 1}}, do: return_probe, who: builder}

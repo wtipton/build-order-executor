@@ -112,24 +112,24 @@ class WorldMixin:
             return int(self.supply_workers)
         return self.all_own_units(unit).ready.filter(lambda u: not u.is_hallucination).amount
 
-    # ======================================================== labelled probes
+    # ========================================================== named probes
     def _worker_by_tag(self, tag: int | None) -> Unit | None:
         if tag is None:
             return None
         found = self.workers.tags_in({tag})
         return found.first if found else None
 
-    def _worker_by_label(self, label: str | None) -> Unit | None:
-        """The live probe currently held under `label`, or None."""
-        if label is None:
+    def _worker_by_name(self, name: str | None) -> Unit | None:
+        """The live probe currently held under `who: <name>`, or None."""
+        if name is None:
             return None
-        return self._worker_by_tag(self.labelled_probes.get(label))
+        return self._worker_by_tag(self.named_probes.get(name))
 
     def _probes_unavailable_to_automation(self) -> set[int]:
         """Tags of probes that are on a specific assignment and must not be reassigned:
         those sent out by `send_probe` (held until a `return_probe`), plus the one walking
         to the next build site. Everything else is fair game for the economy."""
-        tags = set(self.labelled_probes.values())
+        tags = set(self.named_probes.values())
         if self.builder_state.builder_tag is not None:
             tags.add(self.builder_state.builder_tag)
         return tags
@@ -234,12 +234,12 @@ class WorldMixin:
         if spot is None:
             return False  # _find_build_target set _status where it can explain itself
         pos = spot.position  # Point2.position is itself, so this covers both
-        # A labelled build names its own probe (already off the line via send_probe).
+        # A `who:` build names its own probe (already off the line via send_probe).
         # If that probe is dead we fall back to the pool rather than stalling: losing the
         # author's choice of probe is bad, hanging the whole build order over it is worse.
-        label = getattr(step, "label", None)
-        worker = self._worker_by_label(label) if label is not None else None
-        origin = f"label:{label}" if worker is not None else "pool"
+        who = getattr(step, "who", None)
+        worker = self._worker_by_name(who) if who is not None else None
+        origin = f"who:{who}" if worker is not None else "pool"
         if worker is None:
             worker = self._free_probe_near(pos)
         if worker is None:

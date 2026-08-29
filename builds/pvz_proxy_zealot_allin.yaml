@@ -15,14 +15,14 @@
 # ===================== matched PvZ opener (through the first Adept) =========
 - {at: {time: 7},   do: chrono, target: Nexus}  # 1st chrono on probes (~6.5s)
 - {at: {supply: 12},  do: build,  what: Pylon,   prewalk: {minerals: 75}}  # Pylon=100
-- {at: {supply: 12},  do: send_probe, where: enemy_main, label: scout}  # poke-scout the enemy
+- {at: {supply: 12},  do: send_probe, where: enemy_main, who: scout}  # poke-scout the enemy
 - {at: {supply: 14},  do: build,  what: Gateway, prewalk: {minerals: 100}}  # Gateway=150
 - {at: {supply: 14},  do: chrono, target: Nexus}  # 2nd chrono the moment Nexus hits 50 energy
 - {at: {supply: 15},  do: build,  what: Assimilator}
 - {at: {count: {Assimilator: 1}}, do: gas_workers,  count: 1}  # pull one onto gas1
 - {at: {count: {Probe: 17}}, do: gas_workers, count: 2}  # 17th probe -> gas
 - {at: {supply: 19},  do: workers, state: stop}  # cut probes for Nexus + Core
-- {at: {supply: 19},  do: return_probe, label: scout}  # scout home to mining
+- {at: {supply: 19},  do: return_probe, who: scout}  # scout home to mining
 - {at: {count: {Probe: 19}}, do: gas_workers, count: 3}  # 19th probe -> gas
 - {at: {supply: 19},  do: build,  what: Nexus,   prewalk: {minerals: 300}}  # natural expansion (Nexus=400)
 - {at: {supply: 19},  do: build,  what: CyberneticsCore}
@@ -41,7 +41,7 @@
 - {at: {count: {CyberneticsCore: 1}}, do: research, what: Warpgate}
 - {at: {count: {CyberneticsCore: 1}}, do: gas_workers, count: 1}  # 3 probes to minerals; keep 1 on gas for the 3x25 morph gas
 - {at: {count: {CyberneticsCore: 1}}, do: chrono,   target: CyberneticsCore}  # chrono warpgate research
-- {at: {count: {CyberneticsCore: 1}}, do: send_probe, where: proxy, label: scout}  # scout to proxy
+- {at: {count: {CyberneticsCore: 1}}, do: send_probe, where: proxy, who: scout}  # scout to proxy
 - {at: {count: {CyberneticsCore: 1}}, do: set_rally_point, where: proxy}  # gateway zealots gather at the proxy
 - {at: {count: {Nexus: 2}}, do: rally_and_transfer_probes, base: 2}  # saturate the natural
 
@@ -52,7 +52,7 @@
 - {at: {count: {CyberneticsCore: 1}}, do: build, what: Gateway, prewalk: {minerals: 100}}
 - {at: {count: {CyberneticsCore: 1}}, do: build, what: Gateway, prewalk: {minerals: 100}}
 - {at: {count: {CyberneticsCore: 1}}, do: build, what: Gateway, prewalk: {minerals: 100}}
-- {at: {count: {CyberneticsCore: 1}}, do: build, what: Pylon, where: proxy, label: scout}  # proxy pylon
+- {at: {count: {CyberneticsCore: 1}}, do: build, what: Pylon, where: proxy, who: scout}  # proxy pylon
 # keep chrono flowing onto the warpgate research, then the gateways
 - {at: {time: 205}, do: chrono, target: CyberneticsCore}  # chrono research again
 

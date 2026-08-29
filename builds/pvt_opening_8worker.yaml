@@ -12,7 +12,7 @@
 - {at: {time: 7},     do: chrono, target: Nexus}  # 1st chrono on probes (~6.5s)
 - {at: {supply: 12},  do: build,  what: Pylon,   prewalk: {minerals: 75}}  # Pylon=100
 - {at: {supply: 14},  do: build,  what: Gateway, prewalk: {minerals: 100}}  # Gateway=150
-- {at: {supply: 14},  do: send_probe, where: enemy_main, label: scout}  # poke-scout the enemy
+- {at: {supply: 14},  do: send_probe, where: enemy_main, who: scout}  # poke-scout the enemy
 - {at: {supply: 14},  do: chrono, target: Nexus}  # 2nd chrono the moment Nexus hits 50 energy
 # cut probes at 18 to bank Nexus (400) + Gas (75) + Core (150) so all three land
 # on 18; resume after the Core, then 2nd Gas (19) and Pylon (20) follow naturally.
@@ -22,7 +22,7 @@
 - {at: {supply: 18},  do: gas_workers, count: 6}  # fully saturate both gases (3 each) as they finish
 - {at: {supply: 18},  do: build,  what: CyberneticsCore, prewalk: {minerals: 100}}  # Core=150
 - {at: {supply: 18},  do: workers, state: start}  # resume probes
-- {at: {supply: 18},  do: return_probe, label: scout}  # scout home to mining
+- {at: {supply: 18},  do: return_probe, who: scout}  # scout home to mining
 - {at: {supply: 19},  do: build,  what: Assimilator}  # 2nd gas
 - {at: {supply: 20},  do: build,  what: Pylon,   prewalk: {minerals: 75}}
 # @core: 1st Stalker (chrono) + Warpgate, then Sentry, Twilight, 2nd Stalker, 2nd Gate, Pylon

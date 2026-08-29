@@ -14,14 +14,14 @@
 # ===================== 1. Opener: 1-Gate Expand =====================
 - {at: {time: 7},     do: chrono, target: Nexus}  # 1st chrono on probes (~6.5s)
 - {at: {supply: 12},  do: build,  what: Pylon,   prewalk: {minerals: 75}}  # home Pylon=100
-- {at: {supply: 12},  do: send_probe, where: enemy_main, label: scout}  # scout probe
+- {at: {supply: 12},  do: send_probe, where: enemy_main, who: scout}  # scout probe
 - {at: {supply: 14},  do: build,  what: Gateway, prewalk: {minerals: 100}}  # 1st Gateway
 - {at: {supply: 14},  do: chrono, target: Nexus}  # 2nd chrono at 50 energy
 - {at: {supply: 15},  do: build,  what: Assimilator}  # main gas 1
 - {at: {count: {Assimilator: 1}}, do: gas_workers, count: 1}
 - {at: {count: {Probe: 17}}, do: gas_workers, count: 2}
 - {at: {supply: 18},  do: workers, state: stop}  # cut probes for Nexus + Core + Gas 2
-- {at: {supply: 18},  do: return_probe, label: scout}
+- {at: {supply: 18},  do: return_probe, who: scout}
 - {at: {supply: 18},  do: build,  what: Nexus,   prewalk: {minerals: 300}}  # natural expansion (Nexus=400)
 - {at: {supply: 18},  do: build,  what: Assimilator}  # main gas 2
 - {at: {supply: 18},  do: build,  what: CyberneticsCore, prewalk: {minerals: 100}}

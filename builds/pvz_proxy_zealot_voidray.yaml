@@ -27,14 +27,14 @@
 #  can't stall the tech divergence — the economic decisions are unchanged.)
 - {at: {time: 7},   do: chrono, target: Nexus}  # 1st chrono on probes (~6.5s)
 - {at: {supply: 12},  do: build,  what: Pylon,   prewalk: {minerals: 75}}  # Pylon=100
-- {at: {supply: 12},  do: send_probe, where: enemy_main, label: scout}  # poke-scout the enemy
+- {at: {supply: 12},  do: send_probe, where: enemy_main, who: scout}  # poke-scout the enemy
 - {at: {supply: 14},  do: build,  what: Gateway, prewalk: {minerals: 100}}  # Gateway=150
 - {at: {supply: 14},  do: chrono, target: Nexus}  # 2nd chrono the moment Nexus hits 50 energy
 - {at: {supply: 15},  do: build,  what: Assimilator}
 - {at: {count: {Assimilator: 1}}, do: gas_workers,  count: 1}  # pull one onto gas1
 - {at: {count: {Probe: 17}}, do: gas_workers, count: 2}  # 17th probe -> gas
 - {at: {supply: 19},  do: workers, state: stop}  # cut probes for Nexus + Core
-- {at: {supply: 19},  do: return_probe, label: scout}  # scout home to mining
+- {at: {supply: 19},  do: return_probe, who: scout}  # scout home to mining
 - {at: {count: {Probe: 19}}, do: gas_workers, count: 3}  # 19th probe -> gas
 - {at: {supply: 19},  do: build,  what: Nexus,   prewalk: {minerals: 300}}  # natural expansion (Nexus=400)
 - {at: {supply: 19},  do: build,  what: CyberneticsCore}
@@ -56,7 +56,7 @@
 # 1) Stargate first — the Void Ray (4:15) is the tightest deadline (150/150).
 - {at: {count: {CyberneticsCore: 1}}, do: build, what: Stargate, prewalk: {minerals: 130}}  # for the Void Ray
 - {at: {count: {CyberneticsCore: 1}}, do: train, what: Adept}  # 2nd Adept (both done well before 4:15)
-- {at: {count: {CyberneticsCore: 1}}, do: send_probe, where: proxy, label: scout}  # scout -> proxy (long walk overlaps)
+- {at: {count: {CyberneticsCore: 1}}, do: send_probe, where: proxy, who: scout}  # scout -> proxy (long walk overlaps)
 - {at: {count: {CyberneticsCore: 1}}, do: set_rally_point, where: proxy}  # gateway Zealots gather at the proxy
 
 # Warpgate research EARLY (before the Void Ray) — it's only 50 gas, and it gates the
@@ -118,8 +118,8 @@
 # min banked). Two pylons ~double the powered tiles so the whole warp window lands.
 # Built after the home pylons (their across-map pending count is type-wide and would
 # otherwise stall home pylons).
-- {at: {time: 250}, do: build, what: Pylon, where: proxy, label: scout}  # proxy pylon 1
-- {at: {time: 250}, do: build, what: Pylon, where: proxy, label: scout}  # proxy pylon 2 (more warp-in space)
+- {at: {time: 250}, do: build, what: Pylon, where: proxy, who: scout}  # proxy pylon 1
+- {at: {time: 250}, do: build, what: Pylon, where: proxy, who: scout}  # proxy pylon 2 (more warp-in space)
 
 # tech gas is all paid now (Twilight/Charge/Warpgate); the morph only needs 100 more
 # (banked). Pull gas to minerals so the 100-min warp-ins are well funded.
