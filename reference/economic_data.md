@@ -37,28 +37,29 @@ The 4-large/4-small split is the LotV standard, so a base's mineral line is only
 
 ## 2. Mineral mining
 
-### Close vs. far patches
-
 Mineral patches are staggered in their distance from the nexus: close or far. CatalystLE's
 main bases have 3 close and 5 far patches (though most maps have 4 of each). A worker on a
 near patch mines ~13% faster than one on a far patch** (62 vs ~54 min/min).
 
-However, the build order executor doesn't currently give build order authors control over
-the exact mineral patches that probes mine from, and by default, the game engine spreads
-probes over patches of both types. So, the §2 per-worker average of 0.95 should be used for
-whole-base planning.
+The build order executor takes care to preferentially assign workers to near patches in the
+main base at the beginning of the game.
 
-### Mining rates with different numbers of workers
+Thus, at the beginning of the game, the first (2 * number of close patch) workers mine
+slightly more efficiently than the rest, up to 16 workers. Then, there are much more severe
+diminishing returns up to 24 workers. And then there is no gain from exceeding 24 workers on
+minerals per base.
 
-Per-worker mining rates are essentially flat up to 2 workers per patch (16 workers total).
-There are diminishing returns up to 24 workers. And then there is no gain from exceeding
-24 workers on minerals per base. Specifically:
+Specifically:
 
-- **Workers 1–16: ≈ 0.95 min/s each** (57 min/min). Essentially flat — a base is linear
-  right up to 2 workers per patch.
-- **Workers 17–24: ≈ 0.45 min/s each** (27 min/min), i.e. **less than half**. Past 16 a
-  base is still worth adding to, but an expansion is worth 2.1× as much per probe.
-- A base caps at **18.83 min/s**; workers beyond 24 add nothing.
+- **Workers 1 to 2×(close patches)**: ≈1.03 min/s each (62 min/min).
+- **Up to 16 workers: ≈0.91 min/s each** (54 min/min). The close patches are full, so
+  these are on the far row — the ~13% penalty above.
+- **Workers 17–24: ≈0.43 min/s each** (26 min/min), i.e. **half again**. These are third
+  probes on an already-busy patch, which is why the drop is so steep.
+- **Beyond 24: nothing.** A base caps at **18.79 min/s** (1,127 min/min).
+
+For whole-base planning with good saturation past the opening, just use 0.95 min/s: the
+blend of the first two tiers.
 
 ---
 
@@ -89,7 +90,7 @@ Notes:
 - **Cost**: 50 minerals + 1 supply.
 - **Below 16 workers on the base**: +0.95 min/s ⇒ pays for itself after **~53s of
   mining** (~65s from the moment you start training it).
-- **As the 17th–24th on a base**: +0.45 min/s ⇒ **~112s of mining**. Over a 5-minute
+- **As the 17th–24th on a base**: +0.43 min/s ⇒ **~116s of mining**. Over a 5-minute
   build a probe added here returns roughly half what an earlier one does.
 
 ### Chrono Boost on probes

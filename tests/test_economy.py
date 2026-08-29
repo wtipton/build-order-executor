@@ -8,6 +8,8 @@ picture. Those tests move workers and assert the state keeps up.
 
 from __future__ import annotations
 
+from collections import Counter
+
 from sc2.ids.unit_typeid import UnitTypeId as U
 from sc2.position import Point2
 
@@ -441,3 +443,88 @@ async def test_gas_workers_pulled_from_populating_base_not_old_base():
     w_base2.gather.assert_called_once_with(gas_at_base1)
 
 
+
+
+# ------------------------------------------------------------- opening_split
+# The opening worker split. Its gas guard is unreachable in normal play (the window
+# closes before any Assimilator can exist), so these tests are the only thing keeping it
+# honest if OPENING_SPLIT_UNTIL is ever raised.
+
+
+def _split_bot(workers, *, gas=(), patches=(), time=0.0, assignment=None):
+    return fake_bot(
+        time=time,
+        workers=FakeUnits(workers),
+        gas_buildings=FakeUnits(gas),
+        _probes_unavailable_to_automation=lambda: set(),
+        _home_patches=lambda: list(patches),
+        _split_patch=BuildOrderBot._split_patch,
+        _split_assignment=assignment if assignment is not None else {},
+    )
+
+
+async def test_opening_split_puts_two_probes_on_each_near_patch():
+    patches = [_field(tag=10 + i, x=i) for i in range(4)]
+    probes = [_gathering(i, x=0) for i in range(4)]
+    bot = _split_bot(probes, patches=patches)
+    await BuildOrderBot.opening_split(bot)
+    # 4 probes, 4 patches -> the near half (patches 10, 11) taken 2 deep
+    assert sorted(bot._split_assignment.values()) == [10, 10, 11, 11]
+
+
+def test_opening_split_never_stacks_more_than_two_per_patch():
+    """At the worker counts a game actually starts with (8 or 12), every patch gets at
+    most 2 probes -- a third adds only ~20 min/min against ~55 for a second probe on an
+    unused patch. The assignment is built once at t=0, so those are the only sizes that
+    occur; _split_patch does start stacking thirds beyond 16, which this pins as
+    out-of-range rather than endorses."""
+    patches = [_field(tag=10 + i, x=i) for i in range(8)]
+    for n_probes in (8, 12):
+        slots = [BuildOrderBot._split_patch(patches, i) for i in range(n_probes)]
+        per_patch = Counter(s.tag for s in slots)
+        assert max(per_patch.values()) <= 2, (n_probes, per_patch)
+        assert sum(per_patch.values()) == n_probes
+        # and the doubled-up ones are the NEAR half, which is the point of the exercise
+        assert {t for t, c in per_patch.items() if c == 2} == {10, 11, 12, 13}
+
+
+async def test_opening_split_assignment_preserves_the_slot_distribution():
+    """match_nearest only permutes probes across slots, so the per-patch counts it
+    produces are exactly the ones _split_patch asked for."""
+    patches = [_field(tag=10 + i, x=i) for i in range(8)]
+    probes = [_gathering(i, x=i * 0.5) for i in range(12)]
+    bot = _split_bot(probes, patches=patches)
+    await BuildOrderBot.opening_split(bot)
+    got = Counter(bot._split_assignment.values())
+    want = Counter(BuildOrderBot._split_patch(patches, i).tag for i in range(12))
+    assert got == want, (got, want)
+    assert max(got.values()) <= 2
+
+
+async def test_opening_split_leaves_gas_probes_alone():
+    """A probe a gas_workers step has moved onto a geyser must not be dragged back."""
+    patches = [_field(tag=10 + i, x=i) for i in range(4)]
+    geyser = _geyser(50, x=0)
+    on_gas = _gathering(1, x=0, from_gas=50)
+    on_minerals = _gathering(2, x=0)
+    bot = _split_bot([on_gas, on_minerals], gas=[geyser], patches=patches)
+    await BuildOrderBot.opening_split(bot)
+    assert on_gas.tag not in bot._split_assignment, "gas probe was assigned a patch"
+    assert not on_gas.gather.called, "gas probe was pulled off its geyser"
+
+
+async def test_opening_split_leaves_probes_hauling_gas_alone():
+    """Mid-return the order target is the Nexus, so only the carry flag identifies it."""
+    patches = [_field(tag=10 + i, x=i) for i in range(4)]
+    hauling = _returning(1, x=0)
+    bot = _split_bot([hauling], gas=[_geyser(50, x=0)], patches=patches)
+    await BuildOrderBot.opening_split(bot)
+    assert not hauling.gather.called
+
+
+async def test_opening_split_stops_after_the_window():
+    patches = [_field(tag=10 + i, x=i) for i in range(4)]
+    probe = _gathering(1, x=0)
+    bot = _split_bot([probe], patches=patches, time=999.0)
+    await BuildOrderBot.opening_split(bot)
+    assert not probe.gather.called and not bot._split_assignment

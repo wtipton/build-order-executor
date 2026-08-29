@@ -77,6 +77,9 @@ class BuildOrderBot(StepsMixin, EconomyMixin, WorldMixin, ObserveMixin, BotAI):
         #   (1) build spec should probably specify what base to populate gas on
         #   (2) need to ensure workers are correctly allocated to assimilators
         self.gas_target: int = 0  # no workers in gas until a `gas_workers` step says so
+        # Opening worker split: stack the starting probes on the near mineral patches for
+        # the first few seconds (see EconomyMixin.opening_split).
+        self._split_assignment: dict[int, int] = {}  # probe tag -> patch tag
 
         # Rally system: all combat unit production buildings get rallied to a single
         # rally point. Defaults to main ramp (set in on_start). `_rallied` is the set of
@@ -139,6 +142,7 @@ class BuildOrderBot(StepsMixin, EconomyMixin, WorldMixin, ObserveMixin, BotAI):
             self._last_status = self.time
             self._status_report()
         self._note_completions()
+        await self.opening_split()  # before anything can pull a probe off the line
         await self.manage_builder()
         await self.train_workers()  # probes first: continuous, first claim on minerals each frame
         await self.run_steps()

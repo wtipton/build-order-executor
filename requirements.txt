@@ -1,6 +1,9 @@
 # Runtime dependencies for the build-order bot. Direct deps only; burnysc2 pulls in
-# the rest (aiohttp, numpy, scipy, loguru, portpicker, pys2clientprotocol).
+# the rest (aiohttp, numpy, loguru, portpicker, pys2clientprotocol).
 # Pinned to the versions this repo is developed against (see the local .venv).
 burnysc2==7.3.0
 pydantic==2.13.4
 PyYAML==6.0.3
+# Only for matching.match_nearest (the opening worker split's probe->patch assignment);
+# already present transitively via burnysc2, pinned here because we import it directly.
+scipy==1.18.1

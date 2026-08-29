@@ -67,6 +67,9 @@ MIN_PATCH_RESERVE = 300  # move to a fresh base once the thinnest patch drops be
 MAX_NEXUS_OFFSET = 1.5   # a debug-placed Nexus further off the base centre than this is unusable
 GEYSER_MATCH = 1.0       # a properly built Assimilator snaps onto its geyser; anything
                          # further off than this is a stray and gets cleaned up
+NUDGE_INTERVAL = 1.0     # min gap between re-orders of a strayed worker (sticky phases):
+                         # often enough to catch the patch free, rare enough not to
+                         # cancel the harvest it does manage to start
 DRAIN_S = 4.0            # hold the base empty this long before spawning a phase's probes,
                          # so an in-flight debug_create can't land mid-measurement
 
@@ -106,6 +109,11 @@ def phases() -> list[dict]:
     for assign in ("rr", "near"):
         for n in (4, 8, 12):
             p.append({"kind": "min", "n": n, "assign": assign})
+    # Same again, but INSISTING (sticky) rather than ordering once -- repeated gather
+    # orders do hold a worker on a patch the engine would have moved it off.
+    for n in (4, 6, 8, 12):
+        p.append({"kind": "min", "n": n, "assign": "rr"})
+        p.append({"kind": "min", "n": n, "assign": "near", "sticky": True})
     # Gas.
     for n in [1, 2, 3, 4]:
         p.append({"kind": "gas", "n": n, "geysers": 1})
@@ -155,6 +163,8 @@ class EconomyMeasureBot(BotAI):
         self._trip_events: list = []   # (time, is_carrying) at each transition
         self._trip_targets: dict = {}  # order_target tag -> frames seen
         self._was_carrying = False
+        self._last_nudge: dict = {}  # worker tag -> last sticky re-order (see _keep_mining)
+        self._nudges = 0
 
     # ------------------------------------------------------------------ helpers
     @property
@@ -395,6 +405,7 @@ class EconomyMeasureBot(BotAI):
         self._requested = 0
         self._restarts = 0
         self._zero_since = None
+        self._last_nudge, self._nudges = {}, 0
         self._enter("setup")
 
     def _enter(self, stage: str) -> None:
@@ -598,12 +609,36 @@ class EconomyMeasureBot(BotAI):
             self._enter("settle")
 
     def _keep_mining(self, force: bool = False) -> None:
-        """Order each worker onto its assigned target. Only re-issued to workers that
-        have gone idle -- re-issuing a gather order every frame restarts the harvest."""
+        """Order each worker onto its assigned target.
+
+        Normally the order goes in once: re-issuing every frame restarts the harvest, and
+        a worker left alone returns to its own patch after each delivery anyway.
+
+        With `sticky`, we keep INSISTING (see _renew_if_strayed). One gather order at a
+        patch another worker is already on gets overridden by the engine, but repeating it
+        does stick -- eventually one lands while the patch is momentarily free, and from
+        then on the worker stays. That's what lets a phase hold workers on patches the
+        engine would not have chosen.
+        """
         targets = self._targets()
+        sticky = self.phase.get("sticky") and not force
         for w, target in zip(sorted(self.workers, key=lambda u: u.tag), targets):
             if force or w.is_idle:
                 w.gather(target)
+            elif sticky:
+                self._renew_if_strayed(w, target)
+
+    def _renew_if_strayed(self, w, target) -> None:
+        """Re-order a worker the engine has bumped off its assigned patch."""
+        if w.is_carrying_minerals:
+            return  # mid-haul: let it deliver, re-targeting now just wastes the load
+        if w.order_target == target.tag:
+            return  # already on the patch we want
+        if self.time - self._last_nudge.get(w.tag, -99.0) < NUDGE_INTERVAL:
+            return  # rate-limited: a nudge every frame would restart its harvest forever
+        self._last_nudge[w.tag] = self.time
+        self._nudges += 1
+        w.gather(target)
 
     COLUMNS = ["kind", "n", "assign", "secs", "collected", "extracted", "rate_per_s",
                "extr_per_s", "per_worker_per_s", "per_worker_per_min", "detail"]
@@ -640,7 +675,8 @@ class EconomyMeasureBot(BotAI):
                    f"dists={[round(float(g.distance_to(self.nexus)), 2) for g in self._geysers()]}"
                    if gas else
                    f"nexus={base.assigned_harvesters}/{base.ideal_harvesters} "
-                   f"per_patch={[self.t0[pool][k] - t1[pool].get(k, 0) for k in self.t0[pool]]}"))
+                   f"per_patch={[self.t0[pool][k] - t1[pool].get(k, 0) for k in self.t0[pool]]}"
+                   + (f" nudges={self._nudges}" if self.phase.get("sticky") else "")))
         return {
             "base": self._base_i,
             "patch_dists": [round(m.distance_to(base), 2) for m in self._patches()],

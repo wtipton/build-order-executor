@@ -15,6 +15,11 @@ from sc2.unit import Unit
 from sc2.units import Units
 
 from catalog import FULL_MINERAL_SATURATION
+from matching import match_nearest
+
+# How long to keep re-issuing the assignment of probes to patches. This only has to cover
+# the initial scramble:
+OPENING_SPLIT_UNTIL = 10.0
 
 class EconomyFrameState:
     """Who is mining what, seeded from the frame's observation and kept current as we
@@ -127,6 +132,67 @@ class EconomyFrameState:
 
 
 class EconomyMixin:
+    async def opening_split(self) -> None:
+        """Stack the starting probes 2-deep on the NEAR row of patches.
+
+        A probe on the near row mines ~13% faster than one on the far row
+        (reference/economic_data.md §2), and a patch takes 2 probes at full rate, so the
+        best use of the opening workers is to double up on the near row rather than to
+        spread one per patch. Workers past 2 per near patch go round-robin on far patches.
+
+        The engine sometimes undoes a single gather order aimed at a patch it would rather
+        not use, so the assignment is re-issued every frame until it takes.
+        """
+        if self.time > OPENING_SPLIT_UNTIL:
+            return
+        patches = self._home_patches()
+        if not patches:
+            return
+        econ = self.workers.tags_not_in(self._probes_unavailable_to_automation() or [])
+        # A probe a `gas_workers` step has put on a geyser is not ours to move back. With
+        # the window as short as it is no Assimilator can exist yet, so this is currently
+        # unreachable -- it is here so that raising OPENING_SPLIT_UNTIL stays safe.
+        gas_tags = {g.tag for g in self.gas_buildings}
+        econ = econ.filter(lambda w: not w.is_carrying_vespene and w.order_target not in gas_tags)
+        if not self._split_assignment:
+            probes = sorted(econ, key=lambda u: u.tag)
+            slots = [self._split_patch(patches, i) for i in range(len(probes))]
+            for w, patch in match_nearest(probes, slots):
+                self._split_assignment[w.tag] = patch.tag
+        by_tag = {m.tag: m for m in patches}
+        for w in econ:
+            want = self._split_assignment.get(w.tag)
+            # Mid-haul is left alone: re-targeting a loaded probe just wastes the trip.
+            if want is None or want not in by_tag or w.is_carrying_minerals:
+                continue
+            if w.order_target == want:
+                continue
+            w.gather(by_tag[want])
+
+    @staticmethod
+    def _split_patch(patches: list[Unit], i: int) -> Unit:
+        """Which patch the i-th probe (nearest-first order) should take.
+
+        The near row is taken to be the closer half of the patches. That is a heuristic --
+        the rows are not always an even split (CatalystLE's main is 3/5, LockdownLE's is
+        4/4) and the real boundary is a step in round-trip time, not a gap in distance --
+        but "closer half, 2 deep" captures the gain on a standard base without needing to
+        probe the geometry.
+        """
+        near = len(patches) // 2
+        if i < 2 * near:
+            return patches[i // 2]                       # 2 deep on the near row
+        far = patches[near:] or patches
+        return far[(i - 2 * near) % len(far)]            # then spread over the far row
+
+    def _home_patches(self) -> list[Unit]:
+        """The main base's patches, nearest first."""
+        nexus = self.townhalls.closest_to(self.start_location) if self.townhalls else None
+        if nexus is None:
+            return []
+        fields = self.mineral_field.closer_than(12, nexus)
+        return sorted(fields, key=lambda m: (round(m.distance_to(nexus), 3), m.tag))
+
     async def train_workers(self) -> None:
         # By default, we schedule workers on every idle nexus on every frame.
         if not self.continuously_build_workers or self.supply_left <= 0:
