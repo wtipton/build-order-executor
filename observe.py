@@ -19,7 +19,6 @@ from sc2.unit import Unit
 from catalog import (
     BUILDABLE_STRUCTURES,
     CHRONO_ENERGY,
-    FULL_MINERAL_SATURATION,
     PRODUCTION_BUILDINGS,
     RESEARCH,
     TRAINABLE_UNITS,
@@ -188,7 +187,10 @@ class ObserveMixin:
               f"{'  ' + detail if detail else ''}", flush=True)
 
     def _base_saturation(self) -> str:
-        return " ".join(f"b{i+1}={t.assigned_harvesters}/{FULL_MINERAL_SATURATION}"
+        """`bN=assigned/ideal` per base. The denominator is the Nexus's own
+        ideal_harvesters (2 per remaining mineral patch), so a base that has partly
+        mined out reports against what it can still take."""
+        return " ".join(f"b{i+1}={t.assigned_harvesters}/{t.ideal_harvesters}"
                         for i, t in enumerate(self.ordered_bases()))
 
     def _chrono_available(self) -> int:

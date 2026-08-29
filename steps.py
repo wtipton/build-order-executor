@@ -19,7 +19,6 @@ from catalog import (
     CHRONO_ENERGY,
     HALLUCINATION_ABILITY,
     HALLUCINATION_CASTER,
-    FULL_MINERAL_SATURATION,
     HALLUCINATION_ENERGY,
     MORPH,
     PRODUCER,
@@ -352,13 +351,13 @@ class StepsMixin:
             nexus(AbilityId.RALLY_WORKERS, field)
         # transfer every OTHER base's excess mineral workers here, leaving each at
         # the cap. assigned_harvesters is the accurate count, so moving exactly
-        # (assigned - cap) of that base's workers lands it on the cap. Prefer ones
+        # (assigned - ideal) of that base's workers lands it on the cap. Prefer ones
         # not carrying (no wasted trip), but include carriers if needed to reach it.
         pool = self.workers.tags_not_in(self._probes_unavailable_to_automation()).filter(lambda w: w.is_gathering)
         for th in self.ordered_bases():
             if th.position.distance_to(target) < 6:
                 continue  # this IS the target base
-            excess = th.assigned_harvesters - FULL_MINERAL_SATURATION
+            excess = th.assigned_harvesters - th.ideal_harvesters
             if excess <= 0:
                 continue
             near = pool.closer_than(10, th).sorted(key=lambda w: w.is_carrying_minerals)

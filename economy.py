@@ -14,7 +14,6 @@ from sc2.position import Point2
 from sc2.unit import Unit
 from sc2.units import Units
 
-from catalog import FULL_MINERAL_SATURATION
 from matching import match_nearest
 
 # How long to keep re-issuing the assignment of probes to patches. This only has to cover

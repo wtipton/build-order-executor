@@ -187,8 +187,10 @@ async def test_rally_and_transfer_probes_skips_the_target_base_when_transferring
     """Excess comes from the OTHER bases — the target is identified by position now, so
     a Nexus sitting on it must not be treated as a donor."""
     field = object()
-    at_target = fake_unit(tag=1, position=Point2((100.0, 100.0)), assigned_harvesters=99)
-    donor = fake_unit(tag=2, position=Point2((10.0, 10.0)), assigned_harvesters=0)
+    at_target = fake_unit(tag=1, position=Point2((100.0, 100.0)),
+                          assigned_harvesters=99, ideal_harvesters=16)
+    donor = fake_unit(tag=2, position=Point2((10.0, 10.0)),
+                      assigned_harvesters=0, ideal_harvesters=16)
     nexus = fake_unit()
     fake = fake_bot(
         base_position=lambda n: Point2((100.0, 100.0)),
@@ -202,3 +204,29 @@ async def test_rally_and_transfer_probes_skips_the_target_base_when_transferring
     assert await BuildOrderBot.do_rally_and_transfer_probes(fake, fake_bot(base=2)) is True
     # at_target is way over the cap; if it weren't skipped we'd try to drain it
     assert fake.populating_base_num == 2
+
+
+async def test_transfer_caps_each_base_at_its_remaining_patches_not_a_constant():
+    """ideal_harvesters is 2 per mineral patch STILL STANDING, so a base that has partly
+    mined out sheds probes down to what it can still use. A fixed 16 would leave them
+    sitting on a base with nothing left to mine."""
+    field = object()
+    target = fake_unit(tag=1, position=Point2((100.0, 100.0)),
+                       assigned_harvesters=0, ideal_harvesters=16)
+    # 5 patches left -> ideal 10, and 13 probes on it: 3 too many
+    mined_out = fake_unit(tag=2, position=Point2((10.0, 10.0)),
+                          assigned_harvesters=13, ideal_harvesters=10)
+    movers = [fake_unit(tag=10 + i, position=Point2((10.0, 10.0)), is_gathering=True,
+                        is_carrying_minerals=False) for i in range(5)]
+    fake = fake_bot(
+        base_position=lambda n: Point2((100.0, 100.0)),
+        _base_field=lambda pos: field,
+        ordered_bases=lambda: FakeUnits([target, mined_out]),
+        populating_base_num=1,
+        townhalls=lambda t: FakeUnits([fake_unit()]),
+        workers=FakeUnits(movers),
+        _probes_unavailable_to_automation=lambda: set(),
+    )
+    assert await BuildOrderBot.do_rally_and_transfer_probes(fake, fake_bot(base=1)) is True
+    moved = [w for w in movers if w.gather.called]
+    assert len(moved) == 3, f"expected 13-10=3 moved, got {len(moved)}"

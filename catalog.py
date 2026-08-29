@@ -32,9 +32,6 @@ from sc2.dicts.unit_trained_from import UNIT_TRAINED_FROM
 from sc2.dicts.unit_train_build_abilities import TRAIN_INFO
 from sc2.dicts.upgrade_researched_from import UPGRADE_RESEARCHED_FROM
 
-# Count of mineral workers to fully saturate one base.
-FULL_MINERAL_SATURATION = 16
-
 # Game frames per second — the unit for every `cost.time` in game data.
 FRAMES_PER_SEC = 22.4
 

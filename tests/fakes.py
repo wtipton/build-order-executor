@@ -72,6 +72,12 @@ class FakeUnits(list):
     def closest_to(self, pos):
         return min(self, key=lambda u: u.position.distance_to(pos))
 
+    def closer_than(self, distance, position) -> "FakeUnits":
+        """Real `Units.closer_than` takes a Unit or a Point2, so unwrap `.position`
+        (Point2.position is itself, which covers both)."""
+        pos = getattr(position, "position", position)
+        return FakeUnits(u for u in self if u.position.distance_to(pos) < distance)
+
 
 def fake_unit(**attrs) -> MagicMock:
     """A stand-in game unit. It's callable (so `unit(ability)` records a call) and
