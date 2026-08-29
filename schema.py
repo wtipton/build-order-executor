@@ -106,7 +106,7 @@ class TrainStep(_StepBase):
 class WarpStep(_StepBase):
     do: Literal["warp"]
     what: str            # unit to warp in (Zealot, Stalker, Sentry, Adept, HighTemplar, DarkTemplar)
-    where: Place = "proxy"  # which pylon to warp at (the ready pylon nearest this place)
+    where: Place         # which pylon to warp at (the ready pylon nearest this place)
 
     _check = field_validator("what")(staticmethod(catalog.require_warpable))
 
@@ -150,7 +150,7 @@ class ReturnProbeStep(_StepBase):
 
 class SetRallyPointStep(_StepBase):
     do: Literal["set_rally_point"]
-    where: Place = "natural"
+    where: Place         # where newly-produced combat units gather
 
 
 class RallyAndTransferProbesStep(_StepBase):
