@@ -24,10 +24,19 @@ from schema import Step
 
 @dataclass
 class WarpConfirm:
-    """The unit-count baseline for confirming warps completed. There is no `issued`
-    counter: progress is measured from the units that appeared, so a warp order the game
-    dropped gets re-issued instead of counting toward `count`."""
-    baseline: int | None = None      # unit count when the step started
+    """The units this step has warped in, by tag.
+
+    Tags rather than a count of the type, because a type count can't tell a warped unit
+    from one a Gateway happened to finish training mid-step, and would count the latter
+    toward `count` — warping fewer than asked. Warp-in is distinguishable: it puts the
+    unit on the map immediately at build_progress < 1, whereas a trained unit doesn't
+    exist until it pops out complete. So anything of this type seen part-built is ours."""
+    # Tags mid-warp on the step's first frame, so ordered by an earlier step. Subtracted
+    # from every later reading. None means the first frame hasn't happened yet.
+    warping_at_start: set[int] | None = None
+    # Tags seen mid-warp since, minus the above: the units this step has warped in. Kept
+    # after they finish, since a warp that completed still counts toward `count`.
+    warped_in: set[int] = field(default_factory=set)
 
 
 @dataclass

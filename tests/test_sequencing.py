@@ -90,22 +90,22 @@ async def test_empty_build_is_complete_immediately():
 
 
 async def test_step_state_is_reset_on_advance():
-    # The whole contract of StepState: a finished step's in-flight state must not
-    # leak into the next one. Handlers rely on `baseline is None` meaning "my first
-    # frame", so a stale baseline would silently skip a step's capture.
+    # The whole contract of StepState: a finished step's in-flight state must not leak
+    # into the next one. Handlers rely on an unset baseline / warping_at_start meaning
+    # "my first frame", so a stale one would silently skip a step's capture.
     steps = [_step(), _step()]
     seen = []
 
     async def run_handler(step):
-        seen.append((step, fake.step_state.warp.baseline, fake.step_state.morph.target))
-        fake.step_state.warp.baseline = 7       # pretend this step went in flight
+        seen.append((step, fake.step_state.warp.warped_in, fake.step_state.morph.target))
+        fake.step_state.warp.warped_in = {7}      # pretend this step went in flight
         fake.step_state.morph.target = 3
         return True
 
     fake = _seq_bot(steps, trigger_met=lambda at: True, run_handler=run_handler)
     await BuildOrderBot.run_steps(fake)
 
-    assert seen == [(steps[0], None, 0), (steps[1], None, 0)], "state leaked between steps"
+    assert seen == [(steps[0], set(), 0), (steps[1], set(), 0)], "state leaked between steps"
     assert fake.step_state == StepState(), "StepState not fully cleared after the last step"
     assert fake.step_state.started_at == fake.time, "advance must stamp when the new step began"
 

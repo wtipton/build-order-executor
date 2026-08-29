@@ -239,19 +239,25 @@ class StepsMixin:
 
         A warp isn't "done" when we issue it: a Warpgate still reads as off-cooldown to
         get_available_abilities on the frame(s) right after we warp from it, so trusting
-        the issue would over-warp (mark N done with only 2 gates). Instead advance only
-        once the units appear, i.e. the count has grown past the baseline captured when
-        the step started.
+        the issue would over-warp (mark N done with only 2 gates). Instead advance once
+        the units are on the map, collected by tag in step_state.warp — see WarpConfirm
+        for why tags and not a count of the type.
 
         This is also why `count` can't over-warp. A gate used this frame may still read
         ready next frame, but the unit it produced appears in that same observation, so
         `remaining` drops by one at the same time."""
         unit = unit_id(step.what)
         want = step.count or 1
-        if self.step_state.warp.baseline is None:
-            self.step_state.warp.baseline = self.units(unit).amount
+        wc = self.step_state.warp
 
-        remaining = want - (self.units(unit).amount - self.step_state.warp.baseline)
+        # Anything of this type that's part-built is mid-warp. Whatever was already
+        # mid-warp on our first frame was ordered by an earlier step, so subtract it.
+        warping_now = {u.tag for u in self.units(unit) if u.build_progress < 1}
+        if wc.warping_at_start is None:
+            wc.warping_at_start = warping_now
+        wc.warped_in |= warping_now - wc.warping_at_start
+
+        remaining = want - len(wc.warped_in)
         if remaining <= 0:
             return True
 

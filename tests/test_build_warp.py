@@ -378,16 +378,21 @@ async def test_successful_placement_leaves_no_stall_reason():
 
 
 # ============================================================ do_warp
-def _warp_bot(*, unit_amount, afford, warpgates, ready_abilities, placement, **over):
+def _warp_bot(*, warping=(), afford=True, warpgates=(), ready_abilities=(), placement=None, **over):
+    """`warping` = tags of units of the step's type that are mid-warp (build_progress < 1).
+    A trained unit never looks like this — it appears complete — which is what lets do_warp
+    tell its own warp-ins from whatever a Gateway finished."""
     ability = WARP_ABILITY[U.ZEALOT]
+    units = [fake_unit(tag=t, build_progress=0.5) for t in warping]
     base = dict(
         step_state=StepState(),
-        units=lambda t: FakeUnits([object()] * unit_amount),
+        units=lambda t: FakeUnits(units),
         can_afford=lambda u: afford,
-        structures=lambda t: FakeUnits(warpgates),
+        structures=lambda t: FakeUnits(list(warpgates)),
         get_available_abilities=AsyncMock(return_value=[ready_abilities for _ in warpgates]),
         _warp_pylon=lambda where: fake_unit(position=Point2((10.0, 10.0))),
         find_placement=AsyncMock(return_value=placement),
+        _status="",
     )
     base.update(over)
     return fake_bot(**base), ability
@@ -397,32 +402,55 @@ def _zealot_step(count=None):
     return fake_bot(what="Zealot", where="proxy", count=count)
 
 
+def _mid_step(fake, *, already_warped=()):
+    """Past the step's first frame: nothing was in flight when it started, and these tags
+    have been warped by it so far."""
+    fake.step_state.warp.warping_at_start = set()
+    fake.step_state.warp.warped_in = set(already_warped)
+
+
 async def test_warp_confirms_when_unit_appears():
-    step = _zealot_step()
-    fake, _ = _warp_bot(unit_amount=1, afford=True, warpgates=[], ready_abilities=[], placement=None)
-    fake.step_state.warp.baseline = 0
-    assert await BuildOrderBot.do_warp(fake, step) is True
+    fake, _ = _warp_bot(warping=[1])
+    _mid_step(fake)
+    assert await BuildOrderBot.do_warp(fake, _zealot_step()) is True
 
 
 async def test_warp_holds_when_no_warpgate():
-    fake, _ = _warp_bot(unit_amount=0, afford=True, warpgates=[], ready_abilities=[], placement=None)
+    fake, _ = _warp_bot(warpgates=[])
     assert await BuildOrderBot.do_warp(fake, _zealot_step()) is False
 
 
 async def test_warp_holds_when_all_on_cooldown():
     wg = fake_unit()
-    fake, _ = _warp_bot(unit_amount=0, afford=True, warpgates=[wg], ready_abilities=[], placement=None)
+    fake, _ = _warp_bot(warpgates=[wg], ready_abilities=[])
     assert await BuildOrderBot.do_warp(fake, _zealot_step()) is False
 
 
 async def test_warp_issues_when_gate_ready_and_tile_free():
     wg = fake_unit()
-    ability = WARP_ABILITY[U.ZEALOT]
     pos = Point2((11.0, 11.0))
-    fake, _ = _warp_bot(unit_amount=0, afford=True, warpgates=[wg],
-                        ready_abilities=[ability], placement=pos)
+    fake, _ = _warp_bot(warpgates=[wg], ready_abilities=[WARP_ABILITY[U.ZEALOT]], placement=pos)
     assert await BuildOrderBot.do_warp(fake, _zealot_step()) is False  # issued, holds for confirm
     wg.warp_in.assert_called_once_with(U.ZEALOT, pos)
+
+
+async def test_warp_does_not_count_a_unit_the_gateway_trained():
+    # The bug this design exists to prevent: a Gateway finishing a Zealot mid-step used to
+    # count toward `count`, so the step warped fewer than asked. A trained unit appears at
+    # build_progress 1, so it must never be picked up.
+    fake, _ = _warp_bot(warpgates=[])
+    _mid_step(fake)
+    fake.units = lambda t: FakeUnits([fake_unit(tag=9, build_progress=1.0)])
+    assert await BuildOrderBot.do_warp(fake, _zealot_step(count=1)) is False
+    assert fake.step_state.warp.warped_in == set()
+
+
+async def test_warp_ignores_a_warp_still_in_flight_from_an_earlier_step():
+    # first frame of the step, with a previous step's warp not yet landed
+    fake, _ = _warp_bot(warping=[1], warpgates=[])
+    assert await BuildOrderBot.do_warp(fake, _zealot_step(count=1)) is False
+    assert fake.step_state.warp.warped_in == set()
+    assert fake.step_state.warp.warping_at_start == {1}
 
 
 async def test_warp_count_fills_a_round_across_every_ready_gate():
@@ -430,19 +458,18 @@ async def test_warp_count_fills_a_round_across_every_ready_gate():
     # twice in a frame is the one way the loop could double-warp, so each appears once.
     gates = [fake_unit(tag=i) for i in range(4)]
     pos = Point2((11.0, 11.0))
-    fake, ability = _warp_bot(unit_amount=0, afford=True, warpgates=gates,
-                              ready_abilities=[WARP_ABILITY[U.ZEALOT]], placement=pos)
+    fake, _ = _warp_bot(warpgates=gates, ready_abilities=[WARP_ABILITY[U.ZEALOT]], placement=pos)
     assert await BuildOrderBot.do_warp(fake, _zealot_step(count=4)) is False
     for g in gates:
         g.warp_in.assert_called_once_with(U.ZEALOT, pos)
 
 
 async def test_warp_count_never_exceeds_what_is_still_outstanding():
-    # 3 of the 4 already landed, so this frame warps ONE even though 4 gates are free
+    # 3 of the 4 already warped, so this frame warps ONE even though 4 gates are free
     gates = [fake_unit(tag=i) for i in range(4)]
-    fake, _ = _warp_bot(unit_amount=3, afford=True, warpgates=gates,
-                        ready_abilities=[WARP_ABILITY[U.ZEALOT]], placement=Point2((11.0, 11.0)))
-    fake.step_state.warp.baseline = 0
+    fake, _ = _warp_bot(warpgates=gates, ready_abilities=[WARP_ABILITY[U.ZEALOT]],
+                        placement=Point2((11.0, 11.0)))
+    _mid_step(fake, already_warped=[101, 102, 103])
     assert await BuildOrderBot.do_warp(fake, _zealot_step(count=4)) is False
     assert sum(g.warp_in.call_count for g in gates) == 1
 
@@ -450,9 +477,8 @@ async def test_warp_count_never_exceeds_what_is_still_outstanding():
 async def test_warp_count_completes_only_once_every_unit_has_appeared():
     # measured from the units, never from the orders we issued — a dropped warp order
     # has to leave the step unfinished so the next frame re-issues it
-    fake, _ = _warp_bot(unit_amount=3, afford=True, warpgates=[],
-                        ready_abilities=[], placement=None)
-    fake.step_state.warp.baseline = 0
+    fake, _ = _warp_bot(warpgates=[])
+    _mid_step(fake, already_warped=[101, 102, 103])
     assert await BuildOrderBot.do_warp(fake, _zealot_step(count=4)) is False, "3 of 4 — not done"
-    fake.units = lambda t: FakeUnits([object()] * 4)
+    fake.units = lambda t: FakeUnits([fake_unit(tag=104, build_progress=0.5)])
     assert await BuildOrderBot.do_warp(fake, _zealot_step(count=4)) is True
