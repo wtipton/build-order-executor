@@ -8,6 +8,7 @@ that really does seal a pocket, and the ordinary cases that must be allowed thro
 from __future__ import annotations
 
 from types import SimpleNamespace
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -100,3 +101,112 @@ def test_structures_and_minerals_count_as_walls():
                for y in range(46, 55) if y != 51]
     p = Placement(_bot(walls=walls, minerals=patches))
     assert p.would_trap(U.PYLON, Point2((48.0, 51.0))) is True
+
+
+# ------------------------------------------------------------------ find_building_location
+def _target_bot(**over):
+    base = dict(_resolve_place=lambda where: Point2((40.0, 40.0)), _status="")
+    base.update(over)
+    return fake_bot(**base)
+
+
+def _placement_for(bot):
+    """A real Placement over a fake bot, so find_building_location's dispatch is the production one."""
+    return Placement(bot)
+
+
+async def test_nexus_where_aims_at_the_exact_base_location():
+    # NOT a placement search near it — an expansion even a tile off-centre from its
+    # mineral patches mines slower for the rest of the game.
+    bot = _target_bot(townhalls=MagicMock(closer_than=lambda d, p: FakeUnits()))
+    step = fake_bot(what="Nexus", where="natural")
+    assert await _placement_for(bot).find_building_location(step) == Point2((40.0, 40.0))
+
+
+async def test_nexus_where_stalls_when_that_base_is_already_ours():
+    # the alternative is handing build() an occupied tile, which wedges the Nexus into
+    # whatever spot a placement search can scrape together nearby
+    bot = _target_bot(townhalls=MagicMock(closer_than=lambda d, p: FakeUnits([object()])))
+    step = fake_bot(what="Nexus", where="natural")
+    assert await _placement_for(bot).find_building_location(step) is None
+    assert bot._status == "the natural is already ours"
+
+
+async def test_nexus_without_where_reports_when_the_map_is_full():
+    bot = _target_bot(_find_next_expansion=lambda: None)
+    step = fake_bot(what="Nexus", where=None)
+    assert await _placement_for(bot).find_building_location(step) is None
+    assert bot._status == "every expansion is already taken"
+
+
+async def test_gas_at_a_named_base_still_goes_on_a_geyser():
+    # `where:` picks WHICH geyser; it must not send a refinery to open ground. Testing
+    # `where` before the type did exactly that, and the game refuses the placement.
+    geyser = fake_unit(position=Point2((41.0, 41.0)))
+    bot = _target_bot(vespene_geyser=FakeUnits([geyser]),
+                      gas_buildings=FakeUnits(),
+                      find_placement=AsyncMock(return_value=Point2((9.0, 9.0))))
+    step = fake_bot(what="Assimilator", where="natural")
+    assert await _placement_for(bot).find_building_location(step) is geyser
+    bot.find_placement.assert_not_awaited()
+
+
+async def test_gas_at_a_named_base_says_so_when_that_base_has_none_free():
+    taken = fake_unit(position=Point2((41.0, 41.0)))
+    bot = _target_bot(vespene_geyser=FakeUnits([taken]),
+                      gas_buildings=MagicMock(closer_than=lambda d, g: FakeUnits([object()])))
+    step = fake_bot(what="Assimilator", where="natural")
+    assert await _placement_for(bot).find_building_location(step) is None
+    assert bot._status == "no free geyser at natural"
+
+
+async def test_stalled_build_says_there_is_nowhere_to_put_it():
+    """Without this, the stall reaches [status] as "issued; waiting to confirm", which is
+    indistinguishable from the build working."""
+    bot = _target_bot()
+    p = _placement_for(bot)
+    p.building_position = AsyncMock(return_value=None)
+    assert await p.find_building_location(fake_bot(what="Gateway", where=None)) is None
+    assert bot._status == "no powered spot for Gateway at any base"
+
+
+async def test_pylon_with_nowhere_to_go_says_so():
+    bot = _target_bot()
+    p = _placement_for(bot)
+    p.pylon_position = AsyncMock(return_value=None)
+    assert await p.find_building_location(fake_bot(what="Pylon", where=None)) is None
+    assert bot._status == "nowhere left to put a Pylon"
+
+
+async def test_successful_placement_leaves_no_stall_reason():
+    bot = _target_bot()
+    p = _placement_for(bot)
+    p.building_position = AsyncMock(return_value=Point2((5.0, 5.0)))
+    assert await p.find_building_location(fake_bot(what="Gateway", where=None)) == Point2((5.0, 5.0))
+    assert bot._status == ""
+
+
+async def test_where_anchored_build_sweeps_offsets_for_a_safe_spot():
+    # Covers the `where:` branch end to end. Nothing did, which is how a missing
+    # PLACE_OFFSETS import once shipped green: the unit suite passed while any `where:`
+    # build raised NameError on its first frame in a real game.
+    trapping, safe = Point2((1.0, 1.0)), Point2((9.0, 9.0))
+    seen = []
+
+    async def find_placement(unit, near, **kw):
+        seen.append((near.x, near.y))
+        return trapping if len(seen) == 1 else safe
+
+    bot = _target_bot(find_placement=find_placement)
+    p = _placement_for(bot)
+    p.would_trap = lambda unit, pos: pos == trapping
+    assert await p.find_building_location(fake_bot(what="Gateway", where="proxy")) == safe
+    assert len(seen) > 1, "a rejected candidate must not end the search"
+
+
+async def test_where_anchored_build_says_so_when_every_offset_traps():
+    bot = _target_bot(find_placement=AsyncMock(return_value=Point2((1.0, 1.0))))
+    p = _placement_for(bot)
+    p.would_trap = lambda unit, pos: True
+    assert await p.find_building_location(fake_bot(what="Gateway", where="proxy")) is None
+    assert bot._status == "nowhere safe to put Gateway at proxy"

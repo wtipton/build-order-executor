@@ -23,7 +23,9 @@ from sc2.ids.unit_typeid import UnitTypeId as U
 from sc2.position import Point2
 from sc2.unit import Unit
 
-from catalog import BLOCKABLE_PRODUCTION
+from catalog import BLOCKABLE_PRODUCTION, unit_id
+
+from schema import Step
 
 if TYPE_CHECKING:
     from bot import BuildOrderBot
@@ -54,6 +56,94 @@ def _tile_span(centre: float, radius: float) -> range:
 class Placement:
     def __init__(self, bot: BuildOrderBot) -> None:
         self.bot = bot
+
+    # --------------------------------------------------------------- dispatch
+    async def find_building_location(self, step: Step) -> Point2 | Unit | None:
+        """Where `step` should aim its build: a position, or the geyser itself for an
+        Assimilator. The single place that decides, for every structure type.
+
+        Dispatches on TYPE first and treats `where:` as an ANCHOR, never as a bypass. A
+        Nexus belongs on a base location and an Assimilator on a geyser whether or not the
+        author named a place; `where:` says WHICH base or WHICH geyser, and for everything
+        else it says where to search. Ordering it the other way — testing `where:` before
+        the type — sends `build Assimilator where: natural` off to place a refinery on
+        open ground, which the game refuses, and the step stalls.
+
+        Returning None stalls the step, so each case sets `bot._status` on the way out:
+        do_build only has "no placement" to offer, which can't distinguish "not yet" from
+        "never"."""
+        unit = unit_id(step.what)
+        where = getattr(step, "where", None)
+        anchor = self.bot._resolve_place(where) if where is not None else None
+
+        if unit == U.NEXUS:
+            return self._expansion_target(where, anchor)
+        if unit == U.ASSIMILATOR:
+            return self._geyser_target(where, anchor)
+        if anchor is not None:
+            return await self._spot_at(unit, step.what, where, anchor)
+        if unit == U.PYLON:
+            pos = await self.pylon_position()
+            if pos is None:
+                self.bot._status = "nowhere left to put a Pylon"
+            return pos
+        pos = await self.building_position(unit)
+        if pos is None:
+            self.bot._status = f"no powered spot for {step.what} at any base"
+        return pos
+
+    def _expansion_target(self, where: str | None, anchor: Point2 | None) -> Point2 | None:
+        """An expansion belongs ON a base location, not merely somewhere placeable near
+        one, so this never falls back to a placement search."""
+        if anchor is None:
+            nxt = self.bot._find_next_expansion()
+            if nxt is None:
+                self.bot._status = "every expansion is already taken"
+            return nxt
+        if self.bot.townhalls.closer_than(3.0, anchor):
+            self.bot._status = f"the {where} is already ours"  # stall, don't misplace it
+            return None
+        return anchor
+
+    def _geyser_target(self, where: str | None, anchor: Point2 | None) -> Unit | None:
+        geyser = self._free_geyser(anchor)
+        if geyser is None:
+            self.bot._status = (f"no free geyser at {where}" if where is not None
+                                else "no geyser without an Assimilator at any of our bases")
+        return geyser
+
+    async def _spot_at(self, unit: U, what: str, where: str, anchor: Point2) -> Point2 | None:
+        """A spot for `unit` around a named place.
+
+        Sweeps offsets rather than taking find_placement's single nearest answer: pairing
+        a rejection with one candidate can only turn a bad placement into NO placement.
+        Anchored on a Nexus the nearest open tile is usually the gap between it and the
+        minerals, which is exactly the pocket would_trap refuses — `where: sixth` stalled
+        a build for 316s that way."""
+        for dx, dy in PLACE_OFFSETS:
+            pos = await self.bot.find_placement(
+                unit, near=Point2((anchor.x + dx, anchor.y + dy)), max_distance=20,
+                random_alternative=False)
+            if pos is not None and not self.would_trap(unit, pos):
+                return pos
+        self.bot._status = f"nowhere safe to put {what} at {where}"
+        return None
+
+    def _free_geyser(self, near: Point2 | None = None) -> Unit | None:
+        """A geyser with no Assimilator on it yet, or None.
+
+        `near` restricts to that base — which is what `where:` means for gas. Without it,
+        any of our ready bases will do. With it we look at geysers by the place itself
+        rather than by a townhall, so naming a base we haven't taken yet still works."""
+        if near is not None:
+            candidates = self.bot.vespene_geyser.closer_than(10, near)
+        else:
+            candidates = [g for th in self.bot.townhalls.ready
+                          for g in self.bot.vespene_geyser.closer_than(10, th)]
+        for g in candidates:
+            if not self.bot.gas_buildings.closer_than(1, g):
+                return g
+        return None
 
     # ---------------------------------------------------------------- helpers
     def _mineral_line_center(self, near: Point2 | Unit) -> Point2 | None:

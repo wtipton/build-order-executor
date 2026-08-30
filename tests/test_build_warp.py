@@ -1,5 +1,5 @@
 """Tier 1 — the two confirm/baseline state machines: do_build and do_warp, plus the
-placement dispatch do_build leans on (_find_build_target).
+probe assignment do_build leans on (_assign_builder).
 
 The state machines share a pattern: issuing an order != it happening, so the handler
 captures a baseline count when the step starts, HOLDS (returns False, re-issuing as
@@ -221,7 +221,7 @@ async def test_build_gas_uses_build_gas_not_build():
 def _assign_bot(*, spot=Point2((50.0, 50.0)), free=None, named=None, held=None, **over):
     base = dict(
         builder_state=BuilderState(),
-        _find_build_target=AsyncMock(return_value=spot),
+        placement=fake_bot(find_building_location=AsyncMock(return_value=spot)),
         _free_probe_near=lambda pos: free,
         _worker_by_name=lambda name: named,
         _worker_by_tag=lambda tag: held,   # the probe held across a `count:` group
@@ -305,76 +305,6 @@ async def test_assign_fails_without_a_placement_or_a_probe():
     assert await BuildOrderBot._assign_builder(no_probe, step) is False
     assert no_probe.builder_state.for_step is None
     assert no_probe._status == "no free probe to build with"
-
-
-# ================================================== _find_build_target (Nexus)
-def _nexus_target_bot(*, base_taken: bool, **over):
-    base = dict(
-        _resolve_place=lambda where: Point2((40.0, 40.0)),
-        townhalls=MagicMock(closer_than=lambda d, p: FakeUnits([object()] if base_taken else [])),
-        _status="",
-    )
-    base.update(over)
-    return fake_bot(**base)
-
-
-async def test_nexus_where_aims_at_the_exact_base_location():
-    # NOT find_placement near it — an expansion even a tile off-centre from its
-    # mineral patches mines slower for the rest of the game.
-    fake = _nexus_target_bot(base_taken=False)
-    step = fake_bot(what="Nexus", where="natural")
-    assert await BuildOrderBot._find_build_target(fake, step) == Point2((40.0, 40.0))
-
-
-async def test_nexus_where_stalls_when_that_base_is_already_ours():
-    # the alternative is handing build() an occupied tile, which wedges the Nexus
-    # into whatever spot find_placement can scrape together nearby
-    fake = _nexus_target_bot(base_taken=True)
-    step = fake_bot(what="Nexus", where="natural")
-    assert await BuildOrderBot._find_build_target(fake, step) is None
-    assert fake._status == "the natural is already ours"
-
-
-async def test_nexus_without_where_reports_when_the_map_is_full():
-    fake = _nexus_target_bot(base_taken=False, _find_next_expansion=lambda: None)
-    step = fake_bot(what="Nexus", where=None)
-    assert await BuildOrderBot._find_build_target(fake, step) is None
-    assert fake._status == "every expansion is already taken"
-
-
-
-# ======================================= _find_build_target (placement exhausted)
-def _placement_bot(*, pos):
-    """A bot whose placement.building_position yields `pos` (None = nothing fits)."""
-    return fake_bot(
-        _resolve_place=lambda where: Point2((0.0, 0.0)),
-        placement=fake_bot(building_position=AsyncMock(return_value=pos),
-                           pylon_position=AsyncMock(return_value=pos)),
-        _status="",
-    )
-
-
-async def test_stalled_build_says_there_is_nowhere_to_put_it():
-    """Without this, the stall reaches [status] as "issued; waiting to confirm", which
-    is indistinguishable from the build working."""
-    fake = _placement_bot(pos=None)
-    step = fake_bot(what="Gateway", where=None)
-    assert await BuildOrderBot._find_build_target(fake, step) is None
-    assert fake._status == "no powered spot for Gateway at any base"
-
-
-async def test_pylon_with_nowhere_to_go_says_so():
-    fake = _placement_bot(pos=None)
-    step = _build_step(where=None)
-    assert await BuildOrderBot._find_build_target(fake, step) is None
-    assert fake._status == "nowhere left to put a Pylon"
-
-
-async def test_successful_placement_leaves_no_stall_reason():
-    fake = _placement_bot(pos=Point2((5.0, 5.0)))
-    step = fake_bot(what="Gateway", where=None)
-    assert await BuildOrderBot._find_build_target(fake, step) == Point2((5.0, 5.0))
-    assert fake._status == ""
 
 
 # ============================================================ do_warp
@@ -542,37 +472,3 @@ async def test_warp_tiles_empty_when_everything_is_blocked():
     every = [(float(x), float(y)) for x in range(-reach, reach + 1)
              for y in range(-reach, reach + 1)]
     assert await _tiles(_tiles_bot(occupied=every)) == []
-
-
-async def test_where_anchored_build_sweeps_offsets_for_a_safe_spot():
-    # Covers the `where:` branch end to end. Nothing did, which is how a missing
-    # PLACE_OFFSETS import shipped: the unit suite was green while any `where:` build
-    # raised NameError on its first frame in a real game.
-    trapping, safe = Point2((1.0, 1.0)), Point2((9.0, 9.0))
-    seen = []
-
-    async def find_placement(unit, near, **kw):
-        seen.append((near.x, near.y))
-        return trapping if len(seen) == 1 else safe
-
-    fake = fake_bot(
-        _resolve_place=lambda where: Point2((0.0, 0.0)),
-        find_placement=find_placement,
-        placement=fake_bot(would_trap=lambda unit, pos: pos == trapping),
-        _status="",
-    )
-    step = fake_bot(what="Gateway", where="proxy")
-    assert await BuildOrderBot._find_build_target(fake, step) == safe
-    assert len(seen) > 1, "a rejected candidate must not end the search"
-
-
-async def test_where_anchored_build_says_so_when_every_offset_traps():
-    fake = fake_bot(
-        _resolve_place=lambda where: Point2((0.0, 0.0)),
-        find_placement=AsyncMock(return_value=Point2((1.0, 1.0))),
-        placement=fake_bot(would_trap=lambda unit, pos: True),
-        _status="",
-    )
-    step = fake_bot(what="Gateway", where="proxy")
-    assert await BuildOrderBot._find_build_target(fake, step) is None
-    assert fake._status == "nowhere safe to put Gateway at proxy"

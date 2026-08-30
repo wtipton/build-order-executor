@@ -17,7 +17,6 @@ from sc2.unit import Unit
 from sc2.units import Units
 
 from catalog import COMBAT_PRODUCTION, unit_id
-from placement import PLACE_OFFSETS
 from schema import BASE_PLACES, Step
 
 
@@ -240,9 +239,9 @@ class WorldMixin:
         if (self.builder_state.for_step is step and self.builder_state.builder_tag is not None
                 and self.builder_state.spot is not None):
             return True
-        spot = await self._find_build_target(step)
+        spot = await self.placement.find_building_location(step)
         if spot is None:
-            return False  # _find_build_target set _status where it can explain itself
+            return False  # find_building_location set _status where it can explain itself
         pos = spot.position  # Point2.position is itself, so this covers both
         # Partway through a `count:` group the probe is still held (spot cleared,
         # builder_tag kept), so send that one to the next spot instead of pulling another.
@@ -276,67 +275,5 @@ class WorldMixin:
                 return s
             if s.do in ("train", "warp", "research"):
                 return None  # a resource-committing step precedes the next build
-        return None
-
-    async def _find_build_target(self, step: Step) -> Point2 | Unit | None:
-        """Where `step` should aim its build: a position, or the geyser itself for an
-        Assimilator. Dispatches over the ways a target can be decided — a named place,
-        the next expansion, a free geyser, or placement.py's geometry.
-
-        Returning None stalls the step, so the cases that can explain themselves set
-        `_status` on the way out — do_build only has "no placement for X" to offer,
-        which doesn't distinguish "not yet" from "never"."""
-        unit = unit_id(step.what)
-        where = getattr(step, "where", None)
-        if unit == U.NEXUS:
-            # An expansion belongs ON a base location, not merely somewhere placeable
-            # near one. So for nexuses, we don't ever fall back to the generic find_placement.
-            if where is None:
-                nxt = self._find_next_expansion()
-                if nxt is None:
-                    self._status = "every expansion is already taken"
-                return nxt
-            base = self._resolve_place(where)
-            if self.townhalls.closer_than(3.0, base):
-                self._status = f"the {where} is already ours"  # stall, don't misplace it
-                return None
-            return base
-
-        if where is not None:
-            # Sweep offsets around the named place rather than taking find_placement's
-            # single nearest answer. A lone candidate plus a rejection can only turn a bad
-            # placement into NO placement: anchored on a Nexus the nearest open tile is
-            # usually the gap between it and the minerals, which is exactly the pocket
-            # would_trap refuses, and `where: sixth` stalled a build for 316s on that.
-            anchor = self._resolve_place(where)
-            for dx, dy in PLACE_OFFSETS:
-                pos = await self.find_placement(
-                    unit, near=Point2((anchor.x + dx, anchor.y + dy)), max_distance=20,
-                    random_alternative=False)
-                if pos is not None and not self.placement.would_trap(unit, pos):
-                    return pos
-            self._status = f"nowhere safe to put {step.what} at {where}"
-            return None
-        if unit == U.ASSIMILATOR:
-            geyser = self._find_free_geyser()
-            if geyser is None:
-                self._status = "no geyser without an Assimilator at any of our bases"
-            return geyser
-        if unit == U.PYLON:
-            pos = await self.placement.pylon_position()
-            if pos is None:
-                self._status = "nowhere left to put a Pylon"
-            return pos
-        pos = await self.placement.building_position(unit)
-        if pos is None:
-            self._status = f"no powered spot for {step.what} at any base"
-        return pos
-
-    def _find_free_geyser(self) -> Unit | None:
-        """A geyser at one of our bases with no Assimilator on it yet, or None."""
-        for th in self.townhalls.ready:
-            for g in self.vespene_geyser.closer_than(10, th):
-                if not self.gas_buildings.closer_than(1, g):
-                    return g
         return None
 
