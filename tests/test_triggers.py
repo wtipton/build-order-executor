@@ -24,6 +24,22 @@ def test_scalar_triggers_fire_at_or_above_threshold():
     assert BuildOrderBot.trigger_met(fake, Trigger(vespene=89)) is False
 
 
+def test_asap_fires_against_an_empty_game():
+    # Nothing built, no time elapsed, no money: asap still fires. It gates only the
+    # wait, so the step goes on to stall in its handler if it can't afford itself.
+    fake = fake_bot(supply_used=0, time=0.0, minerals=0, vespene=0)
+    assert BuildOrderBot.trigger_met(fake, Trigger(asap=True)) is True
+
+
+def test_asap_reserves_nothing_for_probes():
+    # _probe_reserve only adjusts for triggers that promise future probes; asap doesn't.
+    step = fake_bot(prewalk=Trigger(minerals=100), at=Trigger(asap=True))
+    fake = fake_bot(supply_used=14, minerals=100, vespene=0)
+    fake._probe_reserve = lambda s: BuildOrderBot._probe_reserve(fake, s)
+    assert BuildOrderBot._probe_reserve(fake, step) == 0
+    assert BuildOrderBot._prewalk_due(fake, step) is True   # the full 100 counts
+
+
 def _real(n: int) -> FakeUnits:
     """`n` genuine (non-hallucinated) units."""
     return FakeUnits([fake_unit(is_hallucination=False) for _ in range(n)])

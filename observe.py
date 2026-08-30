@@ -219,6 +219,8 @@ class ObserveMixin:
     def _trigger_progress(self, at: Trigger) -> str:
         """`count HighTemplar=2 (have 0)` — the condition plus what we have right now, so
         it's obvious what a waiting step is short of."""
+        if at.asap:
+            return str(at)
         if at.count is not None:
             name, _ = next(iter(at.count.items()))
             have = self.count_of(name)

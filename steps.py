@@ -70,6 +70,8 @@ class StepsMixin:
             self.step_state.reset(self.time)  # the finished step's in-flight state dies with it
 
     def trigger_met(self, at: Trigger) -> bool:
+        if at.asap:
+            return True
         if at.supply is not None:
             return self.supply_used >= at.supply
         if at.time is not None:

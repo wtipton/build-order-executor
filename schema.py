@@ -83,6 +83,7 @@ Count = Annotated[int, Field(ge=1)] | None
 class Trigger(BaseModel):
     """A firing condition. Exactly one key must be set.
 
+    asap:   fire the moment the previous step completes.
     supply/time/minerals/vespene: fire when that value is >= the given number
     (time in game-seconds).
     count:  {UnitType: N} — fire once we have N completed units/structures of that
@@ -91,14 +92,30 @@ class Trigger(BaseModel):
     """
 
     model_config = ConfigDict(extra="forbid")
+    asap: Literal[True] | None = None
     supply: int | None = None
     time: float | None = None
     minerals: int | None = None
     vespene: int | None = None
     count: dict[str, int] | None = None
 
+    @model_validator(mode="before")
+    @classmethod
+    def _accept_bare_asap(cls, v: object) -> object:
+        """`at: asap` — a bare word where every other trigger is a {key: value} pair,
+        because there's no value to give. Rewritten to the mapping form so the rest of
+        the model (the one-key rule included) sees an ordinary field. Anything that
+        isn't a string falls through to pydantic's usual mapping validation."""
+        if isinstance(v, str):
+            if v.lower() != "asap":
+                raise ValueError(f"unknown trigger {v!r}; the only bare-word trigger is `asap`")
+            return {"asap": True}
+        return v
+
     def __str__(self) -> str:
-        """The condition, e.g. `count Pylon=2` or `supply>=19`."""
+        """The condition, e.g. `count Pylon=2`, `supply>=19`, or `asap`."""
+        if self.asap:
+            return "asap"
         if self.count is not None:
             name, n = next(iter(self.count.items()))
             return f"count {name}={n}"

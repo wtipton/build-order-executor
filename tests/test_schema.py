@@ -60,6 +60,28 @@ def test_trigger_needs_exactly_one_key():
         TypeAdapter(Step).validate_python({"at": {"time": 1, "supply": 2}, "do": "hallucinate"})
 
 
+def test_asap_trigger_is_a_bare_word():
+    step = TypeAdapter(Step).validate_python({"at": "asap", "do": "hallucinate"})
+    assert step.at.asap is True
+    assert str(step.at) == "asap"           # no threshold to print
+    assert all(getattr(step.at, k) is None for k in ("supply", "time", "minerals", "vespene", "count"))
+
+
+def test_asap_is_case_insensitive_like_every_other_value():
+    assert TypeAdapter(Step).validate_python({"at": "ASAP", "do": "hallucinate"}).at.asap is True
+
+
+@pytest.mark.parametrize("at,needle", [
+    ("soon", "only bare-word trigger"),                 # a bare word that isn't asap
+    ({"asap": False}, "asap"),                          # not a way to spell "never"
+    ({"asap": True, "time": 1}, "exactly one"),         # still one key only
+])
+def test_bad_asap_rejected(at, needle):
+    with pytest.raises(Exception) as ei:
+        TypeAdapter(Step).validate_python({"at": at, "do": "hallucinate"})
+    assert needle in str(ei.value)
+
+
 def test_count_trigger_bad_name_rejected():
     with pytest.raises(Exception) as ei:
         TypeAdapter(Step).validate_python({"at": {"count": {"TemplarArchives": 1}}, "do": "hallucinate"})

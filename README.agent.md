@@ -32,7 +32,7 @@ The schema for the yaml files amounts to a domain specific language for build or
 
 The build order config is a list of steps. Each step has:
 
-- an `at` field which specifies a triggering criterion (exactly one of supply, time, minerals, vespene, or count). Count is (e.g., {Pylon: 2}, {CyberneticsCore: 1})
+- an `at` field which specifies a triggering criterion (exactly one of supply, time, minerals, vespene, or count). Count is (e.g., {Pylon: 2}, {CyberneticsCore: 1}). Write `at: asap` (a bare word, not a map) for a step that should fire the moment the previous one completes, with no wait of its own.
 - and a `do` field which specifies the action to takke in the build
 
 Various other fields are specific to the type of action. Values, including building and unit names, are case-insensitive, but field names are not. Several steps take a `count`. The step isn't complete until all of them have been made, so the build order waits for the whole group before moving on.
@@ -154,8 +154,8 @@ A couple other important notes about prewalk:
 
 - This is the only case where a step can have any effect before previous steps are complete.
 - In general, at any particular point in time, we look ahead as far as the next resource-spending step. If it's a build step, we check the prewalk criterion. And if the criterion is true, we walk the probe.
-- Effectively, this means that we partition steps into minimal groups ending with a resource-spending step. If that last step is a build step with a prewalk, then we check the prewalk criterion whenever any steps in the partition are active.
-- A consequence of this is that only one prewalking probe can be active at a time. I.e. we'll have at most one builder probe off of mining due to this system.
+- Effectively, this means that we partition steps into minimal groups ending with a resource-spending step. If that last step is a build step with a prewalk, then we check the prewalk criterion whenever any steps in the partition are active. And e.g., a prewalk criterion of `asap` will send a probe when the first step in the partition becomes active.
+- A consequence of the partitioning approach is that only one prewalking probe can be active at a time. I.e. we'll have at most one builder probe off of mining due to this system.
 
 A final detail about probe walking: in case the build step has a `supply` trigger which is higher than our current supply, we need to build probes (at a cost of 50 minerals apiece) before we can build the building. We deduct these probe costs from our current mineral count before checking the probe-sending criterion, whether it's explicit via `prewalk: {minerals: ...}` or implicit via the default building cost check. A `count: {Probe: N}` trigger reserves the same way as well.
 
