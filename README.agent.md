@@ -61,23 +61,26 @@ runs on map CatalystLE which we'll use pervasively.
 
 ## Step Completion
 
-A step completes (and prints `[done]`) as soon as its action has been initiated/confirmed by the game engine. This is distinct from when a unit, structure, or upgrade finishes and becomes usable (which prints `[ready]`):
+A step completes (and prints `[done]`) once its action has been issued, or (for actions where issuing a command is not the same as it happening) once the executor can confirm it took. Either way this is distinct from when the resulting unit, structure, or upgrade finishes and becomes usable (which prints `[ready]`).
 
-| Step Action (`do:`) | When Step Completes (`[done]`) |
-|---|---|
-| `build` | Construction site placed; probe released back to mining |
-| `train` | Unit queued into production building |
-| `warp_in` | Unit placed in pylon power field (warp animation begins) |
-| `morph` | Gateway morph command accepted |
-| `research` | Upgrade queued and resources deducted |
-| `chrono` | 50 energy spent, boost applied |
-| `send_probe` / `return_probe` | Move order given |
-| `set_rally_point` | Rally point updated |
-| `rally_and_transfer_probes` | Rally set & excess probes reassigned |
-| `set_gas_probes` | Probes reallocated to/from gas |
-| `cut_probes` / `resume_probes` | Worker production toggled |
-| `wait` | Trigger criterion met |
-| `hallucinate` | Energy spent and hallucination spawned |
+The **Confirmed?** column is the one to read when writing a build. A *confirmed* step stalls the line until game state agrees, so anything after it can assume the thing exists. An *issued* step completes on the same frame it fires, so the next step's trigger must not assume the effect has landed.
+
+| Step Action (`do:`) | Confirmed? | When Step Completes (`[done]`) |
+|---|---|---|
+| `build` | confirmed | The structure appears in game state (construction started, not finished) and the probe is released back to mining. With `count: N`, after all N |
+| `warp` | confirmed | The warping units are on the map (warp animation under way), counted by tag. With `count: N`, after all N |
+| `morph` | confirmed | Every source committed is consumed or visibly carrying the morph ability. Covers `warpgate`/`gateway` (1:1) and `archon` (2 HT/DT combined) |
+| `research` | confirmed | The upgrade reads as pending on a later frame. Completes instantly, spending nothing, if it's already researching or done |
+| `train` | issued | All `count` units queued into production buildings (not produced) |
+| `chrono` | issued | 50 energy spent, boost issued to the chosen structure |
+| `hallucinate` | issued | 75 energy spent and the ability issued by a Sentry |
+| `send_probe` | issued | Move order given. Stalls first if no probe is free to send |
+| `return_probe` | issued | Gather order given at the populating base. Completes even if the probe died or there's no field to send it to |
+| `set_rally_point` | issued | Rally point recorded; the rally commands go out to producers next frame |
+| `rally_and_transfer_probes` | issued | Populating base set, Nexuses rallied, excess probes reassigned. Completes having done only the first if that base has no mineral patches |
+| `set_gas_probes` | issued | The gas target is recorded so that the economy manager reallocates probes over following frames |
+| `cut_probes` / `resume_probes` | issued | Worker production toggled |
+| `wait` | issued | Trigger criterion met; does nothing else |
 
 ## Systems
 
