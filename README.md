@@ -25,6 +25,22 @@ cd ~/projects/build-order-executor && .venv/bin/python run.py \
   --fullscreen
 ```
 
+### Run via Docker (headless Linux, no Wine/display required)
+
+```bash
+docker run --rm \
+  -v ~/replays/bot:/root/replays/bot \
+  build-order-executor-headless \
+  python run.py --build builds/pvz_opening_8worker.yaml
+```
+
+Mounting the replays folder this way causes the replay to get saved to the host. To get old maps off the container, e.g.:
+
+```bash
+docker run --rm build-order-executor-headless tar -cf - -C /root/StarCraftII/Maps . \
+  | tar -xf - -C "$HOME/Games/starcraft-ii/drive_c/Program Files (x86)/StarCraft II/Maps"
+```
+
 ## Tests
 
 Fast unit tests, no SC2 required — the executor's methods are tested unbound
