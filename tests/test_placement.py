@@ -19,16 +19,32 @@ from sc2.position import Point2
 from fakes import FakeUnits, fake_bot, fake_unit
 
 PYLON_R = 1.0  # 2x2
+MAP_W = MAP_H = 64  # the fake map's grid, big enough that the cases above never clamp
 
 
 def _bot(*, walls=(), structures=(), minerals=()):
-    """A bot whose terrain is walkable everywhere except `walls` (tile coords)."""
+    """A bot whose terrain is walkable everywhere except `walls` (tile coords).
+
+    `in_pathing_grid` ASSERTS off the grid, exactly as the real one does (it indexes a
+    PixelMap, whose __getitem__ asserts bounds). Without that the fake silently accepts
+    negative tiles and a window running off the map reads as ordinary open ground —
+    which is how an out-of-bounds scan reached a real game and killed the run.
+    """
     blocked = set(walls)
+
+    def in_pathing_grid(p):
+        x, y = int(p.x), int(p.y)
+        assert 0 <= x < MAP_W, f"x is {x}, self.width is {MAP_W}"
+        assert 0 <= y < MAP_H, f"y is {y}, self.height is {MAP_H}"
+        return (x, y) not in blocked
+
     return fake_bot(
-        in_pathing_grid=lambda p: (int(p.x), int(p.y)) not in blocked,
+        in_pathing_grid=in_pathing_grid,
         structures=FakeUnits(list(structures)),
         mineral_field=FakeUnits(list(minerals)),
         vespene_geyser=FakeUnits(),
+        game_info=SimpleNamespace(
+            pathing_grid=SimpleNamespace(width=MAP_W, height=MAP_H)),
         game_data=SimpleNamespace(
             units={U.PYLON.value: SimpleNamespace(footprint_radius=PYLON_R)}),
     )
@@ -74,6 +90,38 @@ def test_a_room_that_was_already_sealed_is_not_blamed_on_this_building():
     walls = _pocket_walls() | {(48, 51)}
     p = Placement(_bot(walls=walls))
     assert p.would_trap(U.PYLON, Point2((44.0, 44.0))) is False
+
+
+def _corner_pocket_walls():
+    """_pocket_walls shifted into the low corner: a room at x 3..5, y 3..9 whose only way
+    in is (2, 7). Close enough to the edge that a _TRAP_WINDOW-sized scan runs off it."""
+    walls = set()
+    walls |= {(6, y) for y in range(2, 11)}           # far side
+    walls |= {(x, 2) for x in range(2, 7)}            # top
+    walls |= {(x, 10) for x in range(2, 7)}           # bottom
+    walls |= {(2, y) for y in range(2, 11) if y != 7}  # near side, one tile open
+    return walls
+
+
+@pytest.mark.parametrize("pos", [
+    Point2((5.0, 5.0)),                    # low corner: lo_x/lo_y would go negative
+    Point2((MAP_W - 4.0, MAP_H - 4.0)),    # high corner: hi_x/hi_y would run past the grid
+])
+def test_a_candidate_near_the_map_edge_does_not_index_off_the_grid(pos):
+    # The window is centred on the candidate and _TRAP_WINDOW (12) wide, so anything
+    # within 12 tiles of an edge used to scan tiles that don't exist. in_pathing_grid
+    # asserts on those, which took down the whole run: "AssertionError: y is -1".
+    p = Placement(_bot())
+    assert p.would_trap(U.PYLON, pos) is False
+
+
+def test_the_trap_check_still_works_next_to_a_map_edge():
+    # The window is CLAMPED to the grid, not abandoned. Were it abandoned, the edge ring
+    # would be entirely off-map, `before` would come back empty, and would_trap would
+    # return False for everything near an edge — quietly disabling the check exactly
+    # where the map is tightest.
+    p = Placement(_bot(walls=_corner_pocket_walls()))
+    assert p.would_trap(U.PYLON, Point2((2.0, 7.0))) is True
 
 
 def test_building_beside_a_gap_it_does_not_cover_is_not_a_trap():

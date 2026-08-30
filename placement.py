@@ -192,7 +192,12 @@ class Placement:
         Cheap enough to do per candidate because the game only advances when we return
         (run.py runs non-realtime), so thinking here costs wall-clock, never game time."""
         cx, cy = int(pos.x), int(pos.y)
-        lo_x, lo_y, hi_x, hi_y = cx - _TRAP_WINDOW, cy - _TRAP_WINDOW, cx + _TRAP_WINDOW, cy + _TRAP_WINDOW
+        # CLAMPED to the grid: `in_pathing_grid` asserts on an out-of-bounds tile, so an
+        # unclamped window crashes.
+        grid = self.bot.game_info.pathing_grid
+        lo_x, lo_y = max(0, cx - _TRAP_WINDOW), max(0, cy - _TRAP_WINDOW)
+        hi_x = min(grid.width - 1, cx + _TRAP_WINDOW)
+        hi_y = min(grid.height - 1, cy + _TRAP_WINDOW)
         blocked = self._blocked_tiles(cx, cy)
         footprint = self._footprint(unit, pos)
 
@@ -311,11 +316,17 @@ class Placement:
         """
         bot = self.bot
         reach = producer.radius + 1.0
+        grid = bot.game_info.pathing_grid
         pts = []
         for k in range(8):
             ang = k * math.pi / 4
             e = Point2((producer.position.x + reach * math.cos(ang),
                         producer.position.y + reach * math.sin(ang)))
+            # Bounds first: in_pathing_grid asserts off the map, and a producer near an
+            # edge has directions that point off it. Off the map is not an exit anyway.
+            r = e.rounded
+            if not (0 <= r.x < grid.width and 0 <= r.y < grid.height):
+                continue
             if bot.in_pathing_grid(e) and not bot.structures.closer_than(1.5, e):
                 pts.append(e)
         return pts

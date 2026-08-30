@@ -100,3 +100,7 @@ done
 5-mineral trip (~8%), so use the frame-timed `trip` phases for finer effects — that gap is
 why the close-vs-far patch difference was missed on the first pass.
 
+
+## Known issues
+
+The `wine` target intermittently dies with `KeyError: 4135`: it looks like retail renumbered ability ids, so `WorkerStopIdleAbilityVespene` is 4135 there but 4132 in burnysc2 7.3.0 (already the latest release), and any read of `Unit.orders` on a probe resuming gas raises; `scripts/ability_lookup.py --target wine 4135` dumps the raw ability data.
