@@ -63,7 +63,7 @@ validated against **both** game versions:
 cd ~/projects/build-order-executor && .venv/bin/python -m pytest tests/test_integration.py --run-integration
 
 # Game version 4.10, via the headless Docker image (~3 min; see docker/):
-docker run --rm -v "$PWD":/app build-order-executor-headless \
+docker run --rm -v "$PWD":/opt/executor -w /opt/executor build-order-executor-headless \
   python -m pytest tests/test_integration.py --run-integration
 ```
 
@@ -91,7 +91,7 @@ Regenerate (the engine calls the game a Tie at ~1320 game-seconds, so it runs in
 the slices are positional indices into `phases()`, so re-derive them if you edit it):
 ```bash
 for s in 0:12 12:24 24:32 32:40 40:46 46:54 54:58; do
-  docker run --rm -v "$PWD":/app build-order-executor-headless \
+  docker run --rm -v "$PWD":/opt/executor build-order-executor-headless \
     python -m scripts.economy_measure --target linux --slice $s 2>&1 | grep -E '^\[econ\]'
 done
 ```

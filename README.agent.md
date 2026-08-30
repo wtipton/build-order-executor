@@ -110,6 +110,8 @@ By default, probes are produced continuously from all ready nexuses. You can pau
 - {at: {time: 20},  do: resume_probes}
 ```
 
+Note: probe production is the highest-priority use of money and is performed before any other tasks, including e.g. performing build steps. Therefore, if you want to cut probe production at a particular number of probes, a `cut_probes` step with trigger `{count: {Probe: ...}}` is not the way to do it! The executor will blow right past that count before checking the trigger condition.
+
 More probes mine more minerals, allowing production of more probes, etc. Exponential growth of the economy is important, so generally we won't want to cut probes early unless there's a pretty good reason for it. It's more common to cut later to divert resources to army production during the build-up to an attack.
 
 Nexuses are always constructed adjacent at a base adjacent to resources. A base will always have 8 mineral patches and 2 gas geysers. When a nexus is first produced, probes will be rallied to the adjacent minerals, and that workers will automatically begin collecting these minerals.

@@ -4,8 +4,8 @@
 
 int main(int argc, char *argv[]) {
     // Elevate privileges to root so /opt/executor can be read
-    if (setuid(0) != 0 || setgid(0) != 0) {
-        perror("setuid/setgid failed");
+    if (setuid(0) != 0) {
+        perror("setuid failed");
         return 1;
     }
 

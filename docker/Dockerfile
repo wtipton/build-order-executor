@@ -53,13 +53,12 @@ RUN useradd -m -s /bin/bash -u 1000 agent \
     && ln -s /opt/StarCraftII /home/agent/StarCraftII \
     && ln -s /opt/StarCraftII /root/StarCraftII
 
-# Compile SetUID wrapper so the non-root agent can execute builds with root privileges
-# while /opt/executor remains strictly chmod 700 (execute-only via wrapper, 0 read access)
+# Compile runner binary inside /opt/executor (locked to root:root, chmod 700)
 COPY docker/run_build.c /opt/run_build.c
-RUN gcc -O2 /opt/run_build.c -o /usr/local/bin/run-build \
+RUN gcc -O2 /opt/run_build.c -o /opt/executor/run-build \
     && rm /opt/run_build.c \
-    && chown root:root /usr/local/bin/run-build \
-    && chmod 4755 /usr/local/bin/run-build
+    && chown root:root /opt/executor/run-build \
+    && chmod 700 /opt/executor/run-build
 
 # Clean agent workspace: contains only DSL docs and reference tables by default
 WORKDIR /workspace

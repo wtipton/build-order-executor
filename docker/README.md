@@ -31,8 +31,8 @@ docker run --rm -it -e ALLOW_RUN=1 build-order-executor-headless
 runs your current tests/code):
 
 ```bash
-docker run --rm -v "$PWD":/opt/executor build-order-executor-headless \
-  python -m pytest /opt/executor/tests/test_integration.py --run-integration
+docker run --rm -v "$PWD":/opt/executor -w /opt/executor build-order-executor-headless \
+  python -m pytest tests/test_integration.py --run-integration
 ```
 
 ## Publishing to GHCR
@@ -66,11 +66,14 @@ package public in its GitHub package settings if pullers shouldn't need auth. Bu
   - **Offline Mode (Default)**: `ALLOW_RUN` not set. `/workspace` contains only `README.md` (the DSL guide) and `reference/`. `run.py` does not exist in `/workspace`.
   - **Interactive Mode**: Pass `-e ALLOW_RUN=1`. `run.py` is created dynamically in `/workspace` at startup for iterative agent testing.
 
-## Installing and Running Claude Code
+## Running Agents in the Container
 
-To run Claude Code inside the container:
+```bash
+curl -fsSL https://claude.ai/install.sh | bash
+~/.local/bin/claude
+```
 
-   ```bash
-   curl -fsSL https://claude.ai/install.sh | bash
-   ~/.local/bin/claude
-   ```
+```bash
+curl -fsSL https://antigravity.google/cli/install.sh | bash
+~/.local/bin/agy
+```
