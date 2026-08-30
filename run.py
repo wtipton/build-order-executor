@@ -130,7 +130,7 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--target", default=_TARGET, choices=sorted(TARGETS),
                     help="launch target (also via SC2_TARGET env); resolved before sc2 import")
-    ap.add_argument("--build", default="builds/pvz_opening_8worker.yaml", help="build-order config")
+    ap.add_argument("--build", default="builds/build.yaml", help="build-order config")
     ap.add_argument("--map", default=default_map,
                     help="map filename without .SC2Map (default: CatalystLE for linux, LockdownLE for wine; also via SC2_MAP env)")
     ap.add_argument("--fullscreen", action="store_true", help="launch SC2 fullscreen (-displayMode 1)")

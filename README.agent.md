@@ -53,7 +53,9 @@ See `schema.py` for details of the syntax. However, a build order `example.yaml`
 
 and it can be run with e.g.: 
 
-python run.py --build builds/pvz_opening_8worker.yaml --time-limit 600
+```
+python run.py --build build.yaml --time-limit 600
+```
 
 runs on map CatalystLE which we'll use pervasively.
 

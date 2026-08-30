@@ -8,7 +8,7 @@ __pycache__/
 .jj/
 .git/
 
-# Agent skills, eval notes, and project planning (prevents eval contamination)
+# Pre-existing buidls, agent skills, notes, and project planning (prevents eval contamination)
 .claude/
 TODOs.md
 
@@ -20,8 +20,11 @@ TODOs.md
 # Docs the bot doesn't read. README.md carries the regeneration commands (and so names
 # the tools above); protoss_data_live.md is the cost/build-time table for the retail
 # patch. Both are ROOT-anchored, so docker/README.md and the other reference/*.md stay.
-README.md
+builds/
 reference/protoss_data_live.md
+README.md
+scripts/
+tests/
 
 # Logs, replays, and game dumps
 *.log
@@ -34,7 +37,9 @@ replays/
 .pytest_cache/
 .benchmarks/
 .coverage
+conftest.py
 htmlcov/
+pytest.ini
 
 # Editor & OS files
 .vscode/

@@ -20,34 +20,65 @@
 FROM python:3.14-slim
 
 # curl + unzip to fetch/extract the game; ca-certificates for the HTTPS pip index.
-# (Deps install from wheels, so no compiler toolchain is needed.)
 RUN apt-get update \
     && apt-get install --assume-yes --no-install-recommends curl unzip ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-# Blizzard's headless Linux build. Extracts to /root/StarCraftII (== ~/StarCraftII,
-# the python-sc2 default for SC2PF=Linux), so the `linux` target needs no SC2PATH.
-# The zip is EULA-locked with the well-known password 'iagreetotheeula'. We keep the
-# maps that ship with the build (the runner passes a valid --map); we only add a
-# lowercase `maps` symlink because python-sc2 probes that name first.
-WORKDIR /root
+# Blizzard's headless Linux build at /opt/StarCraftII (placed at top so it is permanently cached)
+WORKDIR /opt
 RUN curl --retry 5 --retry-delay 5 -C - \
         http://blzdistsc2-a.akamaihd.net/Linux/SC2.4.10.zip -o SC2.4.10.zip \
     && unzip -q -P iagreetotheeula SC2.4.10.zip \
     && rm SC2.4.10.zip \
-    && ln -s /root/StarCraftII/Maps /root/StarCraftII/maps
+    && ln -s /opt/StarCraftII/Maps /opt/StarCraftII/maps \
+    && chmod -R 755 /opt/StarCraftII
 
-# Bot code + Python deps. pytest is included so the integration suite can run inside
-# the image against 4.10 (see docker/README.md); the eval runtime itself doesn't use it.
-WORKDIR /app
+# Build tools & compiler for setuid wrapper
+RUN apt-get update \
+    && apt-get install --assume-yes --no-install-recommends gcc libc6-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Bot engine and Python dependencies installed in /opt/executor (compiled to .pyc)
+WORKDIR /opt/executor
 COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt pytest pytest-asyncio
 COPY . .
+RUN rm -rf docker \
+    && mv run.py _runner.py \
+    && python -m compileall -b /opt/executor \
+    && find /opt/executor -name "*.py" -delete
 
-# Default to the headless launch target so `python run.py ...` inside the container
-# needs no extra flags; still overridable per-invocation with --target / SC2_TARGET.
+# Create non-root agent user (UID 1000)
+RUN useradd -m -s /bin/bash -u 1000 agent \
+    && ln -s /opt/StarCraftII /home/agent/StarCraftII \
+    && ln -s /opt/StarCraftII /root/StarCraftII
+
+# Compile SetUID wrapper so the non-root agent can execute builds with root privileges
+# while /opt/executor remains strictly chmod 700 (execute-only via wrapper, 0 read access)
+COPY docker/run_build.c /opt/run_build.c
+RUN gcc -O2 /opt/run_build.c -o /usr/local/bin/run-build \
+    && rm /opt/run_build.c \
+    && chown root:root /usr/local/bin/run-build \
+    && chmod 4755 /usr/local/bin/run-build
+
+# Clean agent workspace: contains only DSL docs and reference tables by default
+WORKDIR /workspace
+RUN cp /opt/executor/README.agent.md ./README.md \
+    && if [ -d /opt/executor/reference ]; then cp -r /opt/executor/reference ./; fi \
+    && chown -R agent:agent /workspace
+
+# Lock /opt/executor: strictly root-only access (non-root agent cannot read/list files)
+RUN chown -R root:root /opt/executor \
+    && chmod 700 /opt/executor
+
+ENV PYTHONPATH="/opt/executor"
+ENV SC2PATH="/opt/StarCraftII"
 ENV SC2_TARGET=linux
 
-# A terminal agent iterates here (edit a build, run it, read [summary], repeat);
-# a one-shot run overrides this with an explicit `python run.py ...` command.
+# Entrypoint script: dynamically creates run.py only when ALLOW_RUN=1 is passed,
+# then drops privileges to non-root user 'agent'
+COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN chmod 755 /usr/local/bin/entrypoint.sh
+
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 CMD ["bash"]

@@ -28,8 +28,8 @@ cd ~/projects/build-order-executor && .venv/bin/python run.py \
 ### Run via Docker (headless Linux, no Wine/display required)
 
 ```bash
-docker run --rm \
-  -v ~/replays/bot:/root/replays/bot \
+docker run --rm -e ALLOW_RUN=1 \
+  -v ~/replays/bot:/home/agent/replays/bot \
   build-order-executor-headless \
   python run.py --build builds/pvz_opening_8worker.yaml
 ```
@@ -37,7 +37,7 @@ docker run --rm \
 Mounting the replays folder this way causes the replay to get saved to the host. To get old maps off the container, e.g.:
 
 ```bash
-docker run --rm build-order-executor-headless tar -cf - -C /root/StarCraftII/Maps . \
+docker run --rm build-order-executor-headless tar -cf - -C /opt/StarCraftII/Maps . \
   | tar -xf - -C "$HOME/Games/starcraft-ii/drive_c/Program Files (x86)/StarCraft II/Maps"
 ```
 
