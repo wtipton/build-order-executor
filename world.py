@@ -263,8 +263,9 @@ class WorldMixin:
         self.builder_state.builder_tag = worker.tag
         self.builder_state.spot = spot
         worker.move(pos)
+        origin_detail = f"  ({origin})" if origin != "pool" else ""
         self._log_builder("assigned", step, worker,
-                          f"@ ({pos.x:.0f},{pos.y:.0f})  {origin}; build at {step.at}")
+                          f"@ ({pos.x:.0f},{pos.y:.0f}){origin_detail}")
         return True
 
     def _find_next_build_step(self) -> Step | None:

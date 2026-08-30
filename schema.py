@@ -30,7 +30,7 @@ import catalog
 # Every VALUE the DSL accepts is case-insensitive; field names are not (they're the
 # syntax, not the data, and a mis-cased key already fails loudly under extra="forbid").
 # Each value is normalized to its canonical spelling as it validates, so nothing
-# downstream — dict lookups, logs, the [step] echo — has to think about case.
+# downstream — dict lookups, logs, the [done] echo — has to think about case.
 def _lower(v: object) -> object:
     return v.lower() if isinstance(v, str) else v  # non-str falls through to the real error
 
@@ -75,7 +75,7 @@ Place = Annotated[_Place, Lower]
 Who = Annotated[str, Lower]
 
 # "How many", where omitting it means the step's own default. None rather than a literal
-# 1 so `_StepBase.__str__` (which drops None) doesn't tack `count=1` onto every [step]
+# 1 so `_StepBase.__str__` (which drops None) doesn't tack `count=1` onto every [done]
 # line for the single-unit case that is by far the most common.
 Count = Annotated[int, Field(ge=1)] | None
 

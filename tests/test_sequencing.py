@@ -134,3 +134,20 @@ async def test_started_step_completes_even_if_trigger_goes_false():
     assert fake.steps_done == 1
     assert fake.step_state.trigger_fired is False, "commit flag must reset for the next step"
     assert len(trig_calls) == 1, "trigger was re-checked after the step started"
+
+
+async def test_done_output_format(capsys):
+    from schema import BuildStep, SetGasProbesStep, Trigger
+    step1 = BuildStep(at=Trigger(time=0), do="build", what="Pylon")
+    step2 = SetGasProbesStep(at=Trigger(time=180), do="set_gas_probes", count=6)
+    fake = _seq_bot([step1, step2], trigger_met=lambda at: True, run_handler=_always)
+    fake.supply_used = 23
+    fake._clock = lambda: "3:00"
+
+    await BuildOrderBot.run_steps(fake)
+
+    captured = capsys.readouterr()
+    lines = captured.out.strip().splitlines()
+    assert len(lines) == 2
+    assert lines[0] == "[done]     3:00  step=1/2  build what=Pylon"
+    assert lines[1] == "[done]     3:00  step=2/2  set_gas_probes count=6"

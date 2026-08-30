@@ -14,19 +14,18 @@ sequencing explicit steps against that constraint, verified against the real gam
 
 The single most important lesson. Do **not** deduce unit counts from supply arithmetic
 or guess what happened — run the real game and read the instrumentation (`[status]` and
-`[complete]` are always on; `--debug` adds `[step*]`/`[prewalk]` build-issue detail).
-`bot.py` prints a `[status]` block every 10 game-seconds, and a final census at `[end]`:
+`[ready]` are always on; `--debug` adds `[step*]`/`[prewalk]` build-issue detail).
+`bot.py` prints a `[status]` line every 10 game-seconds, and a final census at `[end]`:
 
 ```
-[status]  4:32  sup=45/54 workers=28 min=350 gas=120 bases[b1=16/16 b2=12/16] chrono=2
-[status]  4:32  step 12/34  build what=Gateway  (38s)  waiting on trigger count Pylon=1 (have 0)
+[status]   4:32  step=13/34 (38s)  build what=Gateway -- waiting for count Pylon=1 (have 0)  |  supply=45/54 workers=28 min=350 gas=120 bases[b1=16/16 b2=12/16] chrono=2
 ```
 
-- The `[status]` block prints every 10 game-seconds: an economy snapshot (supply,
-  workers, `min/gas`, per-base saturation `bases[b1=16/16 b2=..]`, chrono available),
-  then the current step with **how long it has been current** and what it is waiting on.
+- The `[status]` line prints every 10 game-seconds: the current step with **how long it
+  has been current** and what it is waiting on, then an economy snapshot (supply,
+  workers, `min/gas`, per-base saturation `bases[b1=16/16 b2=..]`, chrono available).
 - A growing step age is a stall — there is no separate `[stall]` tag and nothing is
-  hidden behind a threshold. Both lines are build-agnostic.
+  hidden behind a threshold. It is build-agnostic.
 
 If a metric matters (e.g. "at the proxy"), add/keep a direct measurement for it. Claims
 like "they died in combat" or "≈19 alive" without a log line to back them are how you
@@ -36,20 +35,20 @@ buffers until the process exits).
 ```bash
 cd ~/projects/build-order-executor
 .venv/bin/python run.py --build builds/<x>.yaml --fullscreen --time-limit 330 2>&1 \
-  | grep -E "\[end\]|\[complete\]|\[status\]"
+  | grep -E "\[end\]|\[ready\]|\[done\]|\[status\]"
 ```
 `--fullscreen` is required (windowed is unusably slow under Wine). `--time-limit N` ends
 at N game-seconds; add a trailing step that never fires (or enough production steps) so
 the build doesn't `concede` before the deadline. **Runs are ~deterministic** — one run
 per change is enough; don't burn time re-running for "stability".
 
-**Verify tight deadlines with `[complete]`, not `[status]`.** `[status]` prints every 10s —
-too coarse to tell 4:12 from 4:18 against a 4:15 deadline. `[complete] M:SS <name>` is
-logged the frame each unit/structure type or upgrade FIRST finishes; grep `\[complete\]`
+**Verify tight deadlines with `[ready]`, not `[status]`.** `[status]` prints every 10s —
+too coarse to tell 4:12 from 4:18 against a 4:15 deadline. `[ready] M:SS <name>` is
+logged the frame each unit/structure type or upgrade FIRST finishes; grep `\[ready\]`
 and compare to the deadline. It's automatic and build-agnostic — every type you produce is
 timestamped, nothing needs configuring. It is first-of-type only, so for "when did I reach
 14 Zealots" you still need a direct measurement. The `[end]` line carries a final census,
-but "done by end" ≠ "done by the deadline", so use `[complete]` for hard cutoffs.
+but "done by end" ≠ "done by the deadline", so use `[ready]` for hard cutoffs.
 
 ## The executor's step model (and its traps)
 
@@ -126,7 +125,7 @@ key things that table's *static* column can't show are the **runtime modifiers**
 
 ## Optimization workflow
 
-1. **State the metric precisely** and measure it directly (a `[complete]` timestamp, a
+1. **State the metric precisely** and measure it directly (a `[ready]` timestamp, a
    census count from `[end]`/`[summary]`, not an inference).
 2. **Find the binding constraint each phase** from the heartbeat:
    - `min` near 0 → **mineral-limited** (fewer/cheaper structures; more income).
@@ -173,8 +172,8 @@ tech tax overloads — key moves:
 - `do_build`: baseline `already_pending()` per step so **many same-type structures build
   concurrently** (python-sc2 counts every under-construction building type-wide).
 - `placement.building`: anchor **away from the mineral line**, pack tight.
-- `observe.py`: the `[status]` block (economy + current step with age/reason) and
-  `_note_completions()` (`[complete] M:SS`) observability — keep them; they're how you
+- `observe.py`: the `[status]` line (economy + current step with age/reason) and
+  `_note_completions()` (`[ready] M:SS`) observability — keep them; they're how you
   measure. Both are build-agnostic: nothing about a particular build is hard-coded.
 
 If a build behaves impossibly, suspect a bot bug before contorting the YAML — but confirm

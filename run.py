@@ -90,8 +90,8 @@ from loguru import logger as _loguru  # noqa: E402  (python-sc2's logging backen
 from bot import BuildOrderBot, load_build  # noqa: E402
 
 # One-line legend for the always-on output tags (printed at startup).
-OUTPUT_LEGEND = ("[run] output: [step]=step fired  [complete]=type first finished  "
-                 "[status]=periodic economy + current-step snapshot  [end]=final  "
+OUTPUT_LEGEND = ("[run] output: [done]=step finished  [ready]=unit/structure/upgrade ready  "
+                 "[status]=periodic current-step + economy snapshot  [end]=final  "
                  "[summary]=machine-readable JSON  "
                  "[builder]=a probe pulled off the line for a build: assigned (walking there) then building (order in, dist= how far it still had to walk)")
 

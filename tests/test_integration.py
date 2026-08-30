@@ -46,7 +46,7 @@ def _census(data: dict) -> dict:
     """The summary's census keyed by UnitTypeId name.
 
     `[summary]` reports the game's own display names (CyberneticsCore, WarpGate) so it
-    matches the `[complete]` lines; those upper-case back to the enum names the catalog
+    matches the `[ready]` lines; those upper-case back to the enum names the catalog
     tables use, which is what these assertions are written against.
     """
     return {name.upper(): n for name, n in data["census"].items()}
@@ -59,7 +59,7 @@ def _run(build: str, time_limit: int) -> dict:
     swallows it and a crashed run reports as a bare exit code — which hides the
     difference that matters here: a bug in the bot vs. the SC2 client dying on
     launch (python-sc2 raises `assert all(isinstance(r, Result) ...)`, and stdout
-    has no [step]/[summary] lines at all).
+    has no [done]/[summary] lines at all).
     """
     cmd = [sys.executable, "run.py", "--build", build, "--fullscreen",
            "--map", TEST_MAP, "--time-limit", str(time_limit)]

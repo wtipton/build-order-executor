@@ -20,7 +20,7 @@ and mixes in the behaviour by concern —
   * steps.py    (StepsMixin)    — the step engine + every do_<action> handler
   * economy.py  (EconomyMixin)  — probes / saturation
   * world.py    (WorldMixin)    — locations, rally point, builder assignment
-  * observe.py  (ObserveMixin)  — run summary, [status]/[complete]/[end] reporting
+  * observe.py  (ObserveMixin)  — run summary, [status]/[ready]/[end] reporting
   * placement.py (Placement)    — building/pylon geometry (held as self.placement)
 
 The YAML spec (triggers, actions) is defined and validated in schema.py.
@@ -105,7 +105,7 @@ class BuildOrderBot(StepsMixin, EconomyMixin, WorldMixin, ObserveMixin, BotAI):
         self._upgrade_completions: dict[UpgradeId, float] = {}  # Values are timestamps
 
         # Why the current step hasn't completed — set by handlers on a False return,
-        # reported every [status] block.
+        # reported on every [status] line.
         # TODO: this is frame-scoped, but it's up to a lot of independent handlers to
         # maintain this invariant. Do an audit to ensure it can never be stale and then
         # maybe do something to ensure it stays that way.
@@ -118,9 +118,10 @@ class BuildOrderBot(StepsMixin, EconomyMixin, WorldMixin, ObserveMixin, BotAI):
         self.rally_point = self._resolve_place("main_ramp")
 
     async def on_end(self, result: Result) -> None:
-        print(f"[end] t={self.time:.1f}s result={result} supply={self.supply_used} "
+        res_str = result.name if hasattr(result, "name") else str(result)
+        print(f"{'[end]':<9} t={self.time:.1f}s result={res_str} supply={self.supply_used} "
               f"workers={int(self.supply_workers)} steps={self.steps_done}/{len(self.cfg.steps)}", flush=True)
-        print(f"[end] {self._army_report()}", flush=True)
+        print(f"{'[end]':<9} {self._army_report()}", flush=True)
         # Machine-readable summary
         try:
             summary = self._run_summary(result)
@@ -148,8 +149,8 @@ class BuildOrderBot(StepsMixin, EconomyMixin, WorldMixin, ObserveMixin, BotAI):
         # Once every step has fired, keep macroing for a short grace period, then concede.
         if self.all_steps_done and self._build_done_at is None:
             self._build_done_at = self.time
-            print(f"[run] {self._clock():>4}  build complete", flush=True)
+            print(f"{'[run]':<9} {self._clock():>5}  build complete", flush=True)
         if not self._conceded and self._build_done_at is not None and self.time - self._build_done_at >= CONCEDE_GRACE:
             self._conceded = True
-            print(f"[run] {self._clock():>4}  conceding ({int(CONCEDE_GRACE)}s after build)", flush=True)
+            print(f"{'[run]':<9} {self._clock():>5}  conceding ({int(CONCEDE_GRACE)}s after build)", flush=True)
             await self.client.leave()

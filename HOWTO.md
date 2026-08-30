@@ -57,6 +57,26 @@ python run.py --build builds/pvz_opening_8worker.yaml --time-limit 600
 
 runs on map CatalystLE which we'll use pervasively.
 
+## Step Completion
+
+A step completes (and prints `[done]`) as soon as its action has been initiated/confirmed by the game engine. This is distinct from when a unit, structure, or upgrade finishes and becomes usable (which prints `[ready]`):
+
+| Step Action (`do:`) | When Step Completes (`[done]`) |
+|---|---|
+| `build` | Construction site placed; probe released back to mining |
+| `train` | Unit queued into production building |
+| `warp_in` | Unit placed in pylon power field (warp animation begins) |
+| `morph` | Gateway morph command accepted |
+| `research` | Upgrade queued and resources deducted |
+| `chrono` | 50 energy spent, boost applied |
+| `send_probe` / `return_probe` | Move order given |
+| `set_rally_point` | Rally point updated |
+| `rally_and_transfer_probes` | Rally set & excess probes reassigned |
+| `set_gas_probes` | Probes reallocated to/from gas |
+| `cut_probes` / `resume_probes` | Worker production toggled |
+| `wait` | Trigger criterion met |
+| `hallucinate` | Energy spent and hallucination spawned |
+
 ## Systems
 
 ### Locations
@@ -174,10 +194,10 @@ The bot's output contains semi-structured data to help understand what happened 
 | Tag | Meaning |
 |---|---|
 | `[run]` | lifecycle: build loaded, output legend, build complete, conceding, replay/summary paths |
-| `[step]` | a build step fired, with clock + supply, e.g. `[step] 1:54  sup19  build what=Nexus` |
-| `[complete]` | a unit, structure, or upgrade completed, with a running per-type count, e.g. `[complete] 4:19  Gateway #3`. Probes are skipped. |
+| `[done]` | a build step completed, with clock and step progress, e.g. `[done] 1:54  step=3/20  build what=Nexus` |
+| `[ready]` | a unit, structure, or upgrade became ready, with a running per-type count, e.g. `[ready] 4:19  Gateway #3`. Probes are skipped. |
 | `[builder]` | the lifecycle of the one probe pulled off the mineral line for a build: `assigned` when it's pulled and starts walking, then `building` when the order goes in. `dist=` is how far it still is from the spot — near-zero on the `building` line means the walk was overlapped with saving up, a big number means it was on the critical path. A `count` step logs `assigned` and `building` for each structure; after the first, `assigned` says `held`, meaning it reused the probe already building for this step. |
-| `[status]` | every 10 game-seconds, two lines: economy snapshot; the current step with how long it's been current and what it's waiting on |
+| `[status]` | every 10 game-seconds: current step with age and status, then economy snapshot |
 | `[end]` | final state + army report |
 
 All of the above are unconditional — there is no verbosity flag, so a run never has to be

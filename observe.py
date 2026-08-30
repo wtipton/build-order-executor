@@ -1,5 +1,5 @@
 """Observability for BuildOrderBot: the machine-readable run summary, the human
-`[status]`/`[complete]`/`[builder]`/`[end]` reporting, and step/trigger formatting.
+`[status]`/`[ready]`/`[builder]`/`[end]` reporting, and step/trigger formatting.
 
 `ObserveMixin` is mixed into `BuildOrderBot` (see bot.py) — its methods run on the
 live bot via `self`, so they read game state (`self.time`, `self.structures`, …)
@@ -24,7 +24,7 @@ from catalog import (
 )
 from schema import PLACES, Step, Trigger
 
-# How often the periodic [status] block prints (game-seconds).
+# How often the periodic [status] line prints (game-seconds).
 STATUS_INTERVAL = 10.0
 
 # UpgradeId -> the friendly name a build order uses (reverse of catalog.RESEARCH),
@@ -95,7 +95,7 @@ class ObserveMixin:
 
     def _note_completions(self) -> None:
         """Timestamp EVERY unit/structure completion and every upgrade, as
-        `[complete] M:SS <Name> #<n>` where n is the running count of that type.
+        `[ready] M:SS <Name> #<n>` where n is the running count of that type.
 
         Derived purely from game state — no knowledge of what the build asked for — so it
         works for any build with no configuration. [status] only prints every
@@ -122,12 +122,12 @@ class ObserveMixin:
             self._completions[key] = self.time
             type_id = key[1]
             nth = sum(1 for _, t in self._completions if t == type_id)
-            print(f"[complete] {self._clock():>4}  {self._unit_name(type_id)} #{nth}", flush=True)
+            print(f"{'[ready]':<9} {self._clock():>5}  {self._unit_name(type_id)} #{nth}", flush=True)
 
         new_upgrades = set(self.state.upgrades) - self._upgrade_completions.keys()
         for upgrade in sorted(new_upgrades, key=lambda u: u.name):
             self._upgrade_completions[upgrade] = self.time
-            print(f"[complete] {self._clock():>4}  {UPGRADE_NAMES.get(upgrade, upgrade.name)}", flush=True)
+            print(f"{'[ready]':<9} {self._clock():>5}  {UPGRADE_NAMES.get(upgrade, upgrade.name)}", flush=True)
 
     def _completions_by_type(self) -> dict:
         """Completion times grouped by type name, oldest first — the summary's view of
@@ -138,40 +138,41 @@ class ObserveMixin:
         return out
 
     def _status_report(self) -> None:
-        """The periodic `[status]` block: an economy snapshot, then what we're doing and
-        how long we've been doing it.
+        """The periodic `[status]` line: what we're doing and how long we've been doing it,
+        then an economy snapshot.
 
-        The second line replaces the old [stall] machinery. Rather than classifying a
+        Replaces the old [stall] machinery. Rather than classifying a
         stall against a threshold, it always shows the current step, its age, and why it
         hasn't completed — an observer sees the age growing and draws their own
         conclusion, with no thresholds to tune and nothing hidden for the first 60s.
 
-        Army/production counts deliberately aren't here: [complete] already timestamps
+        Army/production counts deliberately aren't here: [ready] already timestamps
         every type as it appears, and [end] carries the final census."""
-        print(f"[status] {self._clock():>5}  sup={self.supply_used}/{self.supply_cap} "
+        print(f"{'[status]':<9} {self._clock():>5}  {self._step_status()}  |  "
+              f"supply={self.supply_used}/{self.supply_cap} "
               f"workers={int(self.supply_workers)} min={self.minerals} gas={self.vespene} "
               f"bases[{self._base_saturation()}] chrono={self._chrono_available()}", flush=True)
-        print(f"[status] {self._clock():>5}  {self._step_status()}", flush=True)
 
     def _step_status(self) -> str:
         """Which step we're on, how long it's been current, and what it's waiting for."""
         step = self.current_step
+        total = len(self.cfg.steps)
         if step is None:
-            return f"step {self.steps_done}/{len(self.cfg.steps)}  BUILD COMPLETE"
+            return f"step={self.steps_done}/{total}  BUILD COMPLETE"
+        step_num = self.steps_done + 1
         age = int(self.time - self.step_state.started_at)
         if not self.step_state.trigger_fired:
-            why = f"waiting on trigger {self._trigger_progress(step.at)}"
+            why = f"waiting for {self._trigger_progress(step.at)}"
         else:
             why = self._status or "issued; waiting to confirm"
-        return (f"step {self.steps_done}/{len(self.cfg.steps)}  {step}"
-                f"  ({age}s)  {why}")
+        return f"step={step_num}/{total} ({age}s)  {step} -- {why}"
 
     def _log_builder(self, state: str, step: Step, probe: Unit, detail: str = "") -> None:
         """One `[builder]` line per transition of `builder_state` (world.py owns the state
         itself), so a pulled probe's whole lifecycle is greppable under one tag:
 
-            [builder]  0:42  probe 4342 assigned  Pylon  dist=21.7  sup13 min=88  @ (34,118)  pool; build at supply>=14
-            [builder]  0:51  probe 4342 building  Pylon  dist=0.3  sup14 min=104
+            [builder]  0:42  probe 4342 assigned  Pylon  dist=21.7  supply=13 min=88  @ (34,118)
+            [builder]  0:51  probe 4342 building  Pylon  dist=0.3  supply=14 min=104
 
         `dist` means the same thing on both lines — how far this probe still is from the
         spot — which is exactly what makes the pair readable: big on `assigned` (we just
@@ -181,10 +182,10 @@ class ObserveMixin:
         Unconditional: a build issues ~30 times a game, and needing a flag to see which
         probe did what means re-running to diagnose."""
         where = getattr(step, "where", None)
-        print(f"[builder] {self._clock():>4}  probe {probe.tag} {state}  "
+        print(f"{'[builder]':<9} {self._clock():>5}  probe {probe.tag} {state}  "
               f"{step.what}{'/' + where if where else ''}  "
               f"dist={probe.distance_to(self.builder_state.spot.position):.1f}  "
-              f"sup{self.supply_used} min={self.minerals}"
+              f"supply={self.supply_used} min={self.minerals}"
               f"{'  ' + detail if detail else ''}", flush=True)
 
     def _base_saturation(self) -> str:
@@ -213,7 +214,7 @@ class ObserveMixin:
 
     def _clock(self) -> str:
         s = int(self.time)
-        return f"{s // 60}:{s % 60:02d}"
+        return f"{s // 60:>2}:{s % 60:02d}"
 
     def _trigger_progress(self, at: Trigger) -> str:
         """`count HighTemplar=2 (have 0)` — the condition plus what we have right now, so
