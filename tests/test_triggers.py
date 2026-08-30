@@ -5,6 +5,8 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
+import pytest
+
 from bot import BuildOrderBot
 from schema import Trigger
 
@@ -29,6 +31,14 @@ def test_asap_fires_against_an_empty_game():
     # wait, so the step goes on to stall in its handler if it can't afford itself.
     fake = fake_bot(supply_used=0, time=0.0, minerals=0, vespene=0)
     assert BuildOrderBot.trigger_met(fake, Trigger(asap=True)) is True
+
+
+def test_an_unhandled_trigger_raises_rather_than_firing():
+    # model_construct skips validation, so this is the empty trigger the schema forbids —
+    # standing in for a trigger field added later without a branch in trigger_met.
+    fake = fake_bot(supply_used=20, time=100.0, minerals=500, vespene=88)
+    with pytest.raises(AssertionError, match="unhandled trigger"):
+        BuildOrderBot.trigger_met(fake, Trigger.model_construct())
 
 
 def test_asap_reserves_nothing_for_probes():

@@ -83,7 +83,8 @@ class StepsMixin:
         if at.count is not None:
             name, n = next(iter(at.count.items()))
             return self.count_of(name) >= n
-        return True
+        # Unreachable: Trigger._exactly_one guarantees one of the above is set.
+        raise AssertionError(f"unhandled trigger: {at!r}")
 
     def _prewalk_due(self, step: Step) -> bool:
         """Whether to pull a probe off the mineral line for `step` yet.
