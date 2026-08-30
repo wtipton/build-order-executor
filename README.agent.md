@@ -39,7 +39,7 @@ Various other fields are specific to the type of action. Values, including build
 
 Steps are executed one at a time, i.e. a step's trigger is checked and its action taken only after the previous step is complete. (There is a single exception to this, the prewalk system for builders, described below, which involves some limit lookahead past the current step.) For each step, we wait until the triggering condition becomes true, and then execute it.
 
-So, if one step's triggering condition never becomes true, we never move past the step, and the whole build stalls. Deadlocks like this can definitely happen in pratice -- e.g. suppose a step's trigger criterion is for a unit to appear, but we are currently supply-capped, so that no units can be produced. Ensure you build enough pylons in advance so the game does not stall!
+So, if one step's triggering condition never becomes true, we never move past the step, and the whole build stalls. Deadlocks like this can definitely happen in pratice -- e.g. suppose a step's trigger criterion is for a unit to appear, but we are currently supply-capped, so that no units can be produced. In this case, the whole build will stall.
 
 See `schema.py` for details of the syntax. However, a build order `example.yaml` might begin:
 
@@ -71,7 +71,7 @@ The **Confirmed?** column is the one to read when writing a build. A *confirmed*
 | `warp` | confirmed | The warping units are on the map (warp animation under way), counted by tag. With `count: N`, after all N |
 | `morph` | confirmed | Every source committed is consumed or visibly carrying the morph ability. Covers `warpgate`/`gateway` (1:1) and `archon` (2 HT/DT combined) |
 | `research` | confirmed | The upgrade reads as pending on a later frame. Completes instantly, spending nothing, if it's already researching or done |
-| `train` | issued | All `count` units queued into production buildings (not produced) |
+| `train` | issued | All `count` units queued into production buildings. Note that units will be queued-but-not-actively-training in case we are supply blocked |
 | `chrono` | issued | 50 energy spent, boost issued to the chosen structure |
 | `hallucinate` | issued | 75 energy spent and the ability issued by a Sentry |
 | `send_probe` | issued | Move order given. Stalls first if no probe is free to send |

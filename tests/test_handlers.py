@@ -24,8 +24,13 @@ from state import StepState
 # ------------------------------------------------------------------ do_train
 # NB: WHICH producer gets the unit is Scheduler's job now — see tests/test_scheduler.py.
 # These cover only do_train's own decision: afford, delegate, issue.
-def _train_bot(producer, afford=True):
-    return fake_bot(can_afford=lambda u: afford, step_state=StepState(), _status="",
+def _train_bot(producer, afford=True, supply_left=99):
+    # supply_left defaults high so these cover the ordinary path; the supply-blocked
+    # cases below set it explicitly. do_train passes check_supply_cost=False, so the
+    # stub must accept the kwarg even though it ignores it.
+    return fake_bot(can_afford=lambda u, check_supply_cost=True: afford,
+                    calculate_supply_cost=lambda u: 2.0, supply_left=supply_left,
+                    step_state=StepState(), _status="",
                     scheduler=SimpleNamespace(producer_for=lambda unit: producer))
 
 
@@ -63,13 +68,61 @@ async def test_train_count_orders_them_all_in_one_frame():
     assert fake.step_state.train.issued == 5
 
 
+async def test_train_queues_with_no_supply_rather_than_stalling():
+    # The game holds a train order it has no supply for in the producer's queue and starts
+    # it when supply frees, so stalling would buy nothing — and would deadlock a build
+    # whose Pylon step comes after this one.
+    gw = fake_unit(tag=1)
+    fake = _train_bot(gw, supply_left=0)
+    assert await BuildOrderBot.do_train(fake, _zealot()) is True
+    gw.train.assert_called_once_with(U.ZEALOT)
+
+
+async def test_train_flags_a_batch_that_runs_the_supply_dry_partway():
+    # 4 supply free, Zealots cost 2 each: the first two start, the last two only queue.
+    # supply_left doesn't move as we issue (Unit.train doesn't subtract supply), so
+    # without the manual decrement down the loop this case would report clean.
+    gw = fake_unit(tag=1)
+    fake = _train_bot(gw, supply_left=4)
+    assert await BuildOrderBot.do_train(fake, _zealot(count=4)) is True
+    assert fake.step_state.train.blocked is True
+    assert "supply blocked" in fake._status  # substring: the exact wording is free to change
+
+
+async def test_train_says_nothing_when_supply_was_there():
+    gw = fake_unit(tag=1)
+    fake = _train_bot(gw, supply_left=99)
+    assert await BuildOrderBot.do_train(fake, _zealot(count=4)) is True
+    assert fake.step_state.train.blocked is False
+    assert fake._status == "", "a clean step must not annotate its [done] line"
+
+
+async def test_train_stall_reason_survives_a_supply_blocked_partial_batch():
+    # Blocked units queued AND the step still short: [status] must show why it's holding,
+    # not the supply note (which is only for the frame the step completes). The flag
+    # latches for the [done] line on whichever later frame that turns out to be.
+    gw = fake_unit(tag=1)
+    budget = [1]
+    fake = _train_bot(gw, supply_left=0)
+    fake.can_afford = (lambda u, check_supply_cost=True:
+                       budget[0] > 0 and (budget.__setitem__(0, budget[0] - 1) or True))
+    assert await BuildOrderBot.do_train(fake, _zealot(count=3)) is False
+    assert fake.step_state.train.blocked is True
+    assert "can't afford" in fake._status
+
+    budget[0] = 99
+    assert await BuildOrderBot.do_train(fake, _zealot(count=3)) is True
+    assert "supply blocked" in fake._status
+
+
 async def test_train_count_resumes_next_frame_after_a_partial_batch():
     # afford 2 of 5, then the money arrives: the step must order the REMAINING 3, not
     # start over — the tally is the only record that a partial batch went out.
     gw = fake_unit(tag=1)
     budget = [2]
     fake = _train_bot(gw)
-    fake.can_afford = lambda u: budget[0] > 0 and (budget.__setitem__(0, budget[0] - 1) or True)
+    fake.can_afford = (lambda u, check_supply_cost=True:
+                       budget[0] > 0 and (budget.__setitem__(0, budget[0] - 1) or True))
     step = _zealot(count=5)
     assert await BuildOrderBot.do_train(fake, step) is False, "2 of 5 ordered — must hold"
     assert gw.train.call_count == 2

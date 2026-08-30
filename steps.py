@@ -65,7 +65,10 @@ class StepsMixin:
                 return  # stall the line until this step can be done (strict order)
             step_num = self.steps_done + 1
             total = len(self.cfg.steps)
-            print(f"{'[done]':<9} {self._clock():>5}  step={step_num}/{total}  {step}", flush=True)
+            # A handler that completed but has something to report leaves it in _status;
+            # no step does so routinely, so this stays empty on a clean run.
+            note = f"  -- {self._status}" if self._status else ""
+            print(f"{'[done]':<9} {self._clock():>5}  step={step_num}/{total}  {step}{note}", flush=True)
             self.steps_done += 1
             self.step_state.reset(self.time)  # the finished step's in-flight state dies with it
 
@@ -144,7 +147,9 @@ class StepsMixin:
 
     async def run_handler(self, step: Step) -> bool:
         """Run the step's `do_<action>` handler once; True if the step completed."""
-        self._status = ""  # handlers set this when they return False; shown by [status]
+        # Why the step isn't done yet (shown by [status]) or, on the frame it completes,
+        # a note about how it went (appended to [done]). Cleared per call either way.
+        self._status = ""
         handler = getattr(self, f"do_{step.do}")
         return await handler(step)
 
@@ -231,23 +236,37 @@ class StepsMixin:
         Two things could go stale while issuing several in one frame, and neither does:
         `Unit.train` subtracts the cost immediately, so can_afford stays accurate, and
         the Scheduler records each producer it hands out. Any we can't order this frame
-        are recorded in step_state and ordered on a later one."""
+        are recorded in step_state and ordered on a later one.
+
+        Supply is deliberately NOT part of the affordability check (`check_supply_cost=
+        False`). The game accepts a train order it has no supply for, holding the unit in
+        the producer's queue and starting it the moment supply frees."""
         unit = unit_id(step.what)
         want = step.count or 1
         ts = self.step_state.train
+        supply_cost = self.calculate_supply_cost(unit)
+        supply_left = self.supply_left
 
         while ts.issued < want:
-            if not self.can_afford(unit):
+            if not self.can_afford(unit, check_supply_cost=False):
                 self._status = f"can't afford {step.what} ({ts.issued}/{want} ordered)"
-                break  # save for it (costs money + supply), stalling the line
+                break  # save for it, stalling the line
             producer = self.scheduler.producer_for(unit)
             if producer is None:
                 self._status = f"every {PRODUCER.get(unit, 'producer')} queue is full ({ts.issued}/{want} ordered)"
                 break
+            if supply_left < supply_cost:
+                ts.blocked = True
+            else:
+                supply_left -= supply_cost
             producer.train(unit)
             ts.issued += 1
 
-        return ts.issued >= want
+        if ts.issued < want:
+            return False
+        if ts.blocked:  # surfaced on the [done] line
+            self._status = "(note: supply blocked!)"
+        return True
 
     async def do_warp(self, step: Step) -> bool:
         """Warp in `count` of a unit (default 1) — a round across every ready Warpgate.

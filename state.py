@@ -59,6 +59,8 @@ class TrainState:
     step doesn't wait on it. That makes this count the only record of progress when a step
     can afford 3 of its 7 and has to finish the rest on a later frame."""
     issued: int = 0
+    # Whether any of them went into a producer's queue with no supply free to start it.
+    blocked: bool = False
 
 
 @dataclass
