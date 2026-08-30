@@ -425,18 +425,23 @@ async def test_warp_count_completes_only_once_every_unit_has_appeared():
 
 
 # ============================================================ _warp_tiles
-def _tiles_bot(*, occupied=(), unpowered=(), unplaceable=()):
-    """A pylon at (0,0). `occupied` tiles have a unit standing on them, `unpowered` are
-    outside the matrix, `unplaceable` fail the game's placement query (terrain)."""
-    occupied, unpowered, unplaceable = set(occupied), set(unpowered), set(unplaceable)
-    units = FakeUnits([fake_unit(position=Point2(p)) for p in occupied])
-    return fake_bot(
-        state=fake_bot(psionic_matrix=fake_bot(
-            covers=lambda p: (p.x, p.y) not in unpowered)),
+def _tiles_bot(*, blockers=(), unpowered=(), unplaceable=()):
+    """A pylon at (0,0). Candidate tiles are CENTRES, so they read (x+0.5, y+0.5).
+
+    `blockers` are (position, radius) pairs — a unit blocks a tile when its BODY reaches
+    it, so the radius is the whole point. `unpowered`/`unplaceable` are tile centres.
+    """
+    unpowered, unplaceable = set(unpowered), set(unplaceable)
+    units = FakeUnits([fake_unit(position=Point2(pos), radius=r) for pos, r in blockers])
+    fake = fake_bot(
+        state=fake_bot(psionic_matrix=fake_bot(covers=lambda p: (p.x, p.y) not in unpowered)),
         can_place=AsyncMock(side_effect=lambda ability, ps: [(p.x, p.y) not in unplaceable
                                                             for p in ps]),
         all_units=units,
     )
+    # the real blocker test, so these exercise the production radius arithmetic
+    fake._blocked_for_warp = lambda t: BuildOrderBot._blocked_for_warp(fake, t)
+    return fake
 
 
 async def _tiles(fake, needed=4):
@@ -444,13 +449,38 @@ async def _tiles(fake, needed=4):
         fake, WARP_ABILITY[U.ZEALOT], fake_unit(position=Point2((0.0, 0.0))), needed)
 
 
+async def test_warp_tiles_are_centres_not_corners():
+    # Offsetting by whole tiles from the pylon's position lands on its CORNERS — a 2x2
+    # building sits on integer coordinates — so the nearest candidates were points on the
+    # Pylon itself, and every warp there was refused.
+    got = await _tiles(_tiles_bot(), needed=4)
+    assert all(p.x % 1 == 0.5 and p.y % 1 == 0.5 for p in got), got
+
+
 async def test_warp_tiles_skips_tiles_a_unit_is_standing_on():
-    # THE bug: the placement query calls a tile with a finished unit on it free, because a
-    # unit would walk out of the way for a building. It won't for a warp-in, so we have to
-    # rule those tiles out ourselves or the warp is silently refused.
-    blocked = [(0.0, 1.0), (1.0, 0.0)]
-    got = await _tiles(_tiles_bot(occupied=blocked))
-    assert not ({(p.x, p.y) for p in got} & set(blocked))
+    # The placement query calls a tile with a finished unit on it free, because a unit
+    # would walk out of the way for a building. It won't for a warp-in.
+    zealot = (Point2((0.5, 1.5)), 0.5)
+    got = await _tiles(_tiles_bot(blockers=[zealot]))
+    assert Point2((0.5, 1.5)) not in got
+
+
+async def test_warp_tiles_skips_tiles_under_the_pylon_itself():
+    # THE live bug. The Pylon that powers the warp has radius 1.12, and the nearest tiles
+    # sit inside it. A flat centre-to-centre clearance let those through, we handed the
+    # game a target on top of the Pylon, and — list being sorted nearest-first — re-picked
+    # the same tile every frame forever.
+    pylon = (Point2((0.0, 0.0)), 1.12)
+    got = await _tiles(_tiles_bot(blockers=[pylon]), needed=8)
+    assert all(p.distance_to(Point2((0.0, 0.0))) >= 1.12 for p in got), got
+
+
+async def test_warp_tiles_scale_the_exclusion_to_the_blocker():
+    # A Nexus (radius 2.75) blocks far more ground than a probe (0.375). One constant
+    # cannot express both, which is why the check reads the blocker's own radius.
+    nexus = (Point2((0.0, 0.0)), 2.75)
+    got = await _tiles(_tiles_bot(blockers=[nexus]), needed=8)
+    assert all(p.distance_to(Point2((0.0, 0.0))) >= 2.75 for p in got), got
 
 
 async def test_warp_tiles_are_distinct_and_nearest_first():
@@ -462,13 +492,13 @@ async def test_warp_tiles_are_distinct_and_nearest_first():
 
 async def test_warp_tiles_honours_power_and_terrain():
     # both filters still apply — power from the matrix, terrain from the placement query
-    got = await _tiles(_tiles_bot(unpowered=[(0.0, 1.0)], unplaceable=[(1.0, 0.0)]), needed=8)
+    got = await _tiles(_tiles_bot(unpowered=[(0.5, 1.5)], unplaceable=[(1.5, 0.5)]), needed=8)
     flat = {(p.x, p.y) for p in got}
-    assert (0.0, 1.0) not in flat and (1.0, 0.0) not in flat
+    assert (0.5, 1.5) not in flat and (1.5, 0.5) not in flat
 
 
 async def test_warp_tiles_empty_when_everything_is_blocked():
     reach = int(PYLON_POWER_RADIUS)
-    every = [(float(x), float(y)) for x in range(-reach, reach + 1)
+    every = [(Point2((x + 0.5, y + 0.5)), 0.5) for x in range(-reach, reach + 1)
              for y in range(-reach, reach + 1)]
-    assert await _tiles(_tiles_bot(occupied=every)) == []
+    assert await _tiles(_tiles_bot(blockers=every)) == []

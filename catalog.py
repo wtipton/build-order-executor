@@ -50,9 +50,13 @@ MAX_PRODUCTION_QUEUE = 5
 # the matrix itself is still what decides whether a given tile is powered.
 PYLON_POWER_RADIUS = 6.5
 
-# How close a unit has to be to a tile for a warp-in there to be refused. Warping needs
-# the ground clear — unlike building placement, standing units do NOT walk out of the way.
-WARP_TILE_CLEARANCE = 1.0
+# Half-width of a warping unit, for deciding whether something is standing where we want
+# to warp. A gateway unit is about 0.75 across; erring large just picks a tile further out.
+WARP_UNIT_RADIUS = 0.5
+
+# How far around a tile to look for units that might be over it. Only has to exceed the
+# biggest radius in play (a Nexus, 2.75) plus WARP_UNIT_RADIUS.
+WARP_BLOCK_SEARCH = 4.0
 
 # Protoss buildings that produce units (their `trained_from` == one of these).
 PRODUCTION_BUILDINGS: frozenset[U] = frozenset(

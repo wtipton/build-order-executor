@@ -210,3 +210,4 @@ async def test_where_anchored_build_says_so_when_every_offset_traps():
     p.would_trap = lambda unit, pos: True
     assert await p.find_building_location(fake_bot(what="Gateway", where="proxy")) is None
     assert bot._status == "nowhere safe to put Gateway at proxy"
+

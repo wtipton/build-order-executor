@@ -8,6 +8,8 @@ live bot via `self` and lean on the other mixins' helpers (`_free_probe_near`,
 
 from __future__ import annotations
 
+import math
+
 from sc2.ids.ability_id import AbilityId
 from sc2.ids.unit_typeid import UnitTypeId as U
 from sc2.position import Point2
@@ -27,10 +29,12 @@ from catalog import (
     WARP_ABILITY,
     MorphSpec,
     PYLON_POWER_RADIUS,
-    WARP_TILE_CLEARANCE,
+    WARP_BLOCK_SEARCH,
+    WARP_UNIT_RADIUS,
     unit_id,
 )
 from schema import Step, Trigger
+
 
 
 
@@ -307,16 +311,33 @@ class StepsMixin:
         Done by hand because find_placement cannot answer this question. Its placement
         query reports a tile with a friendly unit standing on it as free, which is right
         for a building — units walk out of the way for one — and wrong for a warp-in,
-        where they don't."""
+        where they don't.
+
+        Two things this has to get right, both learned by getting them wrong:
+
+        Candidates are tile CENTRES. Offsetting by whole tiles from the pylon's position
+        lands on its corners instead, because a 2x2 building sits on integer coordinates —
+        so the nearest candidates were points on the Pylon itself.
+
+        A tile is blocked if any unit's BODY reaches it, which depends on that unit's
+        radius; a flat clearance can't express it. Radii run from 0.375 for a probe to
+        2.75 for a Nexus. Measured live: a Pylon of radius 1.12 sat exactly 1.0 from the
+        chosen tile, cleared a flat 1.0 test, and every warp onto that tile was refused —
+        forever, since the list is sorted nearest-first and we kept re-picking it."""
         near = pylon.position
         reach = int(PYLON_POWER_RADIUS)
-        grid = [near.offset((dx, dy))
+        grid = [Point2((math.floor(near.x) + dx + 0.5, math.floor(near.y) + dy + 0.5))
                 for dx in range(-reach, reach + 1) for dy in range(-reach, reach + 1)]
         powered = sorted((p for p in grid if self.state.psionic_matrix.covers(p)),
                          key=lambda p: p.distance_to(near))
         placeable = await self.can_place(ability, powered)
-        return [p for ok, p in zip(placeable, powered)
-                if ok and not self.all_units.closer_than(WARP_TILE_CLEARANCE, p)][:needed]
+        free = [p for ok, p in zip(placeable, powered) if ok and not self._blocked_for_warp(p)]
+        return free[:needed]
+
+    def _blocked_for_warp(self, tile: Point2) -> bool:
+        """Is any unit's body over `tile`? Their radius decides, not a fixed distance."""
+        return any(u.position.distance_to(tile) < u.radius + WARP_UNIT_RADIUS
+                   for u in self.all_units.closer_than(WARP_BLOCK_SEARCH, tile))
 
     def _warp_pylon(self, where: str) -> Unit | None:
         """The ready pylon nearest the requested place — so `where: proxy` warps
