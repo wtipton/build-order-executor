@@ -8,5 +8,6 @@ import the bot's modules while being run from the repo root:
 INVARIANT: nothing outside this package may import it. Each tool launches its own game
 (via run.py) rather than being hooked into the bot, so scripts/ can be dropped from the
 Docker image without touching the bot -- the tools are run against a bind-mounted repo
-(`docker run -v "$PWD":/app ...`) when they are needed. tests/test_layout.py enforces it.
+(`docker run -v "$PWD":/opt/executor ...`) when they are needed. tests/test_layout.py
+enforces it.
 """

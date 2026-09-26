@@ -27,19 +27,7 @@ cd ~/projects/build-order-executor && .venv/bin/python run.py \
 
 ### Run via Docker (headless Linux, no Wine/display required)
 
-```bash
-docker run --rm -e ALLOW_RUN=1 \
-  -v ~/replays/bot:/home/agent/replays/bot \
-  build-order-executor-headless \
-  python run.py --build builds/pvz_opening_8worker.yaml
-```
-
-Mounting the replays folder this way causes the replay to get saved to the host. To get old maps off the container, e.g.:
-
-```bash
-docker run --rm build-order-executor-headless tar -cf - -C /opt/StarCraftII/Maps . \
-  | tar -xf - -C "$HOME/Games/starcraft-ii/drive_c/Program Files (x86)/StarCraft II/Maps"
-```
+See `docker/README.md`.
 
 ## Tests
 
@@ -63,9 +51,13 @@ validated against **both** game versions:
 cd ~/projects/build-order-executor && .venv/bin/python -m pytest tests/test_integration.py --run-integration
 
 # Game version 4.10, via the headless Docker image (~3 min; see docker/):
-docker run --rm -v "$PWD":/opt/executor -w /opt/executor build-order-executor-headless \
-  python -m pytest tests/test_integration.py --run-integration
+docker run --rm --user root --entrypoint /opt/venv/bin/python \
+  -v "$PWD":/opt/executor -w /opt/executor build-order-executor-headless \
+  -m pytest tests/test_integration.py --run-integration
 ```
+
+(`--user root --entrypoint` bypasses the unprivileged-agent entrypoint; the engine's
+dependencies live in the root-only venv at `/opt/venv`.)
 
 The map defaults automatically by target (`CatalystLE` for `linux` / Docker, `LockdownLE` for `wine`),
 and can be overridden with `--map` or `SC2_TEST_MAP`/`SC2_MAP`. A couple of upgrades don't exist in
