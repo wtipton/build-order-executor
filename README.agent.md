@@ -41,7 +41,9 @@ Steps are executed one at a time, i.e. a step's trigger is checked and its actio
 
 So, if one step's triggering condition never becomes true, we never move past the step, and the whole build stalls. Deadlocks like this can definitely happen in pratice -- e.g. suppose a step's trigger criterion is for a unit to appear, but we are currently supply-capped, so that no units can be produced. In this case, the whole build will stall.
 
-See `schema.py` for details of the syntax. However, a build order `example.yaml` might begin:
+The rest of this document is the complete specification of the syntax — the schema itself
+is not readable from here, so if something isn't described below, it isn't supported. A
+build order `example.yaml` might begin:
 
 ```yaml
 - {at: {supply: 14},  do: build,  what: Pylon,   prewalk: {minerals: 75}}
@@ -51,13 +53,18 @@ See `schema.py` for details of the syntax. However, a build order `example.yaml`
 - {at: {supply: 17},  do: build,  what: Assimilator}
 ```
 
-and it can be run with e.g.: 
+and it can be run with e.g.:
 
 ```
 python run.py --build build.yaml --time-limit 600
 ```
 
-runs on map CatalystLE which we'll use pervasively.
+Those two flags are the entire interface. `--build` must be a file in this directory;
+`--time-limit N` ends the game after N game-seconds (default 300, maximum 1800). The map
+is fixed — CatalystLE, which we use pervasively — and cannot be changed, so every run is
+measured on the same terrain.
+
+Runs are recorded, and the number of runs available to you may be capped.
 
 ## Step Completion
 

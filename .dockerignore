@@ -12,11 +12,10 @@ __pycache__/
 .claude/
 TODOs.md
 
-# Measurement tools. Nothing the bot runs imports them (tests/test_layout.py enforces
-# that), and they are run against a bind-mounted repo, so the image does not need them.
-# Uncomment to slim the image / keep them out of an eval build:
-#scripts/
-
+# Measurement tools (scripts/) and the suite (tests/): nothing the bot runs imports
+# either -- tests/test_layout.py enforces that -- and both are used against a
+# bind-mounted repo, so the image does not need them.
+#
 # Docs the bot doesn't read. README.md carries the regeneration commands (and so names
 # the tools above); protoss_data_live.md is the cost/build-time table for the retail
 # patch. Both are ROOT-anchored, so docker/README.md and the other reference/*.md stay.
